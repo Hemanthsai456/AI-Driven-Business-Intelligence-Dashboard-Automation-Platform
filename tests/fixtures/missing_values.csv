@@ -1,0 +1,5 @@
+item_id,quantity,category,ship_date
+101,10.0,Electronics,2026-02-01
+102,,Home,
+103,30.0,,2026-02-03
+104,,Garden,
