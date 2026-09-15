@@ -7,7 +7,7 @@ The **Data Profiling Engine** in the **AI-Driven Business Intelligence & Dashboa
 ```
 +-------------------+      +-------------------+      +-------------------+
 |  CanonicalDataset | ---> |   DataProfiler    | ---> |    DataProfile    |
-| (DataFrame + Meta)|      |  (Read-Only Engine|      | (Stats & Issues)  |
+| (DataFrame + Meta)|      | (Read-Only Engine)|      | (Stats & Issues)  |
 +-------------------+      +-------------------+      +-------------------+
 ```
 
