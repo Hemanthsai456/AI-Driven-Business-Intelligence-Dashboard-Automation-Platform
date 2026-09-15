@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
+import datetime
 import re
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -244,12 +245,24 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
-        # Signal 5: Conflict Resolution — IDENTIFIER
-        # High uniqueness OR ID naming token
+        # Signal 5: Conflict Resolution — IDENTIFIER (two-part)
+        #
+        # Part A — Uniqueness-based: high unique ratio is a strong identifier signal.
+        #   Requires: numeric OR explicit id naming token (non-numeric text with no id
+        #   name falls through to Signals 7/8 so prose descriptions are classified correctly).
+        #   Guards against date-token columns, which belong in Signal 7.
+        #
+        # Part B — Name-based (non-unique): explicit ID naming token without measure token.
+        #   Handles columns like `customer_code` that are not 100% unique but clearly IDs.
         is_numeric = "int" in dtype_str or "float" in dtype_str
         unique_ratio = (distinct_cnt / non_null_cnt) if non_null_cnt > 0 else 0.0
 
-        if (is_uniq or unique_ratio >= 0.98) and (has_id_token or not is_numeric):
+        if (
+            (is_uniq or unique_ratio >= 0.98)
+            and (has_id_token or is_numeric)
+            and not has_date_token
+            and not has_measure_token  # explicit measure naming overrides uniqueness signal
+        ):
             evidence_statements.append(f"high uniqueness ratio ({distinct_cnt}/{non_null_cnt} = {unique_ratio:.2f})")
             if has_id_token:
                 evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
@@ -258,12 +271,12 @@ class SemanticAnalyzer:
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.IDENTIFIER,
-                confidence=0.95 if has_id_token else 0.85,
-                confidence_level="HIGH",
+                confidence=0.95 if has_id_token else 0.75,  # no id token → lower certainty
+                confidence_level="HIGH" if has_id_token else "MEDIUM",
                 evidence=evidence_statements,
             )
 
-        if has_id_token and distinct_cnt > 1 and not has_measure_token:
+        if has_id_token and distinct_cnt > 1 and not has_measure_token and not has_date_token:
             evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
             evidence_statements.append(f"distinct count: {distinct_cnt}")
             if is_numeric:
@@ -344,8 +357,9 @@ class SemanticAnalyzer:
             if has_dimension_token:
                 evidence_statements.append(f"dimension naming pattern ('{clean_name}')")
 
-            # High cardinality description text check
-            if distinct_cnt > 0.9 * non_null_cnt and non_null_cnt > 10 and not has_dimension_token:
+            # High cardinality description text check (threshold lowered to > 5 rows so small
+            # datasets like 20-row test fixtures are also captured as DIMENSION).
+            if distinct_cnt > 0.9 * non_null_cnt and non_null_cnt > 5 and not has_dimension_token:
                 evidence_statements.append("very high cardinality text (could be free-form description or narrative)")
                 return ColumnSemanticEvidence(
                     column_name=col_name,
