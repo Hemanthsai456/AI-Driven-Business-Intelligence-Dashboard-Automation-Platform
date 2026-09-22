@@ -78,8 +78,8 @@ class AnalysisReadinessResponse(BaseModel):
     status: str
     generated_at: str
     summary: str
-    blocking_issues: List[Dict[str, Any]]
-    warnings: List[Dict[str, Any]]
+    blocking_issues: List[str]
+    warnings: List[str]
     checked_columns: List[str]
     checked_row_count: int
     checked_column_count: int

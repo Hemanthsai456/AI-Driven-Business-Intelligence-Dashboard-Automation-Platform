@@ -114,3 +114,64 @@ def test_list_datasets():
     items = response.json()
     assert len(items) == 1
     assert items[0]["filename"] == "dataset1.csv"
+
+
+def test_readiness_zero_warnings():
+    """Readiness endpoint returns status READY and empty warnings/blocking_issues lists for clean data."""
+    csv_content = b"id,name,cost\n1,Alpha,10.5\n2,Beta,20.0\n3,Gamma,15.2\n"
+    files = {"file": ("clean_dataset.csv", csv_content, "text/csv")}
+    upload_resp = client.post("/api/datasets/upload", files=files)
+    assert upload_resp.status_code == 201
+    dataset_id = upload_resp.json()["dataset_id"]
+
+    response = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "READY"
+    assert data["warnings"] == []
+    assert data["blocking_issues"] == []
+    assert isinstance(data["checks"], list)
+    assert len(data["checks"]) > 0
+
+
+def test_readiness_one_warning_constant_column():
+    """Readiness endpoint returns status READY_WITH_WARNINGS and string list warning for constant column."""
+    csv_content = b"title,isbn13\nBook A,978-0131103627\nBook B,978-0131103627\nBook C,978-0131103627\n"
+    files = {"file": ("books.csv", csv_content, "text/csv")}
+    upload_resp = client.post("/api/datasets/upload", files=files)
+    assert upload_resp.status_code == 201
+    dataset_id = upload_resp.json()["dataset_id"]
+
+    response = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "READY_WITH_WARNINGS"
+    assert len(data["warnings"]) == 1
+    assert isinstance(data["warnings"][0], str)
+    assert data["warnings"][0] == "Column 'isbn13' is constant (only 1 distinct non-null value)."
+    assert data["blocking_issues"] == []
+
+
+def test_readiness_multiple_warnings():
+    """Readiness endpoint handles multiple warnings (constant column + high missingness column)."""
+    # 10 rows: isbn13 constant, score 60% nulls (6/10)
+    lines = ["title,isbn13,score"]
+    for i in range(10):
+        score_str = "10.0" if i < 4 else ""
+        lines.append(f"Title {i},978-0131103627,{score_str}")
+    csv_content = "\n".join(lines).encode("utf-8")
+    
+    files = {"file": ("multi_warnings.csv", csv_content, "text/csv")}
+    upload_resp = client.post("/api/datasets/upload", files=files)
+    assert upload_resp.status_code == 201
+    dataset_id = upload_resp.json()["dataset_id"]
+
+    response = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "READY_WITH_WARNINGS"
+    assert len(data["warnings"]) >= 2
+    for warning in data["warnings"]:
+        assert isinstance(warning, str)
+    assert any("isbn13" in w and "constant" in w for w in data["warnings"])
+    assert any("score" in w and "missingness" in w for w in data["warnings"])

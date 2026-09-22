@@ -1,43 +1,97 @@
 # AI-Driven Business Intelligence & Dashboard Automation Platform
 
-An automated, end-to-end platform for data ingestion, profiling, cleaning, semantic understanding, analytical planning, KPI/chart generation, and interactive dashboard rendering.
+An automated, end-to-end platform for data ingestion, profiling, semantic understanding, schema readiness assessment, and interactive web-based business intelligence analysis.
 
 ---
 
-## Current Development Stage
+## Architecture & System Overview
 
-**Phase 1 — Product UI/UX Foundation & Intelligence Engine (Complete)**
-
-Currently, the production web interface, REST API, ingestion loaders, data profiling engine, rule-based semantic analyzer, and schema readiness engine are established:
-- **Product Frontend**: Next.js 14 / React 18 / TypeScript interface in `frontend/` featuring drag-and-drop file uploader, dataset overview KPIs, data preview table, interactive column profiling inspector, and semantic rule-evidence inspector.
-- **Backend HTTP REST API**: FastAPI application in `api/` wrapping existing Python intelligence engine functions (`/api/datasets/upload`, `/api/datasets/{id}/profile`, `/api/datasets/{id}/semantic-analysis`, `/api/datasets/{id}/preview`, `/api/datasets/{id}/readiness`).
-- **Canonical Data Model**: Format-agnostic dataclasses (`ColumnRole`, `ColumnMetadata`, `DatasetMetadata`, `DataProfile`, `CanonicalDataset`) in `ingestion/models.py`.
-- **CSV & XLSX Data Loaders**: `CSVLoader` and `ExcelLoader` in `ingestion/loaders/` transforming CSV and single-worksheet XLSX files into `CanonicalDataset`.
-- **Deterministic Data Profiling Engine**: `DataProfiler` in `intelligence/profiler.py` generating statistical profiles, dataset summaries, column metrics, correlation matrices, and quality observations.
-- **Rule-Based Semantic Intelligence**: `SemanticAnalyzer` in `intelligence/semantic_analyzer.py` classifying candidate column roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `UNKNOWN`) with explainable evidence rules and confidence scoring.
-- **Schema & Analysis Readiness**: `SchemaValidator` in `intelligence/schema_validator.py` verifying dataset structural integrity prior to analytical execution.
-- **Documentation**: Detailed specifications in `docs/product_ui_foundation.md`, `docs/schema_readiness.md`, `docs/semantic_intelligence.md`, `docs/profiling_engine.md`, and `docs/ingestion_loaders.md`.
+```
+                      Browser User
+                           │
+                           ▼
+                 Next.js 14 / React 18
+                      TypeScript
+                           │
+                     HTTP REST API
+                           │
+                           ▼
+                    FastAPI Backend
+                           │
+                           ▼
+                 Existing Python Engine
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+      Ingestion        Profiling        Semantic
+       Engine           Engine           Engine
+```
 
 ---
 
-## Local Development & Startup
+## Current Capabilities (Phase 1 Complete)
 
-### 1. Install Backend Dependencies & Run Pytest Suite
+- **Production Next.js Web Frontend** (`frontend/`): Next.js 14 App Router, React 18, TypeScript, Tailwind CSS interface featuring drag-and-drop file uploader, dataset overview metrics, data preview table, interactive column profiling inspector, and semantic evidence inspector.
+- **FastAPI HTTP REST API** (`api/`): Clean backend service wrapping Python engine loaders/analyzers (`/api/datasets/upload`, `/api/datasets/{id}/preview`, `/api/datasets/{id}/profile`, `/api/datasets/{id}/semantic-analysis`, `/api/datasets/{id}/readiness`).
+- **Canonical Data Model** (`ingestion/models.py`): Format-agnostic dataclasses (`ColumnRole`, `ColumnMetadata`, `DatasetMetadata`, `DataProfile`, `CanonicalDataset`).
+- **CSV & XLSX Ingestion Loaders** (`ingestion/loaders/`): Format-agnostic `CSVLoader` and `ExcelLoader` with encoding detection and header disambiguation.
+- **Data Profiling Engine** (`intelligence/profiler.py`): Deterministic statistical profiler generating distributions, missingness metrics, distinct counts, quantiles, and quality observations.
+- **Rule-Based Semantic Intelligence** (`intelligence/semantic_analyzer.py`): Preliminary candidate column role classification (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `UNKNOWN`) with explainable evidence rules and confidence scores.
+- **Schema Validation & Readiness** (`intelligence/schema_validator.py`): Structural integrity validator producing `AnalysisReadiness` assessments for downstream analytical execution.
+
+---
+
+## Installation Commands
+
+### 1. Backend Dependency Installation (Python)
+From the project root directory:
 ```powershell
 pip install -r requirements.txt
-python -m pytest tests/ -v
 ```
+*(Dependencies: `pandas`, `openpyxl`, `pytest`, `fastapi`, `uvicorn`, `python-multipart`, `httpx`)*
 
-### 2. Start Backend API Server
-```powershell
-python -m uvicorn api.main:app --reload --port 8000
-```
-
-### 3. Start Next.js Web Frontend
+### 2. Frontend Dependency Installation (Next.js / Node.js)
+Navigate into the `frontend` folder and run `npm install`:
 ```powershell
 cd frontend
 npm install
+```
+*(Dependencies: `next`, `react`, `react-dom`, `typescript`, `tailwindcss`, `lucide-react`)*
+
+---
+
+## How to Run the Project
+
+### Step 1: Run the Backend API Server
+Open Terminal 1 in the project root directory:
+```powershell
+python -m uvicorn api.main:app --reload --port 8000
+```
+- **Backend API Base**: `http://localhost:8000`
+- **Interactive Swagger Documentation**: `http://localhost:8000/docs`
+
+### Step 2: Run the Web Frontend
+Open Terminal 2 in the project root directory:
+```powershell
+cd frontend
 npm run dev
 ```
+- **Web Interface URL**: `http://localhost:3000`
 
-Open browser at `http://localhost:3000`.
+---
+
+## How to Run Tests
+
+To run all 82 unit and API integration tests:
+```powershell
+python -m pytest tests/ -v
+```
+
+---
+
+## Documentation
+
+- [`docs/product_ui_foundation.md`](file:///d:/Mini-Project/github%20repo/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/product_ui_foundation.md): Product UI & REST API specification.
+- [`docs/schema_readiness.md`](file:///d:/Mini-Project/github%20repo/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/schema_readiness.md): Schema validation & readiness specification.
+- [`docs/semantic_intelligence.md`](file:///d:/Mini-Project/github%20repo/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/semantic_intelligence.md): Semantic intelligence engine documentation.
+- [`docs/profiling_engine.md`](file:///d:/Mini-Project/github%20repo/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/profiling_engine.md): Data profiling engine documentation.
+- [`docs/ingestion_loaders.md`](file:///d:/Mini-Project/github%20repo/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/ingestion_loaders.md): Ingestion loaders specification.
