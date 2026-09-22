@@ -1,0 +1,116 @@
+"""Integration tests for FastAPI REST API endpoints.
+
+Validates that HTTP endpoints correctly interface with ingestion, profiling,
+semantic analysis, and schema readiness engines without duplicating engine logic.
+"""
+
+import os
+import pytest
+from fastapi.testclient import TestClient
+
+from api.main import app
+from api.store import session_store
+
+client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clear_session_store():
+    session_store.clear()
+    yield
+    session_store.clear()
+
+
+def test_health_check_endpoint():
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+    assert "capabilities" in data
+    assert len(data["capabilities"]) >= 4
+
+
+def test_upload_csv_dataset():
+    csv_content = b"id,name,cost,date\n1,Alpha,10.5,2023-01-01\n2,Beta,20.0,2023-01-02\n3,Gamma,15.2,2023-01-03\n"
+    files = {"file": ("test_upload.csv", csv_content, "text/csv")}
+    
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert "dataset_id" in data
+    assert data["filename"] == "test_upload.csv"
+    assert data["source_type"].upper() == "CSV"
+    assert data["row_count"] == 3
+    assert data["column_count"] == 4
+    assert len(data["columns"]) == 4
+
+    dataset_id = data["dataset_id"]
+
+    # Retrieve metadata
+    meta_resp = client.get(f"/api/datasets/{dataset_id}")
+    assert meta_resp.status_code == 200
+    assert meta_resp.json()["dataset_id"] == dataset_id
+
+    # Retrieve preview
+    prev_resp = client.get(f"/api/datasets/{dataset_id}/preview")
+    assert prev_resp.status_code == 200
+    prev_data = prev_resp.json()
+    assert prev_data["total_rows"] == 3
+    assert len(prev_data["rows"]) == 3
+    assert "cost" in prev_data["rows"][0]
+
+    # Retrieve profile
+    prof_resp = client.get(f"/api/datasets/{dataset_id}/profile")
+    assert prof_resp.status_code == 200
+    prof_data = prof_resp.json()
+    assert prof_data["dataset_id"] == dataset_id
+    assert "column_statistics" in prof_data
+
+    # Retrieve semantic analysis
+    sem_resp = client.get(f"/api/datasets/{dataset_id}/semantic-analysis")
+    assert sem_resp.status_code == 200
+    sem_data = sem_resp.json()
+    assert sem_data["dataset_id"] == dataset_id
+    assert "column_evidences" in sem_data
+    assert "id" in sem_data["column_evidences"]
+    assert "cost" in sem_data["column_evidences"]
+
+    # Retrieve readiness
+    read_resp = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert read_resp.status_code == 200
+    read_data = read_resp.json()
+    assert read_data["dataset_id"] == dataset_id
+    assert "status" in read_data
+
+
+def test_upload_invalid_file_format():
+    files = {"file": ("unsupported.txt", b"some plain text", "text/plain")}
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 400
+    data = response.json()
+    assert "Unsupported file format" in data["message"]
+
+
+def test_upload_empty_file():
+    files = {"file": ("empty.csv", b"", "text/csv")}
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 400
+    data = response.json()
+    assert "empty" in data["message"].lower()
+
+
+def test_get_nonexistent_dataset():
+    response = client.get("/api/datasets/non_existent_id")
+    assert response.status_code == 404
+
+
+def test_list_datasets():
+    csv_content = b"a,b\n1,2\n3,4\n"
+    files = {"file": ("dataset1.csv", csv_content, "text/csv")}
+    client.post("/api/datasets/upload", files=files)
+
+    response = client.get("/api/datasets")
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 1
+    assert items[0]["filename"] == "dataset1.csv"
