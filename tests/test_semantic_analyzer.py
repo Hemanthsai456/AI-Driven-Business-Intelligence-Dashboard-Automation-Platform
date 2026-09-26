@@ -175,14 +175,14 @@ def test_low_cardinality_numeric():
 
 
 def test_ambiguous_column():
-    """Verify ambiguous integer column (e.g. year) returns low confidence candidate or UNKNOWN."""
-    df = pd.DataFrame({"year": [2020, 2021, 2022, 2023]})
-    meta = DatasetMetadata("ds-year", "Year", "pandas", 4, 1, [ColumnMetadata("year", "year", "int64")])
+    """Verify ambiguous integer column (low-cardinality non-year codes) returns low confidence candidate or UNKNOWN."""
+    df = pd.DataFrame({"misc_factor": [10, 20, 30, 40]})
+    meta = DatasetMetadata("ds-ambig", "Ambig", "pandas", 4, 1, [ColumnMetadata("misc_factor", "misc_factor", "int64")])
     canonical = CanonicalDataset(meta, df)
     profile = profile_dataset(canonical)
 
     sem_profile = analyze_semantics(canonical, profile)
-    ev = sem_profile.get_evidence("year")
+    ev = sem_profile.get_evidence("misc_factor")
 
     assert ev is not None
     assert ev.confidence < 0.85  # Not high confidence false certainty
@@ -244,7 +244,11 @@ def test_string_datetime_candidate():
 
     assert ev is not None
     assert ev.candidate_role == ColumnRole.DATETIME
-    assert canonical.data["admission_date"].dtype == object  # No type mutation!
+    # No type mutation: column must NOT have been silently cast to datetime64.
+    # Accept both legacy object and modern StringDtype (pandas 2.x+); both are non-datetime.
+    assert not pd.api.types.is_datetime64_any_dtype(canonical.data["admission_date"]), (
+        "admission_date dtype must not be mutated to datetime64"
+    )
 
 
 def test_empty_dataset_semantics():
@@ -304,3 +308,127 @@ def test_semantic_profile_json_serialization():
     json_str = json.dumps(sem_dict)
     assert isinstance(json_str, str)
     assert "column_evidences" in sem_dict
+
+
+# ===========================================================================
+# Fix 2 Test Cases — Continuous float measures with high uniqueness
+# ===========================================================================
+
+
+def test_float_unique_measure_latitude():
+    """Verify unique float64 latitude column classifies as MEASURE, not IDENTIFIER."""
+    df = pd.DataFrame({"latitude": [12.9716, 12.9717, 12.9718, 12.9719, 12.9720, 12.9721]})
+    meta = DatasetMetadata("ds-lat", "Lat", "pandas", 6, 1, [ColumnMetadata("latitude", "latitude", "float64")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("latitude")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.MEASURE
+    assert ev.candidate_role != ColumnRole.IDENTIFIER
+    assert ev.confidence >= 0.80
+
+
+def test_float_unique_measure_sensor_reading():
+    """Verify unique float64 sensor_reading column classifies as MEASURE, not IDENTIFIER."""
+    df = pd.DataFrame({"sensor_reading": [101.42, 102.15, 103.88, 104.22, 105.90, 106.31]})
+    meta = DatasetMetadata("ds-sensor", "Sensor", "pandas", 6, 1, [ColumnMetadata("sensor_reading", "sensor_reading", "float64")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("sensor_reading")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.MEASURE
+    assert ev.candidate_role != ColumnRole.IDENTIFIER
+    assert ev.confidence >= 0.80
+
+
+# ===========================================================================
+# Fix 3 Test Cases — Content-based string datetime detection
+# ===========================================================================
+
+
+def test_string_datetime_without_name_token_quarter():
+    """Verify string column named 'quarter' with ISO date strings classifies as DATETIME."""
+    df = pd.DataFrame({"quarter": ["2026-01-01", "2026-04-01", "2026-07-01", "2026-10-01", "2027-01-01"]})
+    meta = DatasetMetadata("ds-qtr", "Qtr", "pandas", 5, 1, [ColumnMetadata("quarter", "quarter", "object")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("quarter")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.DATETIME
+    assert ev.confidence >= 0.80
+    assert any("content-based datetime pattern" in s or "parse success ratio" in s for s in ev.evidence)
+
+
+def test_string_datetime_without_name_token_logged():
+    """Verify string column named 'logged' with date strings classifies as DATETIME."""
+    df = pd.DataFrame({"logged": ["2026-09-15 10:00:00", "2026-09-15 11:30:00", "2026-09-15 14:45:00"]})
+    meta = DatasetMetadata("ds-log", "Log", "pandas", 3, 1, [ColumnMetadata("logged", "logged", "object")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("logged")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.DATETIME
+    assert ev.confidence >= 0.80
+
+
+def test_string_categorical_with_coincidental_date_no_regression():
+    """Verify categorical text column with one coincidental date string does NOT classify as DATETIME."""
+    df = pd.DataFrame({"category_label": ["Alpha", "Beta", "2024-01-01", "Gamma", "Delta"]})
+    meta = DatasetMetadata("ds-cat", "Cat", "pandas", 5, 1, [ColumnMetadata("category_label", "category_label", "object")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("category_label")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.DIMENSION
+    assert ev.candidate_role != ColumnRole.DATETIME
+
+
+# ===========================================================================
+# Fix 4 Test Cases — Numeric year columns
+# ===========================================================================
+
+
+def test_numeric_year_low_cardinality():
+    """Verify numeric year column with 4-digit integers in [1900, 2100] classifies as DATETIME."""
+    df = pd.DataFrame({"year": [2020, 2021, 2022, 2023]})
+    meta = DatasetMetadata("ds-yr-low", "Yr Low", "pandas", 4, 1, [ColumnMetadata("year", "year", "int64")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("year")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.DATETIME
+    assert ev.confidence >= 0.85
+    assert any("calendar year range" in s for s in ev.evidence)
+
+
+def test_numeric_year_wide_range():
+    """Verify numeric year column with wider range of integers (1995-2024) classifies as DATETIME."""
+    df = pd.DataFrame({"year": list(range(1995, 2025))})
+    meta = DatasetMetadata("ds-yr-wide", "Yr Wide", "pandas", 30, 1, [ColumnMetadata("year", "year", "int64")])
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+
+    sem_profile = analyze_semantics(canonical, profile)
+    ev = sem_profile.get_evidence("year")
+
+    assert ev is not None
+    assert ev.candidate_role == ColumnRole.DATETIME
+    assert ev.confidence >= 0.85
