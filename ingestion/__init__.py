@@ -7,7 +7,7 @@ from ingestion.exceptions import (
     InvalidFileFormatError,
     UnsupportedFileTypeError,
 )
-from ingestion.loaders import CSVLoader, ExcelLoader, load_dataset
+from ingestion.loaders import CSVLoader, ExcelLoader, ParquetLoader, TSVLoader, load_dataset
 from ingestion.models import (
     CanonicalDataset,
     ColumnMetadata,
@@ -24,7 +24,9 @@ __all__ = [
     "InvalidFileFormatError",
     "InvalidExcelStructureError",
     "CSVLoader",
+    "TSVLoader",
     "ExcelLoader",
+    "ParquetLoader",
     "load_dataset",
     "ColumnRole",
     "ColumnMetadata",

@@ -1,16 +1,21 @@
-# CSV & XLSX Data Ingestion Specification
+# CSV, TSV, XLSX & Parquet Data Ingestion Specification
 
 ## Overview
 
-The ingestion layer in the **AI-Driven Business Intelligence & Dashboard Automation Platform** converts raw tabular files (`.csv` and `.xlsx`) into standardized `CanonicalDataset` objects.
+The ingestion layer in the **AI-Driven Business Intelligence & Dashboard Automation Platform** converts raw tabular files (`.csv`, `.tsv`, `.xlsx`, and `.parquet`) into standardized `CanonicalDataset` objects.
 
 ```
 +---------------+      +-------------------+
 |  input.csv    | ---> |     CSVLoader     | ---\
 +---------------+      +-------------------+     \
-                                                  +--->  CanonicalDataset
++---------------+      +-------------------+      \
+|  input.tsv    | ---> |     TSVLoader     | ------\
++---------------+      +-------------------+        +--->  CanonicalDataset
++---------------+      +-------------------+       /
+|  input.xlsx   | ---> |    ExcelLoader    | -----/
 +---------------+      +-------------------+     /
-|  input.xlsx   | ---> |    ExcelLoader    | ---/
++---------------+      +-------------------+    /
+| input.parquet | ---> |   ParquetLoader   | --/
 +---------------+      +-------------------+
 ```
 
@@ -24,11 +29,23 @@ The ingestion layer in the **AI-Driven Business Intelligence & Dashboard Automat
 - **Metadata Extraction:** Populates column metadata (`original_name`, `normalized_name`, `detected_datatype`, null statistics, distinct count, sample values) and dataset-level metadata (`source_type="csv"`).
 - **Default Roles:** All column semantic roles default to `ColumnRole.UNKNOWN`.
 
-### 2. `ExcelLoader`
+### 2. `TSVLoader`
+- **File Validation:** Verifies file existence and `.tsv` extension.
+- **Data Parsing:** Reads file contents using `pandas.read_csv(sep="\t")`.
+- **Metadata Extraction:** Populates column metadata and dataset-level metadata (`source_type="tsv"`).
+- **Default Roles:** All column semantic roles default to `ColumnRole.UNKNOWN`.
+
+### 3. `ExcelLoader`
 - **File Validation:** Verifies file existence and `.xlsx` extension.
 - **Single-Worksheet Rule (V1):** Inspects the workbook using `pandas.ExcelFile`. If the workbook contains zero or more than one worksheet, `InvalidExcelStructureError` is raised. Multi-sheet merging or guessing is strictly forbidden in V1.
 - **Data Parsing:** Reads worksheet 0 via `pandas.read_excel()`.
 - **Metadata Extraction:** Produces the identical `CanonicalDataset` structure as `CSVLoader` (`source_type="xlsx"`).
+
+### 4. `ParquetLoader`
+- **File Validation:** Verifies file existence and `.parquet` extension.
+- **Data Parsing:** Reads file contents using `pandas.read_parquet()`.
+- **Metadata Extraction:** Populates column metadata and dataset-level metadata (`source_type="parquet"`).
+- **Default Roles:** All column semantic roles default to `ColumnRole.UNKNOWN`.
 
 ---
 
@@ -55,8 +72,8 @@ Custom exception hierarchy defined in `ingestion/exceptions.py`:
 | :--- | :--- |
 | `IngestionError` | Base exception for all ingestion failures. |
 | `IngestionFileNotFoundError` | Raised when the target file does not exist on disk. |
-| `UnsupportedFileTypeError` | Raised when file extension is not `.csv` or `.xlsx`. |
-| `InvalidFileFormatError` | Raised when CSV/XLSX file is corrupted or unparseable. |
+| `UnsupportedFileTypeError` | Raised when file extension is not `.csv`, `.tsv`, `.xlsx`, or `.parquet`. |
+| `InvalidFileFormatError` | Raised when input file is corrupted or unparseable. |
 | `InvalidExcelStructureError` | Raised when an Excel workbook has 0 or >1 worksheets. |
 
 ---

@@ -22,13 +22,13 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
     setUploadedDataset(null);
 
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    if (!['.csv', '.xlsx', '.xls'].includes(ext)) {
-      setError(`Invalid file format '${ext}'. Please upload a valid CSV or XLSX dataset.`);
+    if (!['.csv', '.tsv', '.xlsx', '.parquet'].includes(ext)) {
+      setError(`Invalid file format '${ext}'. Supported formats: CSV, TSV, XLSX, Parquet.`);
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      setError('File size exceeds the 50MB development limit.');
+    if (file.size > 100 * 1024 * 1024) {
+      setError('Maximum file size is 100 MB.');
       return;
     }
 
@@ -83,7 +83,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
         <input
           ref={fileInputRef}
           type="file"
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.tsv,.xlsx,.parquet"
           onChange={handleFileChange}
           className="hidden"
         />
@@ -102,7 +102,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
 
           <div>
             <h3 className="text-base font-semibold text-slate-200">
-              {isUploading ? 'Ingesting & Profiling Dataset...' : 'Upload CSV or XLSX Dataset'}
+              {isUploading ? 'Ingesting & Profiling Dataset...' : 'Upload Dataset'}
             </h3>
             <p className="text-xs text-slate-400 mt-1">
               Drag and drop your file here, or click to browse from disk
@@ -110,9 +110,9 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
           </div>
 
           <div className="flex items-center space-x-2 text-[11px] text-slate-500 font-mono">
-            <span>Supports .csv, .xlsx</span>
+            <span>Supported formats: CSV, TSV, XLSX, Parquet</span>
             <span>•</span>
-            <span>Max size 50MB</span>
+            <span>Maximum file size: 100 MB</span>
           </div>
         </div>
       </div>

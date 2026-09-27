@@ -128,7 +128,7 @@ function AnalysisContent() {
             <Database className="w-12 h-12 text-slate-500 mx-auto mb-3" />
             <h2 className="text-lg font-bold text-slate-200">No Dataset Selected</h2>
             <p className="text-xs text-slate-400 mt-1">
-              Please upload a CSV or XLSX dataset to inspect profiling statistics and semantic column roles.
+              Please upload a CSV, TSV, XLSX, or Parquet dataset to inspect profiling statistics and semantic column roles.
             </p>
             <div className="pt-4">
               <Link href="/upload">

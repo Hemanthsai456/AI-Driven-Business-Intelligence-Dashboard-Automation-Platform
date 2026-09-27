@@ -21,7 +21,9 @@ def generate_all_fixtures():
         }
     )
     baseline_df.to_csv(FIXTURES_DIR / "baseline.csv", index=False)
+    baseline_df.to_csv(FIXTURES_DIR / "baseline.tsv", sep="\t", index=False)
     baseline_df.to_excel(FIXTURES_DIR / "baseline.xlsx", index=False)
+    baseline_df.to_parquet(FIXTURES_DIR / "baseline.parquet", index=False)
 
     # 2. Missing values dataset
     missing_df = pd.DataFrame(
@@ -84,7 +86,9 @@ def generate_all_fixtures():
 
     # 8. Corrupt / unreadable files
     (FIXTURES_DIR / "corrupt.csv").write_bytes(b"\x00\xff\xfe\xfa\xfb\xfe\xff binary junk \x80\x81\x82")
+    (FIXTURES_DIR / "corrupt.tsv").write_bytes(b"\x00\xff\xfe\xfa\xfb\xfe\xff binary junk \x80\x81\x82")
     (FIXTURES_DIR / "corrupt.xlsx").write_text("This is plain text, not a valid zip/xlsx workbook.")
+    (FIXTURES_DIR / "corrupt.parquet").write_bytes(b"This is plain text, not a valid parquet file.")
 
 
 if __name__ == "__main__":

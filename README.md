@@ -33,7 +33,7 @@ An automated, end-to-end platform for data ingestion, profiling, semantic unders
 - **Production Next.js Web Frontend** (`frontend/`): Next.js 14 App Router, React 18, TypeScript, Tailwind CSS interface featuring drag-and-drop file uploader, dataset overview metrics, data preview table, interactive column profiling inspector, and semantic evidence inspector.
 - **FastAPI HTTP REST API** (`api/`): Clean backend service wrapping Python engine loaders/analyzers (`/api/datasets/upload`, `/api/datasets/{id}/preview`, `/api/datasets/{id}/profile`, `/api/datasets/{id}/semantic-analysis`, `/api/datasets/{id}/readiness`).
 - **Canonical Data Model** (`ingestion/models.py`): Format-agnostic dataclasses (`ColumnRole`, `ColumnMetadata`, `DatasetMetadata`, `DataProfile`, `CanonicalDataset`).
-- **CSV & XLSX Ingestion Loaders** (`ingestion/loaders/`): Format-agnostic `CSVLoader` and `ExcelLoader` with encoding detection and header disambiguation.
+- **CSV, TSV, XLSX & Parquet Ingestion Loaders** (`ingestion/loaders/`): Format-agnostic `CSVLoader`, `TSVLoader`, `ExcelLoader`, and `ParquetLoader` with encoding detection and header disambiguation.
 - **Data Profiling Engine** (`intelligence/profiler.py`): Deterministic statistical profiler generating distributions, missingness metrics, distinct counts, quantiles, and quality observations.
 - **Rule-Based Semantic Intelligence** (`intelligence/semantic_analyzer.py`): Preliminary candidate column role classification (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `UNKNOWN`) with explainable evidence rules and confidence scores.
 - **Schema Validation & Readiness** (`intelligence/schema_validator.py`): Structural integrity validator producing `AnalysisReadiness` assessments for downstream analytical execution.
@@ -47,7 +47,7 @@ From the project root directory:
 ```powershell
 pip install -r requirements.txt
 ```
-*(Dependencies: `pandas`, `openpyxl`, `pytest`, `fastapi`, `uvicorn`, `python-multipart`, `httpx`)*
+*(Dependencies: `pandas`, `openpyxl`, `pyarrow`, `pytest`, `fastapi`, `uvicorn`, `python-multipart`, `httpx`)*
 
 ### 2. Frontend Dependency Installation (Next.js / Node.js)
 Navigate into the `frontend` folder and run `npm install`:
