@@ -5,6 +5,7 @@ semantic analysis, and schema readiness engines without duplicating engine logic
 """
 
 import os
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
@@ -81,6 +82,105 @@ def test_upload_csv_dataset():
     read_data = read_resp.json()
     assert read_data["dataset_id"] == dataset_id
     assert "status" in read_data
+
+
+def test_upload_tsv_dataset():
+    tsv_content = b"id\tname\tcost\tdate\n1\tAlpha\t10.5\t2023-01-01\n2\tBeta\t20.0\t2023-01-02\n3\tGamma\t15.2\t2023-01-03\n"
+    files = {"file": ("test_upload.tsv", tsv_content, "text/tab-separated-values")}
+    
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert "dataset_id" in data
+    assert data["filename"] == "test_upload.tsv"
+    assert data["source_type"].upper() == "TSV"
+    assert data["row_count"] == 3
+    assert data["column_count"] == 4
+    assert len(data["columns"]) == 4
+
+    dataset_id = data["dataset_id"]
+
+    # Retrieve preview
+    prev_resp = client.get(f"/api/datasets/{dataset_id}/preview")
+    assert prev_resp.status_code == 200
+    prev_data = prev_resp.json()
+    assert prev_data["total_rows"] == 3
+    assert len(prev_data["rows"]) == 3
+    assert "cost" in prev_data["rows"][0]
+
+    # Retrieve profile
+    prof_resp = client.get(f"/api/datasets/{dataset_id}/profile")
+    assert prof_resp.status_code == 200
+    assert "column_statistics" in prof_resp.json()
+
+    # Retrieve semantic analysis
+    sem_resp = client.get(f"/api/datasets/{dataset_id}/semantic-analysis")
+    assert sem_resp.status_code == 200
+    assert "column_evidences" in sem_resp.json()
+
+    # Retrieve readiness
+    read_resp = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert read_resp.status_code == 200
+    assert "status" in read_resp.json()
+
+
+def test_upload_parquet_dataset():
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    parquet_path = fixtures_dir / "baseline.parquet"
+    parquet_content = parquet_path.read_bytes()
+    files = {"file": ("baseline.parquet", parquet_content, "application/octet-stream")}
+    
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    assert "dataset_id" in data
+    assert data["filename"] == "baseline.parquet"
+    assert data["source_type"].upper() == "PARQUET"
+    assert data["row_count"] == 5
+    assert data["column_count"] == 5
+
+    dataset_id = data["dataset_id"]
+
+    # Retrieve preview
+    prev_resp = client.get(f"/api/datasets/{dataset_id}/preview")
+    assert prev_resp.status_code == 200
+    assert prev_resp.json()["total_rows"] == 5
+
+    # Retrieve profile
+    prof_resp = client.get(f"/api/datasets/{dataset_id}/profile")
+    assert prof_resp.status_code == 200
+    assert "column_statistics" in prof_resp.json()
+
+    # Retrieve semantic analysis
+    sem_resp = client.get(f"/api/datasets/{dataset_id}/semantic-analysis")
+    assert sem_resp.status_code == 200
+    assert "column_evidences" in sem_resp.json()
+
+    # Retrieve readiness
+    read_resp = client.get(f"/api/datasets/{dataset_id}/readiness")
+    assert read_resp.status_code == 200
+    assert "status" in read_resp.json()
+
+
+def test_upload_size_validation_limit_100mb(monkeypatch):
+    """Verify upload size validation rejects files exceeding 100MB and communicates the 100 MB limit."""
+    from api.main import MAX_FILE_SIZE_BYTES
+    assert MAX_FILE_SIZE_BYTES == 100 * 1024 * 1024
+
+    # Test rejection when payload exceeds MAX_FILE_SIZE_BYTES
+    monkeypatch.setattr("api.main.MAX_FILE_SIZE_BYTES", 50)
+    over_limit_content = b"a,b\n" + b"1,2\n" * 15  # ~64 bytes > 50 bytes
+    files = {"file": ("large.csv", over_limit_content, "text/csv")}
+    response = client.post("/api/datasets/upload", files=files)
+    assert response.status_code == 400
+    data = response.json()
+    assert "Maximum file size is 100 MB" in data["message"]
+
+    # Test acceptance when within MAX_FILE_SIZE_BYTES
+    under_limit_content = b"a,b\n1,2\n"  # 8 bytes <= 50 bytes
+    files = {"file": ("small.csv", under_limit_content, "text/csv")}
+    response_ok = client.post("/api/datasets/upload", files=files)
+    assert response_ok.status_code == 201
 
 
 def test_upload_invalid_file_format():

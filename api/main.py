@@ -16,8 +16,7 @@ from ingestion.exceptions import (
     InvalidFileFormatError,
     UnsupportedFileTypeError,
 )
-from ingestion.loaders.csv_loader import CSVLoader
-from ingestion.loaders.excel_loader import ExcelLoader
+from ingestion.loaders import CSVLoader, ExcelLoader, ParquetLoader, TSVLoader, load_dataset
 from intelligence.profiler import profile_dataset
 from intelligence.semantic_analyzer import analyze_semantics
 from intelligence.schema_validator import assess_readiness
@@ -48,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB development upload limit
+MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100MB upload limit
 
 
 @app.get("/api/health")
@@ -59,7 +58,7 @@ def health_check():
         "service": "AI-Driven Business Intelligence Platform API",
         "version": "1.0.0",
         "capabilities": [
-            "CSV/XLSX Ingestion",
+            "Data Ingestion (CSV, TSV, XLSX, Parquet)",
             "Data Profiling",
             "Rule-Based Semantic Intelligence",
             "Schema Readiness Assessment",
@@ -73,7 +72,7 @@ def health_check():
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_dataset(file: UploadFile = File(...)):
-    """Upload a CSV or XLSX dataset, run ingestion, profiling, and semantic analysis."""
+    """Upload a CSV, TSV, XLSX, or Parquet dataset, run ingestion, profiling, and semantic analysis."""
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -82,10 +81,10 @@ async def upload_dataset(file: UploadFile = File(...)):
 
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in [".csv", ".xlsx", ".xls"]:
+    if ext not in [".csv", ".tsv", ".xlsx", ".parquet"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file format '{ext}'. Only .csv and .xlsx files are supported.",
+            detail=f"Unsupported file format '{ext}'. Supported formats: CSV, TSV, XLSX, Parquet.",
         )
 
     # Read uploaded bytes and check size
@@ -98,7 +97,7 @@ async def upload_dataset(file: UploadFile = File(...)):
     if len(contents) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File exceeds maximum allowed upload size of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB.",
+            detail=f"File exceeds maximum allowed upload size of {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB. Maximum file size is 100 MB.",
         )
 
     # Write to temporary file for loader processing
@@ -107,13 +106,8 @@ async def upload_dataset(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     try:
-        # 1. Ingestion Loader
-        if ext == ".csv":
-            loader = CSVLoader()
-        else:
-            loader = ExcelLoader()
-        
-        canonical_ds = loader.load(tmp_path)
+        # 1. Ingestion Loader (dispatched through load_dataset)
+        canonical_ds = load_dataset(tmp_path)
         canonical_ds.metadata.name = filename  # Preserve original filename
 
         # 2. Data Profiler

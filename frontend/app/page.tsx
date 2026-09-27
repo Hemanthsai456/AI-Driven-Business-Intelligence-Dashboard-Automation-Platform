@@ -75,7 +75,7 @@ export default function HomePage() {
             <Card className="hover:border-slate-700 transition-all">
               <div className="flex items-center space-x-3 mb-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-slate-200 text-sm">CSV/XLSX Ingestion</h3>
+                <h3 className="font-semibold text-slate-200 text-sm">CSV/TSV/XLSX/Parquet Ingestion</h3>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
                 Deterministic raw data loading, encoding detection, and canonical dataset construction.
@@ -137,7 +137,7 @@ export default function HomePage() {
               </div>
               <h3 className="text-sm font-semibold text-slate-200">No Datasets Uploaded in Current Session</h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Upload a real CSV or XLSX dataset to inspect ingestion metadata, data profiles, and semantic column roles.
+                Upload a real CSV, TSV, XLSX, or Parquet dataset to inspect ingestion metadata, data profiles, and semantic column roles.
               </p>
               <Link href="/upload" className="inline-block pt-2">
                 <Button variant="primary" size="sm">

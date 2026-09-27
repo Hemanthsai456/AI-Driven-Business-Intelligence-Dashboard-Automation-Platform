@@ -46,7 +46,7 @@ export default function SettingsPage() {
             </li>
             <li className="flex items-center space-x-2 p-2 bg-slate-950/60 rounded border border-slate-800">
               <Check className="w-4 h-4 text-emerald-400" />
-              <span>Step 2 — CSV/XLSX Ingestion Loaders (CSVLoader, ExcelLoader)</span>
+              <span>Step 2 — Ingestion Loaders (CSVLoader, TSVLoader, ExcelLoader, ParquetLoader)</span>
             </li>
             <li className="flex items-center space-x-2 p-2 bg-slate-950/60 rounded border border-slate-800">
               <Check className="w-4 h-4 text-emerald-400" />

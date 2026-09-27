@@ -44,8 +44,8 @@ Phase 1 establishes a decoupled frontend and backend REST API architecture:
 ### 2. Dataset Upload & Ingestion
 `POST /api/datasets/upload`
 - **Content-Type**: `multipart/form-data`
-- **Body**: `file` (.csv, .xlsx)
-- **Behavior**: Delegates file stream to `CSVLoader` or `ExcelLoader`, runs `profile_dataset()`, `analyze_semantics()`, and `assess_readiness()`. Saves dataset record to session store.
+- **Body**: `file` (.csv, .tsv, .xlsx, .parquet)
+- **Behavior**: Delegates file stream to `load_dataset` (CSVLoader, TSVLoader, ExcelLoader, ParquetLoader), runs `profile_dataset()`, `analyze_semantics()`, and `assess_readiness()`. Saves dataset record to session store.
 - **Response**: `201 Created` with structured `DatasetMetadataResponse`.
 
 ### 3. List Active Session Datasets
@@ -96,5 +96,5 @@ Open browser at: `http://localhost:3000`
 ## Development-Stage Limitations
 
 1. **In-Memory Session Store**: Datasets uploaded during a dev session are stored in server memory (`api/store.py`).
-2. **50MB Upload Limit**: File uploads are capped at 50MB for local development safety.
+2. **100MB Upload Limit**: File uploads are capped at 100MB for local development safety.
 3. **No Authentication / RBAC**: Auth is intentionally deferred to future iterations per spec.
