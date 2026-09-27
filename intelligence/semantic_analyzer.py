@@ -142,6 +142,35 @@ class SemanticAnalyzer:
 
         return semantic_profile
 
+    def _sample_datetime_parse_ratio(
+        self, series: Optional[pd.Series], sample_size: int = 50
+    ) -> float:
+        """Sample up to sample_size non-null values and compute the fraction that parse as datetime."""
+        if series is None or len(series) == 0:
+            return 0.0
+        non_null = series.dropna()
+        if len(non_null) == 0:
+            return 0.0
+        sample = non_null.head(sample_size)
+        success_count = 0
+        import warnings
+
+        for val in sample:
+            val_str = str(val).strip()
+            if not val_str:
+                continue
+            # Pure short digits like "123" are not datetimes
+            if val_str.isdigit() and len(val_str) < 4:
+                continue
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    pd.to_datetime(val_str, errors="raise")
+                success_count += 1
+            except Exception:
+                pass
+        return float(success_count / len(sample)) if len(sample) > 0 else 0.0
+
     def _classify_column(
         self,
         col_meta: ColumnMetadata,
@@ -245,28 +274,66 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
+        is_numeric = "int" in dtype_str or "float" in dtype_str
+        is_integer = "int" in dtype_str
+        unique_ratio = (distinct_cnt / non_null_cnt) if non_null_cnt > 0 else 0.0
+
+        # Dedicated Year-Range Signal (e.g. 1900-2100)
+        # Evaluated before IDENTIFIER / MEASURE / low-cardinality numeric rules
+        if is_numeric and non_null_cnt > 0 and series is not None and not has_measure_token:
+            min_val = col_stats.get("min")
+            max_val = col_stats.get("max")
+            if min_val is not None and max_val is not None:
+                try:
+                    min_f = float(min_val)
+                    max_f = float(max_val)
+                    if 1900 <= min_f and max_f <= 2100:
+                        non_null_s = series.dropna()
+                        if len(non_null_s) > 0 and (non_null_s % 1 == 0).all():
+                            evidence_statements.append("numeric values fall entirely within calendar year range [1900, 2100]")
+                            evidence_statements.append(f"detected year values from {int(min_f)} to {int(max_f)}")
+                            if "year" in clean_name or has_date_token:
+                                evidence_statements.append(f"column name indicates temporal year: '{clean_name}'")
+                                return ColumnSemanticEvidence(
+                                    column_name=col_name,
+                                    candidate_role=ColumnRole.DATETIME,
+                                    confidence=0.92,
+                                    confidence_level="HIGH",
+                                    evidence=evidence_statements,
+                                )
+                            else:
+                                evidence_statements.append("numeric year distribution without date naming token")
+                                return ColumnSemanticEvidence(
+                                    column_name=col_name,
+                                    candidate_role=ColumnRole.DATETIME,
+                                    confidence=0.85,
+                                    confidence_level="HIGH",
+                                    evidence=evidence_statements,
+                                )
+                except Exception:
+                    pass
+
         # Signal 5: Conflict Resolution — IDENTIFIER (two-part)
         #
         # Part A — Uniqueness-based: high unique ratio is a strong identifier signal.
-        #   Requires: numeric OR explicit id naming token (non-numeric text with no id
-        #   name falls through to Signals 7/8 so prose descriptions are classified correctly).
-        #   Guards against date-token columns, which belong in Signal 7.
+        #   Requires: integer dtype (not float) OR explicit id naming token (id, _id, code, key, uuid).
+        #   If dtype is float64 with no identifier name token, do NOT assign IDENTIFIER by uniqueness
+        #   alone — let it fall through to MEASURE evaluation instead.
         #
         # Part B — Name-based (non-unique): explicit ID naming token without measure token.
         #   Handles columns like `customer_code` that are not 100% unique but clearly IDs.
-        is_numeric = "int" in dtype_str or "float" in dtype_str
-        unique_ratio = (distinct_cnt / non_null_cnt) if non_null_cnt > 0 else 0.0
+        has_id_signal = has_id_token or is_integer
 
         if (
             (is_uniq or unique_ratio >= 0.98)
-            and (has_id_token or is_numeric)
+            and has_id_signal
             and not has_date_token
             and not has_measure_token  # explicit measure naming overrides uniqueness signal
         ):
             evidence_statements.append(f"high uniqueness ratio ({distinct_cnt}/{non_null_cnt} = {unique_ratio:.2f})")
             if has_id_token:
                 evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
-            if is_numeric:
+            if is_integer:
                 evidence_statements.append("numeric identifier disambiguation (unique key overrides numeric dtype)")
             return ColumnSemanticEvidence(
                 column_name=col_name,
@@ -337,17 +404,32 @@ class SemanticAnalyzer:
                     evidence=evidence_statements,
                 )
 
-        # Signal 7: DATETIME Candidate (String/Object with date token)
-        if ("object" in dtype_str or "str" in dtype_str) and has_date_token:
-            evidence_statements.append(f"string/object datatype ({dtype_str}) with date naming token ('{clean_name}')")
-            evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
-            return ColumnSemanticEvidence(
-                column_name=col_name,
-                candidate_role=ColumnRole.DATETIME,
-                confidence=0.65,
-                confidence_level="MEDIUM",
-                evidence=evidence_statements,
-            )
+        # Signal 7: DATETIME Candidate (String/Object with date content or date token)
+        if "object" in dtype_str or "str" in dtype_str:
+            parse_ratio = self._sample_datetime_parse_ratio(series)
+            if parse_ratio >= 0.9:
+                evidence_statements.append(f"string/object datatype ({dtype_str}) with content-based datetime pattern")
+                evidence_statements.append(f"high sample datetime parse success ratio ({parse_ratio:.2f})")
+                if has_date_token:
+                    evidence_statements.append(f"column name contains date token: '{clean_name}'")
+                evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
+                return ColumnSemanticEvidence(
+                    column_name=col_name,
+                    candidate_role=ColumnRole.DATETIME,
+                    confidence=0.92 if has_date_token else 0.85,
+                    confidence_level="HIGH",
+                    evidence=evidence_statements,
+                )
+            elif has_date_token:
+                evidence_statements.append(f"string/object datatype ({dtype_str}) with date naming token ('{clean_name}')")
+                evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
+                return ColumnSemanticEvidence(
+                    column_name=col_name,
+                    candidate_role=ColumnRole.DATETIME,
+                    confidence=0.65,
+                    confidence_level="MEDIUM",
+                    evidence=evidence_statements,
+                )
 
         # Signal 8: DIMENSION Candidate (String/Object or Categorical)
         if "object" in dtype_str or "str" in dtype_str or "category" in dtype_str:

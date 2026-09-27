@@ -215,25 +215,9 @@ class DataProfiler:
                     "error": f"Failed to profile column '{col_str}': {e}",
                 }
 
-        # 3. Correlation Matrix Calculation (Numeric columns with >=2 numeric cols & >=2 rows)
+        # 3. Correlation Matrix: computation removed (Option A) to prevent O(C^2) payload bloat and
+        # eliminate unconsumed dead calculations. Empty dictionary maintained for contract stability.
         correlation_matrix: Dict[str, Dict[str, float]] = {}
-        num_cols = [
-            str(c)
-            for c in df.columns
-            if pd.api.types.is_numeric_dtype(df[c]) and not pd.api.types.is_bool_dtype(df[c])
-        ]
-        if len(num_cols) >= 2 and row_cnt >= 2:
-            try:
-                corr_df = df[num_cols].corr(method="pearson")
-                for c1 in num_cols:
-                    correlation_matrix[c1] = {}
-                    for c2 in num_cols:
-                        val = corr_df.loc[c1, c2]
-                        correlation_matrix[c1][c2] = (
-                            sanitize_json_value(val) if not pd.isna(val) else None
-                        )
-            except Exception:
-                correlation_matrix = {}
 
         # 4. Construct DataProfile object
         profile_id = (
@@ -256,7 +240,10 @@ class DataProfiler:
                 details={
                     "profile_id": profile_id,
                     "quality_issues_count": len(quality_issues),
-                    "numeric_columns_count": len(num_cols),
+                    "numeric_columns_count": sum(
+                        1 for s in column_statistics.values()
+                        if "mean" in s  # numeric columns always have a 'mean' key
+                    ),
                 },
             )
 

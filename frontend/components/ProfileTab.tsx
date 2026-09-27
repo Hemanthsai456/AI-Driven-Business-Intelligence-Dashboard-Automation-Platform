@@ -98,7 +98,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ profile }) => {
                 <li key={idx} className="flex items-start space-x-2">
                   <span className="text-amber-400">•</span>
                   <span>
-                    <strong>{issue.issue_type}</strong>: {issue.description}
+                    <strong>{issue.issue_type}</strong>: {issue.message}
                   </span>
                 </li>
               ))}
