@@ -103,4 +103,5 @@ Confidence scores are deterministically assigned based on evidence signal alignm
 
 The `DatasetSemanticProfile` provides structured physical evidence that will be passed to downstream AI agents in future phases:
 - LLM agents inspect column names, data dtypes, physical statistics, rule-based candidate roles, confidence levels, and explicit evidence statements.
-- The LLM can validate or refine candidate roles using domain context without needing to perform low-level data parsing.
+- **V1 Scope Note :** Role refinement or role reassignment by the LLM is explicitly **out of scope for V1**. The candidate roles and confidence scores produced by `DatasetSemanticProfile` serve as the frozen, authoritative, read-only semantic context for intent interpretation and query compilation.
+

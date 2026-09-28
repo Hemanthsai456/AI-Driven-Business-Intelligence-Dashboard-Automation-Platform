@@ -105,3 +105,93 @@ During analysis of `docs/`, `README.md`, and the prompt instructions, the follow
 - **Stage 0 Goal:** Complete documentary cross-reference and conflict enumeration without code modifications.
 - **Current State:** Baseline test suite verified (89 passing unit/API tests). No locked layers modified.
 - **Readiness for Stage 1:** Frozen schemas and contract tests can proceed immediately upon approval.
+
+---
+
+## 4. Architecture Diagram (`Archotecture.drawio.png`) Verification & Binding Resolutions
+
+This section cross-references the official system architecture diagram ([`docs/references/Archotecture.drawio.png`](file:///c:/Users/GANDL/OneDrive/Documents/MiniProject/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/references/Archotecture.drawio.png)) with existing documentation (`docs/`) and the Orchestrator specifications, citing exact text, diagram blocks, and section numbers.
+
+### 4.1 Verification Matrix: Diagram vs. Specifications
+
+#### 1. Retry Caps
+- **Architecture Diagram Text:**
+  - Red loop arrow: `"Pass 1 Failure: Error-Informed Re-Prompt Loop (DuckDB Execution Error Logs)"` routed back to `"AI Orchestrator"`.
+  - Condition diamond: `"All Candidates Failed? (|S| = 0)"`.
+  - Cascade arrow: `"Runner-Up Candidate Rollback Cascade (Evaluate Next Candidate)"` routed back to `"Robustness Ranker (Deterministic / Zero LLM Cost)"`.
+- **Existing Documentation (`docs/`):**
+  - No retry caps, re-prompt limits, or cascade limits exist in `docs/canonical_data_model.md`, `docs/schema_readiness.md`, or `docs/semantic_intelligence.md`.
+- **Orchestrator Specification:**
+  - `AI_MAX_RETRIES = 1`: Caps initial LLM JSON/schema generation attempts.
+  - `PASS1_REPROMPT_MAX`: Caps the DuckDB error-informed re-prompt loop shown in the diagram.
+  - `MAX_CASCADE_DEPTH`: Caps the runner-up candidate rollback cascade shown in the diagram.
+- **Mismatch / Verification Flag:**
+  - **MISMATCH:** The diagram visually specifies the error re-prompt loop and rollback cascade but does NOT define numerical bounding limits. Without explicit caps, the loop `"Pass 1 Failure: Error-Informed Re-Prompt Loop"` risks non-terminating execution if DuckDB queries repeatedly fail. The Orchestrator specification strictly bounds these with `AI_MAX_RETRIES=1`, `PASS1_REPROMPT_MAX`, and `MAX_CASCADE_DEPTH`.
+
+#### 2. Pass 1 / Pass 2 Semantics
+- **Architecture Diagram Text:**
+  - In `AI Orchestrator`: `"Enforces API JSON Schema + Candidate Homogenization Checks"`.
+  - Worker Pool: `"Analytical Engine (DuckDB - K-Way Parallel)"` with 3 workers labeled `"Candidate Execution Plan 1..3 (DuckDB Worker)"` and subtitle `"Thread Isolation | Per-Worker Memory Caps | Timeout Bounds"`.
+  - Pass 1 block: `"Validation Layer — Pass 1 (Per-Candidate)"` with `"Deterministic Schema, Query, & Evidence Checks"`.
+  - Filter: `"Surviving Candidates Set S"`.
+  - Ranker: `"Robustness Ranker (Deterministic / Zero LLM Cost)"`.
+  - Pass 2 block: `"Validation Layer — Pass 2 (AI Proposal Validation)"` with `"Validates Winner Only (No AI Proposal Ships Unchecked)"`.
+  - Decision diamond: `"Winner Passed Pass 2?"`
+    - **Yes** $\rightarrow$ `"Dashboard Specification Object (Canonical Spec + alternate_interpretations Field & Full Trace History)"`.
+    - **No** $\rightarrow$ `"Runner-Up Candidate Rollback Cascade (Evaluate Next Candidate)"` back to Ranker.
+- **Existing Documentation (`docs/schema_readiness.md`):**
+  - Section 3.4 & 4.1 define only `SchemaValidator` for dataset structural integrity prior to analytical loading.
+- **Mismatch / Verification Flag:**
+  - **ALIGNMENT:** Pass 2 semantics in the diagram (*"Validates Winner Only (No AI Proposal Ships Unchecked)"*) perfectly match the prompt's Pass 2 winner validation and capped runner-up cascade.
+  - **MISMATCH / EXECUTION ORDER:** In the diagram, the DuckDB execution block is drawn directly preceding the `"Validation Layer — Pass 1 (Per-Candidate)"` box, and the re-prompt loop is annotated with `"DuckDB Execution Error Logs"`. In the staged implementation:
+    1. Pre-execution static validation (column existence, role compatibility, aggregation validity) runs deterministically as Pass 1 before query dispatch.
+    2. DuckDB execution errors (syntax, timeouts, memory bounds) feed the error-informed re-prompt loop.
+    3. Post-execution checks enforce candidate output consistency across surviving results before ranking.
+
+#### 3. Relationship-Detection Scope
+- **Architecture Diagram Text:**
+  - Third top block: `"Data Intelligence Engine"` with description `"Profiling, Quality, Semantic Graphs & Relationship Extraction"`.
+- **Existing Documentation (`docs/schema_readiness.md`):**
+  - Section "Architectural Boundary (After Step 4.2)", line 290 explicitly states: `| **Relationship Detection** | Phase 2 — NOT HERE |`.
+- **Mismatch / Verification Flag:**
+  - **MISMATCH:** The diagram includes `"Semantic Graphs & Relationship Extraction"` within the upstream Data Intelligence Engine. However, per `docs/schema_readiness.md` and the Orchestrator staged build scope, relationship extraction and multi-table joins are **strictly out of scope for V1**. V1 executes single-dataset analytics over a single `CanonicalDataset`.
+
+#### 4. Confidence Handling
+- **Architecture Diagram Text:**
+  - In Pass 1: `"Deterministic Schema, Query, & Evidence Checks"`.
+  - In Ranker: `"Robustness Ranker (Deterministic / Zero LLM Cost)"`.
+  - Decision diamond: `"Score Differential < ε (Tie Threshold)?"` $\rightarrow$ **Yes**: `"Clarification Fallback Prompt (User UI)"`.
+- **Existing Documentation (`docs/semantic_intelligence.md`):**
+  - Section 4 "Confidence Scoring": defines deterministic confidence levels: `HIGH` (0.85–0.95), `MEDIUM` (0.60–0.84), `LOW` (0.30–0.59), `NONE` (0.00).
+  - Section 2.4: `"Ambiguous columns return ColumnRole.UNKNOWN with low confidence rather than creating false certainty."`
+- **Orchestrator Specification:**
+  - Pass 1: `LOW` confidence produces a plan warning; `UNKNOWN` role is rejected for automatic KPIs.
+  - Ranker V1: `evidence = mean role confidence of columns used`.
+  - Tie threshold: If score differential $< \epsilon$ (`RANK_TIE_EPSILON`), route to clarification prompt rather than picking arbitrarily.
+- **Mismatch / Verification Flag:**
+  - **ALIGNMENT:** The diagram's tie threshold check (`Score Differential < ε`) and fallback prompt directly align with Ranker V1's `RANK_TIE_EPSILON` clarification rule.
+  - **ALIGNMENT:** Confidence scores from `DatasetSemanticProfile` serve directly as inputs to both Pass 1 evidence checks and the Ranker evidence formula.
+
+---
+
+### 4.2 Binding Architectural Resolutions
+
+The following architectural resolutions are binding across all subsequent build stages (Stage 1 through Stage 7):
+
+1. **Resolution C3 (Readiness Gating Before Pass 1):**
+   - In accordance with `docs/schema_readiness.md` (§ Downstream DuckDB Contract, line 212: *"The DuckDB layer must not proceed if status == NOT_READY"*), the Orchestrator **refuses dispatch** if `AnalysisReadiness.status == NOT_READY`.
+   - This gate check is evaluated **prior to Pass 1 and prior to DuckDB worker invocation**. Datasets with `NOT_READY` status immediately halt pipeline execution with a structured readiness refusal error.
+
+2. **Resolution C4 (Sole Semantic Role Authority):**
+   - `DatasetSemanticProfile` is the **sole authoritative source** for column candidate roles (`candidate_role`) and confidence scores.
+   - `apply_roles` remains `False` on the canonical model; `CanonicalDataset.metadata.schema` is never mutated, preserving the fundamental read-only invariance guarantee.
+
+3. **Resolution C5 (LLM Role Refinement Out of Scope for V1):**
+   - `docs/semantic_intelligence.md` (§ Future AI / LLM Preparation, lines 102–107) has been formally updated: **Role refinement or role reassignment by the LLM is explicitly out of scope for V1**.
+   - Semantic roles and confidence scores produced by the deterministic rule engine are frozen, read-only inputs to the LLM. The LLM's role is restricted to translating natural language intent into structured `CandidatePlan`s conforming to these frozen roles.
+
+4. **Resolution C2 Addition (DataFrame Invariance & Temporal String Casting):**
+   - `CanonicalDataset.data` DataFrame is strictly immutable and will **never be mutated or type-coerced**.
+   - `DATETIME` columns stored as strings are handled via `TRY_CAST(col AS TIMESTAMP)` dynamically inside the DuckDB view created per worker.
+   - Any failed casts (evaluating to `NULL`) are tracked, and failed-cast counts are reported as structured warnings in `ExecutionResult.warnings`.
+
