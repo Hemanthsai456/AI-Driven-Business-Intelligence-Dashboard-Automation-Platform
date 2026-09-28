@@ -125,6 +125,73 @@ class PlanGenerator(ABC):
         pass
 
 
+class LLMDirectGenerator(PlanGenerator):
+    """Generates candidate plans directly via structured LLM schema prompts."""
+
+    def __init__(self, llm_client: LLMClient):
+        self.client = llm_client
+
+    def _build_prompt(self, context: LLMContext, k: int, retry_error: Optional[str] = None) -> str:
+        cols_summary = "\n".join(
+            f"- {c.column_name} (Role: {c.candidate_role}, Confidence: {c.confidence:.2f}, Type: {c.dtype or 'N/A'})"
+            for c in context.columns
+        )
+
+        prompt = (
+            f"You are a Business Intelligence Analyst. Generate {k} analytical query plan(s) for the dataset.\n"
+            f"Dataset ID: {context.dataset_id}\n"
+            f"User Intent: {context.intent}\n\n"
+            f"Available Columns (Read-only Metadata):\n{cols_summary}\n\n"
+            "Rules:\n"
+            "1. Metric must use a MEASURE role column for SUM/AVG/STDDEV/MEDIAN.\n"
+            "2. Temporal granularity (YEAR, MONTH, DAY, etc.) requires a DATETIME column.\n"
+            "3. Return a JSON object matching the CandidatePlan schema.\n"
+        )
+        if retry_error:
+            prompt += f"\nPrevious attempt failed with error: {retry_error}. Please correct the schema.\n"
+        return prompt
+
+    def generate_plans(
+        self,
+        context: LLMContext,
+        k: int = 1,
+    ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
+        logs: List[GeneratorCallLog] = []
+        valid_plans: List[CandidatePlan] = []
+        schema = CandidatePlan.model_json_schema()
+
+        attempts = 1 + AI_MAX_RETRIES
+        last_error = None
+
+        for attempt in range(attempts):
+            prompt = self._build_prompt(context, k=k, retry_error=last_error)
+            try:
+                raw_json, call_log = self.client.generate_structured(
+                    prompt=prompt,
+                    response_schema=schema,
+                    generator_label="llm_direct",
+                )
+                logs.append(call_log)
+
+                candidates = raw_json if isinstance(raw_json, list) else [raw_json]
+                for item in candidates:
+                    if isinstance(item, dict):
+                        item["dataset_id"] = context.dataset_id
+                        item["generator"] = "llm_direct"
+                        if "intent" not in item:
+                            item["intent"] = context.intent
+                        plan = CandidatePlan.model_validate(item)
+                        valid_plans.append(plan)
+
+                if valid_plans:
+                    break
+
+            except (ValidationError, LLMClientError, Exception) as e:
+                last_error = str(e)
+
+        return valid_plans[:k], logs
+
+
 class MultiProviderGenerator(PlanGenerator):
     """Calls Gemini, Groq, and Ollama in parallel. Returns valid schema-checked plans."""
 
@@ -468,6 +535,68 @@ class ExternalAgentGenerator(PlanGenerator):
                     estimated_cost_usd=0.0,
                 )
                 return [], [error_log]
+
+
+class MockAgent(PlanGenerator):
+    """Mock agent implementation for unit tests verifying timeouts, isolation, and metadata tool access."""
+
+    def __init__(
+        self,
+        canned_plans: Optional[List[CandidatePlan]] = None,
+        simulate_timeout: bool = False,
+        simulate_error: bool = False,
+        sleep_seconds: float = 0.0,
+    ):
+        self.canned_plans = canned_plans or []
+        self.simulate_timeout = simulate_timeout
+        self.simulate_error = simulate_error
+        self.sleep_seconds = sleep_seconds
+        self.tools_called: List[str] = []
+
+    def generate_plans(
+        self,
+        context: LLMContext,
+        k: int = 1,
+    ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
+        env = AgentMetadataEnvironment(context)
+        self.tools_called.append("list_columns")
+        _ = env.list_columns()
+
+        if self.sleep_seconds > 0:
+            time.sleep(self.sleep_seconds)
+
+        if self.simulate_timeout:
+            log = GeneratorCallLog(
+                model="mock-agent",
+                generator="external_agent",
+                steps=1,
+                input_tokens=0,
+                output_tokens=0,
+                thinking_tokens=0,
+                latency_seconds=round(self.sleep_seconds, 4),
+                estimated_cost_usd=0.0,
+            )
+            return [], [log]
+
+        if self.simulate_error:
+            raise RuntimeError("Mock agent encountered unexpected error.")
+
+        plans = [
+            p.model_copy(update={"generator": "external_agent"})
+            for p in self.canned_plans[:k]
+        ]
+        log = GeneratorCallLog(
+            model="mock-agent",
+            generator="external_agent",
+            steps=2,
+            input_tokens=100,
+            output_tokens=80,
+            thinking_tokens=0,
+            latency_seconds=0.02,
+            estimated_cost_usd=0.000030,
+        )
+        return plans, [log]
+
 
 
 # ---------------------------------------------------------------------------

@@ -443,7 +443,7 @@ class RankerWeights(BaseModel):
     w2_coverage: float = Field(description="Weight for coverage score (fraction of request terms mapped to plan).")
     w3_stability: float = Field(description="Weight for stability score (result agreement under perturbations).")
     w4_assumptions: float = Field(description="Penalty weight for assumptions (defaults filled without request support).")
-    w5_agreement: float = Field(description="Weight for agreement score (supporting_count / providers_responded).")
+    w5_agreement: float = Field(default=0.0, description="Weight for agreement score (supporting_count / providers_responded).")
 
     model_config = {"frozen": True}
 
