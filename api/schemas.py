@@ -171,3 +171,30 @@ class SelectWinnerResponse(BaseModel):
     # Score breakdown
     score_breakdown: Dict[str, Any]
     created_at: str
+
+
+class OrchestratorPipelineRequest(BaseModel):
+    """Request payload for the end-to-end Orchestrator pipeline."""
+
+    dataset_id: str
+    intent: str
+    mode: Optional[str] = "both"  # "llm_only" | "agent_only" | "both"
+    k: Optional[int] = 3
+
+
+class OrchestratorPipelineResponse(BaseModel):
+    """Response payload from the end-to-end Orchestrator pipeline."""
+
+    status: str  # "SUCCESS" | "REFUSED" | "UNANSWERABLE"
+    message: str
+    spec_id: Optional[str] = None
+    dashboard_spec: Optional[Dict[str, Any]] = None
+    ranked_candidates: List[Dict[str, Any]] = []
+    winner: Optional[Dict[str, Any]] = None
+    is_tie: bool = False
+    cascade_depth: int = 0
+    ambiguity_status: str = "CLEAR"
+    ambiguity_message: Optional[str] = None
+    clarification_needed: bool = False
+    decision_log_entry: Optional[Dict[str, Any]] = None
+    explainability_log_entry: Optional[Dict[str, Any]] = None

@@ -7,11 +7,12 @@ import { Badge } from '@/components/Badge';
 import { Alert } from '@/components/Alert';
 import { Button } from '@/components/Button';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { generateCandidates, listDatasets, runPlan, selectWinner } from '@/lib/api';
+import { generateCandidates, listDatasets, runPipeline, runPlan, selectWinner } from '@/lib/api';
 import {
   CandidatePlanUI,
   DatasetListItem,
   GenerateCandidatesResponse,
+  OrchestratorPipelineResponse,
   SelectWinnerResponse,
 } from '@/lib/types';
 import {
@@ -28,6 +29,10 @@ import {
   Award,
   AlertTriangle,
   CheckCircle2,
+  Play,
+  Code,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export default function AskPage() {
@@ -43,6 +48,12 @@ export default function AskPage() {
   const [isSelectingWinner, setIsSelectingWinner] = useState<boolean>(false);
   const [winnerResponse, setWinnerResponse] = useState<SelectWinnerResponse | null>(null);
   const [winnerError, setWinnerError] = useState<string | null>(null);
+
+  // Stage 7: End-to-End Pipeline & Spec Viewer state
+  const [isPipelineRunning, setIsPipelineRunning] = useState<boolean>(false);
+  const [pipelineResponse, setPipelineResponse] = useState<OrchestratorPipelineResponse | null>(null);
+  const [showSpecJson, setShowSpecJson] = useState<boolean>(false);
+  const [copiedSpec, setCopiedSpec] = useState<boolean>(false);
 
   useEffect(() => {
     async function loadData() {
@@ -108,20 +119,36 @@ export default function AskPage() {
     }
   };
 
+  const handleRunPipeline = async () => {
+    if (!selectedDatasetId || !intent.trim()) return;
+
+    setErrorMsg(null);
+    setPipelineResponse(null);
+    setIsPipelineRunning(true);
+    try {
+      const res = await runPipeline(selectedDatasetId, intent, mode, 3);
+      setPipelineResponse(res);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Orchestrator pipeline execution failed');
+    } finally {
+      setIsPipelineRunning(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
           <Sparkles className="w-6 h-6 text-sky-400" />
-          Natural Language Analysis (Ask)
+          Natural Language Analysis (Ask & Orchestrator Pipeline)
         </h1>
         <p className="text-sm text-slate-400 mt-1">
-          Generate structured analytical candidates using direct LLM generation and external agents with full generator attribution.
+          Full-lifecycle orchestrator: ambiguity detection, candidate generation, DuckDB execution, Pass 1/2 validation, Ranker V1, and DashboardSpec emission.
         </p>
       </div>
 
-      {errorMsg && <Alert variant="error" title="Generation Error" message={errorMsg} />}
+      {errorMsg && <Alert variant="error" title="Execution Error" message={errorMsg} />}
 
       {/* Query Form */}
       <Card title="Analytical Query & Generator Settings">
@@ -170,7 +197,7 @@ export default function AskPage() {
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
               Natural Language Intent
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
@@ -178,7 +205,24 @@ export default function AskPage() {
                 value={intent}
                 onChange={(e) => setIntent(e.target.value)}
               />
-              <Button type="submit" variant="primary" size="md" isLoading={isLoading} disabled={datasets.length === 0}>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                onClick={handleRunPipeline}
+                isLoading={isPipelineRunning}
+                disabled={datasets.length === 0}
+              >
+                <Play className="w-4 h-4 mr-1.5" />
+                Run Pipeline
+              </Button>
+              <Button
+                type="submit"
+                variant="secondary"
+                size="md"
+                isLoading={isLoading}
+                disabled={datasets.length === 0}
+              >
                 <Search className="w-4 h-4 mr-1.5" />
                 Generate Candidates
               </Button>
@@ -186,6 +230,231 @@ export default function AskPage() {
           </div>
         </form>
       </Card>
+
+      {/* Pipeline Tie / Clarification Alert */}
+      {pipelineResponse && (pipelineResponse.is_tie || pipelineResponse.clarification_needed) && (
+        <Alert
+          variant="warning"
+          title="Clarification Needed (Candidate Tie Detected)"
+          message={
+            pipelineResponse.ambiguity_message ||
+            `Multiple valid interpretations exist within the ε=0.05 tie threshold for "${intent}". Please review the ranked candidates below and confirm your desired interpretation.`
+          }
+        />
+      )}
+
+      {/* Pipeline Error / Refusal Alert */}
+      {pipelineResponse && pipelineResponse.status !== 'SUCCESS' && (
+        <Alert
+          variant={pipelineResponse.status === 'REFUSED' ? 'error' : 'warning'}
+          title={`Pipeline Status: ${pipelineResponse.status}`}
+          message={pipelineResponse.message}
+        />
+      )}
+
+      {/* Stage 7: Candidate Ranking Table with Full Score Breakdown */}
+      {pipelineResponse && pipelineResponse.ranked_candidates.length > 0 && (
+        <Card
+          title="Ranker V1 Scoring & Candidate Evaluation"
+          headerAction={
+            <div className="flex items-center gap-2">
+              {pipelineResponse.is_tie && (
+                <Badge variant="amber" size="sm">
+                  Tie (within ε=0.05)
+                </Badge>
+              )}
+              {pipelineResponse.cascade_depth > 0 && (
+                <Badge variant="amber" size="sm">
+                  Cascade (depth {pipelineResponse.cascade_depth})
+                </Badge>
+              )}
+              <Badge variant="blue" size="sm">
+                {pipelineResponse.ranked_candidates.length} Evaluated
+              </Badge>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left text-slate-300">
+                <thead className="bg-slate-950 text-slate-400 uppercase font-mono border-b border-slate-800 text-[10px]">
+                  <tr>
+                    <th className="px-3 py-2">Rank</th>
+                    <th className="px-3 py-2">Plan ID</th>
+                    <th className="px-3 py-2">Generator</th>
+                    <th className="px-3 py-2">Vis</th>
+                    <th className="px-3 py-2">Metric</th>
+                    <th className="px-3 py-2">Dimensions</th>
+                    <th className="px-3 py-2 text-right">Evidence (35%)</th>
+                    <th className="px-3 py-2 text-right">Coverage (30%)</th>
+                    <th className="px-3 py-2 text-right">Stability (20%)</th>
+                    <th className="px-3 py-2 text-right">Assumptions (-15%)</th>
+                    <th className="px-3 py-2 text-right">Total Score</th>
+                    <th className="px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                  {pipelineResponse.ranked_candidates.map((cand) => (
+                    <tr
+                      key={cand.plan_id}
+                      className={`hover:bg-slate-800/30 ${cand.is_winner ? 'bg-sky-950/20' : ''}`}
+                    >
+                      <td className="px-3 py-2 font-bold text-white">#{cand.rank}</td>
+                      <td className="px-3 py-2 text-sky-400 font-semibold">{cand.plan_id}</td>
+                      <td className="px-3 py-2">
+                        <Badge
+                          variant={cand.generator === 'external_agent' ? 'purple' : 'blue'}
+                          size="sm"
+                        >
+                          {cand.generator === 'external_agent' ? 'Agent' : 'LLM'}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-2 uppercase text-slate-200">{cand.visualization}</td>
+                      <td className="px-3 py-2 text-slate-300">{cand.metric}</td>
+                      <td className="px-3 py-2 text-slate-400">{cand.dimensions.join(', ') || 'None'}</td>
+                      <td className="px-3 py-2 text-right text-sky-300">
+                        {cand.score_breakdown.evidence.toFixed(3)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-indigo-300">
+                        {cand.score_breakdown.coverage.toFixed(3)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-emerald-300">
+                        {cand.score_breakdown.stability.toFixed(3)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-amber-300">
+                        {cand.score_breakdown.assumptions.toFixed(3)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-emerald-400">
+                        {cand.score.toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {cand.is_winner ? (
+                          <Badge variant="green" size="sm">WINNER</Badge>
+                        ) : (
+                          <Badge variant="slate" size="sm">Alternate</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Stage 7: Pipeline Winner Card */}
+      {pipelineResponse?.winner && (
+        <Card
+          title="Pipeline Winner (Validated Dashboard Spec)"
+          headerAction={
+            <div className="flex items-center gap-2">
+              {pipelineResponse.cascade_depth > 0 && (
+                <Badge variant="amber" size="sm">
+                  Cascade Depth {pipelineResponse.cascade_depth}
+                </Badge>
+              )}
+              <Badge
+                variant={pipelineResponse.winner.generator === 'external_agent' ? 'purple' : 'blue'}
+                size="sm"
+              >
+                {pipelineResponse.winner.generator}
+              </Badge>
+              <Badge variant="green" size="sm">
+                Score: {pipelineResponse.winner.score.toFixed(4)}
+              </Badge>
+            </div>
+          }
+        >
+          <div className="space-y-4 text-xs">
+            {pipelineResponse.cascade_depth > 0 && (
+              <Alert
+                variant="warning"
+                title="Pass 2 Runner-Up Cascade Triggered"
+                message={`The initial rank-1 proposal failed Pass 2 visualization suitability. Runner-up promoted to winner after ${pipelineResponse.cascade_depth} cascade step(s).`}
+              />
+            )}
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">Plan ID</span>
+                <span className="font-mono text-sky-400 font-semibold">{pipelineResponse.winner.plan_id}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">Visualization</span>
+                <span className="font-semibold text-white uppercase">{pipelineResponse.winner.visualization}</span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">Pass 2 Status</span>
+                <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {pipelineResponse.winner.pass2_passed ? 'Passed (Suitability Verified)' : 'Issues Detected'}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">Spec ID</span>
+                <span className="font-mono text-slate-400 truncate block">
+                  {pipelineResponse.spec_id ? `${pipelineResponse.spec_id.slice(0, 16)}...` : 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
+              <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Interpretation</span>
+              <p className="text-slate-300 italic">
+                &quot;{pipelineResponse.winner.reasoning.interpretation}&quot;
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Stage 7: DashboardSpec JSON Viewer */}
+      {pipelineResponse?.dashboard_spec && (
+        <Card
+          title="DashboardSpec JSON Artifact"
+          headerAction={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    JSON.stringify(pipelineResponse.dashboard_spec, null, 2)
+                  );
+                  setCopiedSpec(true);
+                  setTimeout(() => setCopiedSpec(false), 2000);
+                }}
+              >
+                {copiedSpec ? (
+                  <Check className="w-3.5 h-3.5 mr-1 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 mr-1" />
+                )}
+                {copiedSpec ? 'Copied!' : 'Copy Spec JSON'}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowSpecJson(!showSpecJson)}
+              >
+                <Code className="w-3.5 h-3.5 mr-1" />
+                {showSpecJson ? 'Hide JSON' : 'View Spec JSON'}
+              </Button>
+            </div>
+          }
+        >
+          {showSpecJson ? (
+            <pre className="p-4 bg-slate-950 text-slate-300 rounded-lg text-xs font-mono overflow-x-auto max-h-96 border border-slate-800">
+              {JSON.stringify(pipelineResponse.dashboard_spec, null, 2)}
+            </pre>
+          ) : (
+            <p className="text-xs text-slate-400">
+              Canonical DashboardSpec emitted with full trace, alternate interpretations, and isolated candidate artifacts. Click &quot;View Spec JSON&quot; to inspect payload.
+            </p>
+          )}
+        </Card>
+      )}
 
       {/* Ambiguity Alert */}
       {response?.ambiguity && response.ambiguity.status !== 'CLEAR' && (

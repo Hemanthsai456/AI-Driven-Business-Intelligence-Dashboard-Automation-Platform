@@ -125,4 +125,21 @@ export async function selectWinner(
   return handleResponse<import('./types').SelectWinnerResponse>(res);
 }
 
-
+export async function runPipeline(
+  datasetId: string,
+  intent: string,
+  mode?: string,
+  k: number = 3
+): Promise<import('./types').OrchestratorPipelineResponse> {
+  const res = await fetch(`${API_BASE}/orchestrator/pipeline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      intent,
+      mode,
+      k,
+    }),
+  });
+  return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
+}

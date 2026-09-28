@@ -344,3 +344,7 @@ __marimo__/
 .models/
 .model_cache/
 .cache_ai/
+
+# Runtime logs and candidate artifacts
+logs/
+artifacts/

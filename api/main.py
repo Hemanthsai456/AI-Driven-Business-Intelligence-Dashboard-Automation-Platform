@@ -34,6 +34,8 @@ from api.schemas import (
     SemanticProfileResponse,
     SelectWinnerRequest,
     SelectWinnerResponse,
+    OrchestratorPipelineRequest,
+    OrchestratorPipelineResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
@@ -47,6 +49,7 @@ from orchestrator.generator import (
     PlanGenerationCoordinator,
 )
 from orchestrator.llm import GeminiClient, LLMClient, LLMClientError, MockLLMClient
+from orchestrator.pipeline import run_orchestration_pipeline
 from orchestrator.schemas import (
     AggregationType,
     CandidatePlan,
@@ -569,6 +572,88 @@ def select_winner_endpoint(req: SelectWinnerRequest):
         winner_execution=winner.execution_result.model_dump(),
         score_breakdown=winner.score_breakdown.model_dump(),
         created_at=dashboard_spec.created_at,
+    )
+
+
+@app.post(
+    "/api/orchestrator/pipeline",
+    response_model=OrchestratorPipelineResponse,
+)
+def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
+    """Execute end-to-end orchestration pipeline from natural language intent to validated DashboardSpec."""
+    record = session_store.get(req.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{req.dataset_id}' not found in current session.",
+        )
+
+    pipeline_result = run_orchestration_pipeline(
+        dataset=record.dataset,
+        semantic_profile=record.semantic_profile,
+        readiness=record.readiness,
+        intent=req.intent,
+        data_profile=record.profile,
+        mode=req.mode or "both",
+        k=req.k or 3,
+    )
+
+    spec = pipeline_result.dashboard_spec
+    ranked_list = []
+    if pipeline_result.ranked_candidates:
+        for plan, res, score, rank in pipeline_result.ranked_candidates:
+            ranked_list.append({
+                "rank": rank,
+                "plan_id": plan.plan_id,
+                "generator": plan.generator,
+                "visualization": plan.visualization.value,
+                "metric": f"{plan.metric.aggregation.value}({plan.metric.column})",
+                "dimensions": [
+                    f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+                    for d in plan.dimensions
+                ],
+                "score": round(score.total, 4),
+                "score_breakdown": score.model_dump(),
+                "is_winner": (spec is not None and spec.winner.plan.plan_id == plan.plan_id),
+            })
+
+    winner_dict = None
+    if spec:
+        winner_dict = {
+            "plan_id": spec.winner.plan.plan_id,
+            "generator": spec.winner.plan.generator,
+            "visualization": spec.winner.plan.visualization.value,
+            "score": round(spec.winner.score_breakdown.total, 4),
+            "score_breakdown": spec.winner.score_breakdown.model_dump(),
+            "metric": f"{spec.winner.plan.metric.aggregation.value}({spec.winner.plan.metric.column})",
+            "dimensions": [
+                f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+                for d in spec.winner.plan.dimensions
+            ],
+            "reasoning": spec.winner.plan.reasoning.model_dump(),
+            "pass2_passed": spec.trace.pass2_result.passed if spec.trace.pass2_result else True,
+            "pass2_issues": [
+                i.model_dump() for i in (spec.trace.pass2_result.issues if spec.trace.pass2_result else [])
+            ],
+            "execution": spec.winner.execution_result.model_dump(),
+        }
+
+    return OrchestratorPipelineResponse(
+        status=pipeline_result.status,
+        message=pipeline_result.message,
+        spec_id=spec.spec_id if spec else None,
+        dashboard_spec=spec.model_dump() if spec else None,
+        ranked_candidates=ranked_list,
+        winner=winner_dict,
+        is_tie=pipeline_result.is_tie,
+        cascade_depth=pipeline_result.cascade_depth,
+        ambiguity_status=pipeline_result.ambiguity.status.value if pipeline_result.ambiguity else "CLEAR",
+        ambiguity_message=pipeline_result.ambiguity.message if pipeline_result.ambiguity else None,
+        clarification_needed=pipeline_result.is_tie or (
+            pipeline_result.ambiguity is not None and pipeline_result.ambiguity.status.value != "CLEAR"
+        ),
+        decision_log_entry=pipeline_result.decision_log_entry,
+        explainability_log_entry=pipeline_result.explainability_log_entry,
     )
 
 

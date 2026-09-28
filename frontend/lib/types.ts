@@ -252,3 +252,58 @@ export interface SelectWinnerResponse {
   };
   created_at: string;
 }
+
+export interface RankedCandidateUI {
+  rank: number;
+  plan_id: string;
+  generator: string;
+  visualization: string;
+  metric: string;
+  dimensions: string[];
+  score: number;
+  score_breakdown: {
+    evidence: number;
+    coverage: number;
+    stability: number;
+    assumptions: number;
+    total: number;
+  };
+  is_winner: boolean;
+}
+
+export interface OrchestratorPipelineResponse {
+  status: 'SUCCESS' | 'REFUSED' | 'UNANSWERABLE' | string;
+  message: string;
+  spec_id?: string;
+  dashboard_spec?: any;
+  ranked_candidates: RankedCandidateUI[];
+  winner?: {
+    plan_id: string;
+    generator: string;
+    visualization: string;
+    score: number;
+    score_breakdown: {
+      evidence: number;
+      coverage: number;
+      stability: number;
+      assumptions: number;
+      total: number;
+    };
+    metric: string;
+    dimensions: string[];
+    reasoning: {
+      interpretation: string;
+      evidence: string[];
+    };
+    pass2_passed: boolean;
+    pass2_issues: any[];
+    execution: any;
+  };
+  is_tie: boolean;
+  cascade_depth: number;
+  ambiguity_status: string;
+  ambiguity_message?: string;
+  clarification_needed: boolean;
+  decision_log_entry?: any;
+  explainability_log_entry?: any;
+}

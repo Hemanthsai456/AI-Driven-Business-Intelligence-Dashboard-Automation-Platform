@@ -79,6 +79,15 @@ from orchestrator.winner import (
     WinnerSelectionError,
     select_winner,
 )
+from orchestrator.logger import (
+    emit_decision_log,
+    emit_explainability_log,
+    save_candidate_artifact,
+)
+from orchestrator.pipeline import (
+    OrchestrationPipelineResult,
+    run_orchestration_pipeline,
+)
 
 __all__ = [
     # Compiler
@@ -113,6 +122,12 @@ __all__ = [
     "ExternalAgentGenerator",
     "MockAgent",
     "PlanGenerationCoordinator",
+    # Pipeline & Logging
+    "run_orchestration_pipeline",
+    "OrchestrationPipelineResult",
+    "emit_decision_log",
+    "emit_explainability_log",
+    "save_candidate_artifact",
     # Schemas
     "AggregationType",
     "Granularity",

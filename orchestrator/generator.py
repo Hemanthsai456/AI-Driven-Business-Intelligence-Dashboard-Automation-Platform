@@ -436,3 +436,5 @@ class PlanGenerationCoordinator:
                 unique_plans.append(p)
 
         return unique_plans[:k], all_logs
+
+    generate_plans = generate_candidates
