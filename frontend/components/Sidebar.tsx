@@ -14,11 +14,13 @@ import {
 
 const navItems = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
+  { href: '/ask', label: 'Ask (NL Query)', icon: Sparkles },
   { href: '/upload', label: 'Upload Dataset', icon: FileSpreadsheet },
   { href: '/analysis', label: 'Analysis Workspace', icon: BarChart3 },
   { href: '/plan-runner', label: 'Plan Runner', icon: Terminal },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
+
 
 
 export const Sidebar: React.FC = () => {

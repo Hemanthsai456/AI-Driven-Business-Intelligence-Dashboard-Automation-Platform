@@ -168,3 +168,87 @@ export interface PlanRunResponse {
   execution?: ExecutionResult;
   pass1b?: Pass1bResult;
 }
+
+export interface CandidatePlanUI {
+  plan_id: string;
+  dataset_id: string;
+  intent: string;
+  generator: 'llm_direct' | 'external_agent' | string;
+  metric: {
+    column: string;
+    aggregation: string;
+  };
+  dimensions: {
+    column: string;
+    granularity?: string;
+  }[];
+  filters: {
+    column: string;
+    operator: string;
+    value: any;
+  }[];
+  visualization: string;
+  reasoning: {
+    interpretation: string;
+    evidence: string[];
+  };
+}
+
+export interface GeneratorCallLogUI {
+  model: string;
+  generator: string;
+  steps: number;
+  input_tokens: number;
+  output_tokens: number;
+  thinking_tokens: number;
+  latency_seconds: number;
+  estimated_cost_usd: number;
+}
+
+export interface GenerateCandidatesResponse {
+  dataset_id: string;
+  intent: string;
+  ambiguity: {
+    status: string;
+    message?: string;
+    ambiguities: any[];
+  };
+  candidates: CandidatePlanUI[];
+  logs: GeneratorCallLogUI[];
+}
+
+export interface SelectWinnerAlternate {
+  plan_id: string;
+  score: number;
+  reason_not_winner: string;
+  generator: string;
+  visualization: string;
+  intent: string;
+}
+
+export interface SelectWinnerResponse {
+  spec_id: string;
+  dataset_id: string;
+  intent: string;
+  winner_plan_id: string;
+  winner_score: number;
+  winner_generator: string;
+  winner_visualization: string;
+  winner_rank_before_cascade: number;
+  pass2_passed: boolean;
+  pass2_issues: any[];
+  cascade_depth: number;
+  cascade_triggered: boolean;
+  is_tie: boolean;
+  alternate_interpretations: SelectWinnerAlternate[];
+  winner_plan: any;
+  winner_execution: any;
+  score_breakdown: {
+    evidence: number;
+    coverage: number;
+    stability: number;
+    assumptions: number;
+    total: number;
+  };
+  created_at: string;
+}

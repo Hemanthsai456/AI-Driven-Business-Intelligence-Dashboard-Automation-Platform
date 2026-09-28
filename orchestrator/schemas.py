@@ -195,9 +195,14 @@ class CandidatePlan(BaseModel):
         default=VisualizationType.TABLE,
         description="Proposed chart type for this plan.",
     )
+    generator: str = Field(
+        default="llm_direct",
+        description="Generator identifier (e.g. 'llm_direct', 'external_agent').",
+    )
     reasoning: PlanReasoning = Field(description="LLM interpretation and evidence.")
 
     model_config = {"frozen": True}
+
 
     def plan_signature(self) -> str:
         """Compute a structural signature for deduplication.
@@ -480,6 +485,21 @@ class AlternateInterpretation(BaseModel):
     model_config = {"frozen": True}
 
 
+class GeneratorCallLog(BaseModel):
+    """Execution telemetry for a single generator call (LLM direct or external agent)."""
+
+    model: str = Field(description="Model identifier or agent name.")
+    generator: str = Field(description="Generator type: 'llm_direct' or 'external_agent'.")
+    steps: int = Field(default=1, description="Number of agent reasoning/tool execution steps.")
+    input_tokens: int = Field(default=0)
+    output_tokens: int = Field(default=0)
+    thinking_tokens: int = Field(default=0)
+    latency_seconds: float = Field(default=0.0)
+    estimated_cost_usd: float = Field(default=0.0)
+
+    model_config = {"frozen": True}
+
+
 class OrchestratorTrace(BaseModel):
     """Full execution trace for auditability and explainability logging."""
 
@@ -492,6 +512,7 @@ class OrchestratorTrace(BaseModel):
     llm_call_count: int = Field(default=0)
     llm_token_usage: int = Field(default=0)
     llm_latency_seconds: float = Field(default=0.0)
+    generator_logs: List[GeneratorCallLog] = Field(default_factory=list)
     plans_generated: int = Field(default=0)
     plans_passed_pass1a: int = Field(default=0)
     plans_passed_pass1b: int = Field(default=0)
@@ -503,6 +524,7 @@ class OrchestratorTrace(BaseModel):
     total_runtime_seconds: float = Field(default=0.0)
 
     model_config = {"frozen": True}
+
 
 
 class DashboardSpec(BaseModel):

@@ -28,15 +28,42 @@ from api.schemas import (
     DataProfileResponse,
     DatasetListItem,
     DatasetMetadataResponse,
+    GenerateCandidatesRequest,
+    GenerateCandidatesResponse,
     PlanRunResponse,
     SemanticProfileResponse,
+    SelectWinnerRequest,
+    SelectWinnerResponse,
 )
 from api.store import DatasetSessionRecord, session_store
+from intelligence.semantic_analyzer import ColumnRole
+from orchestrator.ambiguity import assess_ambiguity
+from orchestrator.context_builder import build_llm_context
 from orchestrator.executor import execute_plan
-from orchestrator.schemas import CandidatePlan, Pass1aResult
+from orchestrator.generator import (
+    ExternalAgentGenerator,
+    LLMDirectGenerator,
+    MockAgent,
+    PlanGenerationCoordinator,
+)
+from orchestrator.llm import GeminiClient, LLMClient, LLMClientError, MockLLMClient
+from orchestrator.schemas import (
+    AggregationType,
+    CandidatePlan,
+    DimensionSpec,
+    ExecutionResult,
+    GeneratorCallLog,
+    MetricSpec,
+    Pass1aResult,
+    PlanReasoning,
+    VisualizationType,
+)
 from orchestrator.validator import validate_pass1a, validate_pass1b
+from orchestrator.winner import WinnerSelectionError, select_winner
+from orchestrator.utils import rank_candidates, check_candidate_output_consistency
 
 app = FastAPI(
+
 
     title="AI-Driven Business Intelligence Platform API",
     description="REST API wrapping Ingestion, Profiling, Semantic Intelligence, and Schema Readiness engines.",
@@ -329,7 +356,224 @@ def run_plan_endpoint(plan: CandidatePlan):
     )
 
 
+@app.post(
+    "/api/orchestrator/generate-candidates",
+    response_model=GenerateCandidatesResponse,
+)
+def generate_candidates_endpoint(req: GenerateCandidatesRequest):
+    """Generate candidate analytical plans using LLMDirectGenerator and ExternalAgentGenerator."""
+    record = session_store.get(req.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{req.dataset_id}' not found in current session.",
+        )
+
+    # 1. Ambiguity Pre-Check
+    ambiguity = assess_ambiguity(req.intent, record.semantic_profile)
+
+    # 2. Build Compact LLM Context
+    context = build_llm_context(
+        dataset_id=req.dataset_id,
+        intent=req.intent,
+        semantic_profile=record.semantic_profile,
+        data_profile=record.profile,
+    )
+
+    # 3. Determine LLM Client (Gemini if key configured, otherwise intelligent Mock client)
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        llm_client: LLMClient = GeminiClient(api_key=gemini_key)
+    else:
+        # Fallback to smart mock client based on dataset columns
+        first_measure = "Revenue"
+        first_dim = "Category"
+        for col, ev in record.semantic_profile.column_evidences.items():
+            if ev.candidate_role == ColumnRole.MEASURE:
+                first_measure = col
+                break
+        for col, ev in record.semantic_profile.column_evidences.items():
+            if ev.candidate_role in (ColumnRole.DIMENSION, ColumnRole.DATETIME) and col != first_measure:
+                first_dim = col
+                break
+
+        canned = {
+            "dataset_id": req.dataset_id,
+            "intent": req.intent,
+            "metric": {"column": first_measure, "aggregation": "SUM"},
+            "dimensions": [{"column": first_dim}],
+            "filters": [],
+            "visualization": "BAR",
+            "reasoning": {
+                "interpretation": f"Aggregated {first_measure} broken down by {first_dim}",
+                "evidence": [f"Selected measure '{first_measure}' and dimension '{first_dim}'"],
+            },
+        }
+        llm_client = MockLLMClient(canned_response=canned)
+
+    direct_gen = LLMDirectGenerator(llm_client)
+    agent_gen = ExternalAgentGenerator(llm_client)
+    coordinator = PlanGenerationCoordinator(
+        direct_generator=direct_gen,
+        agent_generator=agent_gen,
+        mode=req.mode or os.getenv("GENERATOR_MODE", "llm_only"),
+    )
+
+    candidates, logs = coordinator.generate_candidates(context, k=req.k)
+
+    return GenerateCandidatesResponse(
+        dataset_id=req.dataset_id,
+        intent=req.intent,
+        ambiguity=ambiguity.model_dump(),
+        candidates=[c.model_dump() for c in candidates],
+        logs=[l.model_dump() for l in logs],
+    )
+
+
+@app.post(
+    "/api/orchestrator/select-winner",
+    response_model=SelectWinnerResponse,
+)
+def select_winner_endpoint(req: SelectWinnerRequest):
+    """Re-rank candidates, apply Pass 2 with cascade, and return the winning DashboardSpec.
+
+    Accepts the candidates from /generate-candidates and their execution results
+    from /run-plan, then:
+    1. Ranks surviving candidates using Ranker V1.
+    2. Applies Pass 2 winner-only validation with runner-up cascade.
+    3. Returns a structured winner response including tie/cascade metadata.
+    """
+    record = session_store.get(req.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{req.dataset_id}' not found in current session.",
+        )
+
+    if not req.candidates:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No candidates provided for winner selection.",
+        )
+
+    if not req.execution_results:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No execution results provided for winner selection.",
+        )
+
+    # 1. Deserialize candidates
+    plans = []
+    for c in req.candidates:
+        try:
+            plans.append(CandidatePlan.model_validate(c))
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid candidate plan: {str(e)}",
+            )
+
+    # 2. Deserialize execution results (plan_id -> ExecutionResult)
+    exec_results = {}
+    for plan_id, er_dict in req.execution_results.items():
+        try:
+            exec_results[plan_id] = ExecutionResult.model_validate(er_dict)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid execution result for plan '{plan_id}': {str(e)}",
+            )
+
+    # 3. Build (plan, exec_result) pairs — only keep plans that have execution results
+    candidate_pairs = []
+    for plan in plans:
+        if plan.plan_id in exec_results:
+            candidate_pairs.append((plan, exec_results[plan.plan_id]))
+
+    if not candidate_pairs:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No candidates matched their execution results by plan_id.",
+        )
+
+    # 4. Consistency check before ranking
+    consistency = check_candidate_output_consistency(candidate_pairs)
+
+    # 5. Rank candidates (intent tokens for coverage score)
+    intent_tokens = req.intent.lower().split()
+    semantic_evidences = record.semantic_profile.column_evidences
+    ranked, is_tie = rank_candidates(
+        candidate_pairs,
+        semantic_evidences=semantic_evidences,
+        intent_tokens=intent_tokens,
+    )
+
+    # 6. Deserialize generator logs (optional)
+    gen_logs = []
+    for gl_dict in (req.generator_logs or []):
+        try:
+            gen_logs.append(GeneratorCallLog.model_validate(gl_dict))
+        except Exception:
+            pass  # non-critical — log dropped silently
+
+    # 7. Select winner with Pass 2 cascade
+    try:
+        dashboard_spec = select_winner(
+            ranked=ranked,
+            dataset_id=req.dataset_id,
+            intent=req.intent,
+            context_hash=req.context_hash or "",
+            generator_logs=gen_logs,
+            consistency_check=consistency,
+        )
+    except WinnerSelectionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"All candidates failed Pass 2 after {e.cascade_depth} cascade step(s). "
+                "No viable winner could be selected (UNANSWERABLE)."
+            ),
+        )
+
+    winner = dashboard_spec.winner
+    trace = dashboard_spec.trace
+
+    return SelectWinnerResponse(
+        spec_id=dashboard_spec.spec_id,
+        dataset_id=dashboard_spec.dataset_id,
+        intent=dashboard_spec.intent,
+        winner_plan_id=winner.plan.plan_id,
+        winner_score=winner.score_breakdown.total,
+        winner_generator=winner.plan.generator,
+        winner_visualization=winner.plan.visualization.value,
+        winner_rank_before_cascade=winner.rank,
+        pass2_passed=trace.pass2_result.passed if trace.pass2_result else True,
+        pass2_issues=[
+            i.model_dump() for i in (trace.pass2_result.issues if trace.pass2_result else [])
+        ],
+        cascade_depth=trace.cascade_depth,
+        cascade_triggered=trace.cascade_depth > 0,
+        is_tie=dashboard_spec.is_tie,
+        alternate_interpretations=[
+            {
+                "plan_id": alt.plan.plan_id,
+                "score": alt.score,
+                "reason_not_winner": alt.reason_not_winner,
+                "generator": alt.plan.generator,
+                "visualization": alt.plan.visualization.value,
+                "intent": alt.plan.intent,
+            }
+            for alt in dashboard_spec.alternate_interpretations
+        ],
+        winner_plan=winner.plan.model_dump(),
+        winner_execution=winner.execution_result.model_dump(),
+        score_breakdown=winner.score_breakdown.model_dump(),
+        created_at=dashboard_spec.created_at,
+    )
+
+
 @app.exception_handler(HTTPException)
+
 def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,

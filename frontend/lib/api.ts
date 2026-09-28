@@ -88,3 +88,41 @@ export async function runPlan(plan: any): Promise<import('./types').PlanRunRespo
   return handleResponse<import('./types').PlanRunResponse>(res);
 }
 
+export async function generateCandidates(
+  datasetId: string,
+  intent: string,
+  k: number = 3,
+  mode?: string
+): Promise<import('./types').GenerateCandidatesResponse> {
+  const res = await fetch(`${API_BASE}/orchestrator/generate-candidates`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataset_id: datasetId, intent, k, mode }),
+  });
+  return handleResponse<import('./types').GenerateCandidatesResponse>(res);
+}
+
+export async function selectWinner(
+  datasetId: string,
+  intent: string,
+  candidates: any[],
+  executionResults: Record<string, any>,
+  generatorLogs: any[] = [],
+  contextHash?: string
+): Promise<import('./types').SelectWinnerResponse> {
+  const res = await fetch(`${API_BASE}/orchestrator/select-winner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      intent,
+      candidates,
+      execution_results: executionResults,
+      generator_logs: generatorLogs,
+      context_hash: contextHash,
+    }),
+  });
+  return handleResponse<import('./types').SelectWinnerResponse>(res);
+}
+
+

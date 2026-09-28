@@ -356,3 +356,100 @@ def validate_pass1b(
 
     passed = not any(issue.status == ValidationStatus.FAILED for issue in issues)
     return Pass1bResult(plan_id=plan.plan_id, passed=passed, issues=issues)
+
+
+def validate_pass2(
+    plan: CandidatePlan,
+    exec_result: ExecutionResult,
+) -> "Pass2Result":
+    """Pass 2 Winner-Only Validation.
+
+    Called only on the current ranking winner (rank=1) after Pass 1 survivors are ranked.
+    Checks plan-vs-result consistency and visualization suitability.
+
+    Per ranker_v1_spec.md §6:
+    1. Plan-vs-result consistency: metric column (or its alias) appears in result columns.
+    2. Visualization suitability:
+       - KPI requires row_count == 1.
+       - LINE / AREA requires at least one dimension with a DATETIME-compatible granularity.
+       - PIE requires row_count <= 20.
+    3. Failure triggers runner-up cascade (recorded via cascade_triggered=True).
+    """
+    # import here to avoid circular import at module level
+    from orchestrator.schemas import Pass2Result, VisualizationType
+
+    issues: List[ValidationIssue] = []
+
+    # 1. Plan-vs-result consistency: metric column appears in result columns
+    result_cols_lower = {c.lower() for c in exec_result.columns}
+    metric_col_lower = plan.metric.column.lower()
+    metric_agg_lower = plan.metric.aggregation.value.lower()
+
+    metric_present = (
+        metric_col_lower in result_cols_lower
+        or any(metric_col_lower in rc for rc in result_cols_lower)
+        or any(metric_agg_lower in rc for rc in result_cols_lower)
+    )
+    if not metric_present:
+        issues.append(
+            ValidationIssue(
+                check="plan_result_consistency",
+                status=ValidationStatus.FAILED,
+                column=plan.metric.column,
+                message=(
+                    f"Metric column '{plan.metric.column}' (or its aggregation alias) not found "
+                    f"in execution result columns {exec_result.columns}."
+                ),
+            )
+        )
+
+    # 2. Visualization suitability
+    viz = plan.visualization
+
+    if viz == VisualizationType.KPI:
+        if exec_result.row_count != 1:
+            issues.append(
+                ValidationIssue(
+                    check="viz_kpi_single_row",
+                    status=ValidationStatus.FAILED,
+                    message=(
+                        f"KPI visualization requires exactly 1 result row, "
+                        f"but got {exec_result.row_count} rows."
+                    ),
+                )
+            )
+
+    elif viz in {VisualizationType.LINE, VisualizationType.AREA}:
+        has_datetime_dim = any(d.granularity is not None for d in plan.dimensions)
+        if not has_datetime_dim:
+            issues.append(
+                ValidationIssue(
+                    check="viz_line_requires_datetime",
+                    status=ValidationStatus.FAILED,
+                    message=(
+                        f"{viz.value} visualization requires at least one dimension with temporal "
+                        "granularity (a DATETIME column), but no such dimension was found."
+                    ),
+                )
+            )
+
+    elif viz == VisualizationType.PIE:
+        if exec_result.row_count > 20:
+            issues.append(
+                ValidationIssue(
+                    check="viz_pie_row_limit",
+                    status=ValidationStatus.FAILED,
+                    message=(
+                        f"PIE visualization requires <= 20 rows (categorical breakdown), "
+                        f"but got {exec_result.row_count} rows."
+                    ),
+                )
+            )
+
+    passed = not any(issue.status == ValidationStatus.FAILED for issue in issues)
+    return Pass2Result(
+        plan_id=plan.plan_id,
+        passed=passed,
+        issues=issues,
+        cascade_triggered=not passed,
+    )

@@ -1,0 +1,5 @@
+{"prompt": "Total revenue by product category", "dataset_id": "real-sales-2024", "category": "aggregation_by_dimension", "acceptable_signatures": ["sig_rev_by_cat_v1", "sig_rev_by_cat_v2"], "labeler": "human_gold"}
+{"prompt": "Monthly sales trend for 2024", "dataset_id": "real-sales-2024", "category": "time_series", "acceptable_signatures": ["sig_monthly_trend_v1"], "labeler": "human_gold"}
+{"prompt": "Top customers by total quantity purchased", "dataset_id": "real-sales-2024", "category": "ranking", "acceptable_signatures": ["sig_top_cust_qty_v1"], "labeler": "human_gold"}
+{"prompt": "Average unit price across product categories", "dataset_id": "real-products", "category": "aggregation_by_dimension", "acceptable_signatures": ["sig_avg_price_cat_v1"], "labeler": "human_gold"}
+{"prompt": "Store count by region", "dataset_id": "real-stores", "category": "count_dimension", "acceptable_signatures": ["sig_store_count_region_v1"], "labeler": "human_gold"}

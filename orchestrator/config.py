@@ -70,3 +70,35 @@ RESULT_ROW_CAP: int = 50_000
 
 # Maximum fraction of failed datetime TRY_CAST operations before Pass 1b rejects.
 FAILED_CAST_RATE_THRESHOLD: float = 0.50
+
+# ---------------------------------------------------------------------------
+# Generator Configuration & Modes
+# ---------------------------------------------------------------------------
+
+# Generator mode: "llm_only" | "agent_only" | "both" (default "llm_only")
+GENERATOR_MODE: str = "llm_only"
+
+# ---------------------------------------------------------------------------
+# External Agent Resource Limits (Project Decisions)
+# ---------------------------------------------------------------------------
+
+# Maximum reasoning/tool execution steps an external agent can perform per request.
+AGENT_MAX_STEPS: int = 5
+
+# Maximum context/output token budget for agent execution.
+AGENT_MAX_TOKENS: int = 4096
+
+# Agent execution timeout in seconds.
+AGENT_TIMEOUT_S: float = 30.0
+
+# ---------------------------------------------------------------------------
+# Gemini LLM Client Configuration
+# ---------------------------------------------------------------------------
+
+GEMINI_API_KEY_ENV: str = "GEMINI_API_KEY"
+GEMINI_MODEL_ENV: str = "GEMINI_MODEL"
+DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+
+# Cost estimation constants ($ per 1M tokens, gemini-2.5-flash baseline)
+ESTIMATED_INPUT_COST_PER_M: float = 0.075
+ESTIMATED_OUTPUT_COST_PER_M: float = 0.30

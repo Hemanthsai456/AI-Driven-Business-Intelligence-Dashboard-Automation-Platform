@@ -109,3 +109,65 @@ class PlanRunResponse(BaseModel):
     execution: Optional[Dict[str, Any]] = None
     pass1b: Optional[Dict[str, Any]] = None
 
+
+class GenerateCandidatesRequest(BaseModel):
+    dataset_id: str
+    intent: str
+    k: int = 3
+    mode: Optional[str] = None  # "llm_only" | "agent_only" | "both"
+
+
+class GenerateCandidatesResponse(BaseModel):
+    dataset_id: str
+    intent: str
+    ambiguity: Dict[str, Any]
+    candidates: List[Dict[str, Any]]
+    logs: List[Dict[str, Any]]
+
+
+class SelectWinnerRequest(BaseModel):
+    """Request body for /api/orchestrator/select-winner.
+
+    Accepts candidate plans and their execution results; the server re-ranks
+    and selects the winner applying Pass 2 with cascade.
+    """
+
+    dataset_id: str
+    intent: str
+    # Candidates as CandidatePlan dicts (from /generate-candidates)
+    candidates: List[Dict[str, Any]]
+    # Execution results keyed by plan_id (from /run-plan per candidate)
+    execution_results: Dict[str, Any]  # plan_id -> ExecutionResult dict
+    # Optional generator logs for OrchestratorTrace
+    generator_logs: Optional[List[Dict[str, Any]]] = None
+    context_hash: Optional[str] = None
+
+
+class SelectWinnerResponse(BaseModel):
+    """Response from /api/orchestrator/select-winner."""
+
+    spec_id: str
+    dataset_id: str
+    intent: str
+    # Winner identification
+    winner_plan_id: str
+    winner_score: float
+    winner_generator: str
+    winner_visualization: str
+    winner_rank_before_cascade: int
+    # Pass 2 details
+    pass2_passed: bool
+    pass2_issues: List[Dict[str, Any]]
+    cascade_depth: int
+    cascade_triggered: bool
+    # Tie handling
+    is_tie: bool
+    # Alternate interpretations (runner-ups)
+    alternate_interpretations: List[Dict[str, Any]]
+    # Full winner plan for display
+    winner_plan: Dict[str, Any]
+    # Full execution result of winner
+    winner_execution: Dict[str, Any]
+    # Score breakdown
+    score_breakdown: Dict[str, Any]
+    created_at: str
