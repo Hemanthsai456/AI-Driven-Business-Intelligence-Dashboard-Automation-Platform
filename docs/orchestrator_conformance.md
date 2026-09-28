@@ -22,11 +22,12 @@ The following table itemizes every requirement across existing documentation and
 | **Compact LLM Context** | Downstream AI components receive compact structured physical evidence (column names, candidate roles, confidence levels, key statistics) — raw data rows are NEVER passed. | `docs/semantic_intelligence.md` | Future AI / LLM Preparation | Stage 5 |
 | **K-Way Parallel Workers** | Orchestrator invokes up to `MAX_K=3` parallel candidate execution workers. Each worker runs an isolated in-memory DuckDB instance with strict thread limits, memory limits, and interrupt-based timeouts. | Orchestrator Prompt Decisions | Stage 3, Stage 4 | Stage 3, 4 |
 | **Query Compiler & Whitelist** | Never accept raw SQL from LLM. Queries are deterministically compiled from `CandidatePlan` using whitelisted aggregations and granularities, quoted identifiers, and parameterized literals. | Orchestrator Prompt Decisions | Stage 4 | Stage 4 |
-| **Pass 1 Pre-Execution Validator** | Deterministically validates all candidate plans prior to execution: verifies column existence, role compatibility with aggregation, `DATETIME` requirement for granularity, rejection of `UNKNOWN` roles for automatic KPIs, and warnings on `LOW` confidence. | Orchestrator Prompt Decisions | Stage 4 | Stage 4 |
-| **Candidate Output Consistency Check** | Verifies that all valid candidate execution results share identical metric semantics, time basis, scope, units, and output schema before ranking. | Orchestrator Prompt Decisions | Stage 3 | Stage 3, 7 |
-| **Pass 2 Post-Execution Validator** | Validates the winning candidate execution output only. If Pass 2 validation fails, the orchestrator triggers a capped runner-up cascade. | Orchestrator Prompt Decisions | Stage 3, Stage 7 | Stage 3, 7 |
-| **Retry & Reprompt Caps** | LLM generation is capped at `AI_MAX_RETRIES=1`. Pass 1 execution errors re-prompt the LLM with DuckDB error text capped by `PASS1_REPROMPT_MAX`. Runner-up cascade is capped by `MAX_CASCADE_DEPTH`. | Orchestrator Prompt Decisions | Stage 3, Stage 5, Stage 7 | Stage 3, 5, 7 |
-| **Deterministic Ranker V1** | Zero-LLM scoring: $S = w_1 \cdot \text{evidence} + w_2 \cdot \text{coverage} + w_3 \cdot \text{stability} - w_4 \cdot \text{assumptions}$. Score ties within `RANK_TIE_EPSILON` trigger user clarification instead of guessing. | Orchestrator Prompt Decisions | Stage 3, Stage 7 | Stage 3, 7 |
+| **Pass 1a Pre-Dispatch Validator** | Deterministically validates all candidate plans prior to DuckDB dispatch: checks readiness != NOT_READY, verifies column existence, role compatibility with aggregation, DATETIME requirement for granularity, rejection of UNKNOWN roles for automatic KPIs, and warnings on LOW confidence. | Orchestrator Prompt / Architecture Diagram | Pass 1a Specification | Stage 4 |
+| **Pass 1b Post-Execution Validator** | Deterministically validates execution result before ranking: checks non-empty result, not all-null, row cap enforcement, and failed-cast rate under threshold. | Orchestrator Prompt / Architecture Diagram | Pass 1b Specification | Stage 4 |
+| **Candidate Output Consistency Check** | Verifies that all surviving candidate execution results share identical metric semantics, time basis, scope, units, and output schema before ranking. | Orchestrator Prompt Decisions | Stage 3 | Stage 3, 7 |
+| **Pass 2 Post-Execution Validator (Winner Only)** | Validates the winning candidate execution output only: re-checks plan vs. result consistency and chart/visualization suitability (no AI proposal ships unchecked). Failure triggers runner-up cascade. | Orchestrator Prompt Decisions | Stage 3, Stage 7 | Stage 3, 7 |
+| **Retry & Reprompt Caps (Project Decisions)** | Project decisions (not spec requirements): initial LLM retry capped at `AI_MAX_RETRIES=1`; DuckDB error re-prompts capped at `PASS1_REPROMPT_MAX`; runner-up cascade capped at `MAX_CASCADE_DEPTH`. | Project Decisions | Stage 3, Stage 5, Stage 7 | Stage 3, 5, 7 |
+| **Deterministic Ranker V1 (Project Decisions)** | Zero-LLM scoring: $S = w_1 \cdot \text{evidence} + w_2 \cdot \text{coverage} + w_3 \cdot \text{stability} - w_4 \cdot \text{assumptions}$. Tie threshold `RANK_TIE_EPSILON` is a project decision (configurable hypothesis): ties within epsilon trigger user clarification. | Project Decisions | Stage 3, Stage 7 | Stage 3, 7 |
 | **Plan Signature & Deduplication** | Structural signature over (metric, aggregation, grouping, time column/range/granularity, filter/scope, comparison basis, KPI definition) to deduplicate candidates. | Orchestrator Prompt Decisions | Stage 3, Stage 5 | Stage 3, 5 |
 | **Ambiguity Engine & UNANSWERABLE** | Pre-check rules detect multiple measures/dates/groupings or missing aggregations. Returns `CLEAR`, `AMBIGUOUS`, or `UNANSWERABLE`. Rejects ungrounded requests where required columns/definitions do not exist (never invent KPIs). | Orchestrator Prompt Decisions | Stage 3, Stage 6 | Stage 3, 6 |
 | **Dashboard Specification** | Orchestrator outputs `DashboardSpec` containing canonical spec, `alternate_interpretations`, and complete execution trace. | Orchestrator Prompt Decisions | Stage 3, Stage 7 | Stage 3, 7 |
@@ -114,21 +115,23 @@ This section cross-references the official system architecture diagram ([`docs/r
 
 ### 4.1 Verification Matrix: Diagram vs. Specifications
 
-#### 1. Retry Caps
+#### 1. Retry Caps, Epsilon, and Cascade Depth (Project Decisions)
 - **Architecture Diagram Text:**
   - Red loop arrow: `"Pass 1 Failure: Error-Informed Re-Prompt Loop (DuckDB Execution Error Logs)"` routed back to `"AI Orchestrator"`.
   - Condition diamond: `"All Candidates Failed? (|S| = 0)"`.
   - Cascade arrow: `"Runner-Up Candidate Rollback Cascade (Evaluate Next Candidate)"` routed back to `"Robustness Ranker (Deterministic / Zero LLM Cost)"`.
+  - Decision diamond: `"Score Differential < ε (Tie Threshold)?"`.
 - **Existing Documentation (`docs/`):**
-  - No retry caps, re-prompt limits, or cascade limits exist in `docs/canonical_data_model.md`, `docs/schema_readiness.md`, or `docs/semantic_intelligence.md`.
-- **Orchestrator Specification:**
-  - `AI_MAX_RETRIES = 1`: Caps initial LLM JSON/schema generation attempts.
-  - `PASS1_REPROMPT_MAX`: Caps the DuckDB error-informed re-prompt loop shown in the diagram.
-  - `MAX_CASCADE_DEPTH`: Caps the runner-up candidate rollback cascade shown in the diagram.
+  - No retry caps, re-prompt limits, cascade limits, or tie thresholds exist in `docs/canonical_data_model.md`, `docs/schema_readiness.md`, or `docs/semantic_intelligence.md`.
+- **Orchestrator Project Decisions (Not Spec Requirements):**
+  - `AI_MAX_RETRIES = 1`: Project decision default capping initial LLM JSON/schema generation attempts.
+  - `PASS1_REPROMPT_MAX`: Project decision default capping the DuckDB error-informed re-prompt loop.
+  - `MAX_CASCADE_DEPTH`: Project decision default capping the runner-up candidate rollback cascade.
+  - `RANK_TIE_EPSILON`: Project decision default threshold where score differentials trigger user clarification.
 - **Mismatch / Verification Flag:**
-  - **MISMATCH:** The diagram visually specifies the error re-prompt loop and rollback cascade but does NOT define numerical bounding limits. Without explicit caps, the loop `"Pass 1 Failure: Error-Informed Re-Prompt Loop"` risks non-terminating execution if DuckDB queries repeatedly fail. The Orchestrator specification strictly bounds these with `AI_MAX_RETRIES=1`, `PASS1_REPROMPT_MAX`, and `MAX_CASCADE_DEPTH`.
+  - **PROJECT DECISIONS CLARIFICATION:** The diagram visually specifies the loops and tie branch but does NOT define numerical bounding limits. These caps (`AI_MAX_RETRIES=1`, `PASS1_REPROMPT_MAX`, `MAX_CASCADE_DEPTH`, `RANK_TIE_EPSILON`) are **project decisions** (configurable hypotheses/operational defaults), not pre-existing spec requirements. Without them, the loop `"Pass 1 Failure: Error-Informed Re-Prompt Loop"` would risk indefinite execution.
 
-#### 2. Pass 1 / Pass 2 Semantics
+#### 2. Pass 1a / Pass 1b / Pass 2 Validation Semantics
 - **Architecture Diagram Text:**
   - In `AI Orchestrator`: `"Enforces API JSON Schema + Candidate Homogenization Checks"`.
   - Worker Pool: `"Analytical Engine (DuckDB - K-Way Parallel)"` with 3 workers labeled `"Candidate Execution Plan 1..3 (DuckDB Worker)"` and subtitle `"Thread Isolation | Per-Worker Memory Caps | Timeout Bounds"`.
@@ -141,12 +144,24 @@ This section cross-references the official system architecture diagram ([`docs/r
     - **No** $\rightarrow$ `"Runner-Up Candidate Rollback Cascade (Evaluate Next Candidate)"` back to Ranker.
 - **Existing Documentation (`docs/schema_readiness.md`):**
   - Section 3.4 & 4.1 define only `SchemaValidator` for dataset structural integrity prior to analytical loading.
-- **Mismatch / Verification Flag:**
-  - **ALIGNMENT:** Pass 2 semantics in the diagram (*"Validates Winner Only (No AI Proposal Ships Unchecked)"*) perfectly match the prompt's Pass 2 winner validation and capped runner-up cascade.
-  - **MISMATCH / EXECUTION ORDER:** In the diagram, the DuckDB execution block is drawn directly preceding the `"Validation Layer — Pass 1 (Per-Candidate)"` box, and the re-prompt loop is annotated with `"DuckDB Execution Error Logs"`. In the staged implementation:
-    1. Pre-execution static validation (column existence, role compatibility, aggregation validity) runs deterministically as Pass 1 before query dispatch.
-    2. DuckDB execution errors (syntax, timeouts, memory bounds) feed the error-informed re-prompt loop.
-    3. Post-execution checks enforce candidate output consistency across surviving results before ranking.
+- **Split Validation Semantics (Matching the Architecture Diagram):**
+  - **Pass 1a (Before Dispatch):** Pre-execution deterministic validation. Verifies:
+    1. Dataset readiness check (`AnalysisReadiness.status != NOT_READY`).
+    2. Column existence in `DatasetSemanticProfile`.
+    3. Semantic role and aggregation compatibility (e.g. `MEASURE` for `SUM`/`AVG`, reject `IDENTIFIER`).
+    4. Granularity requires `DATETIME` role.
+    5. Structural syntax correctness of `CandidatePlan`.
+  - **Pass 1b (After Execution / Pre-Ranking):** Post-execution deterministic validation on worker output. Verifies:
+    1. Non-empty tabular result.
+    2. Result is not all-null across metric values.
+    3. Row cap enforcement (result length within allowed limits).
+    4. Failed-cast rate under threshold for string timestamps.
+    5. DuckDB execution errors (syntax/interrupt/memory) caught and routed to error-informed re-prompt loop (capped by `PASS1_REPROMPT_MAX`).
+  - **Candidate Output Consistency Check:** Verifies surviving candidates share identical metric semantics, time basis, scope, units, and output schema.
+  - **Pass 2 (Winner Only):** Validates winning candidate exclusively:
+    1. Re-checks plan vs. result consistency.
+    2. Validates chart/visualization choice against result dimensions and cardinality.
+    3. Failure initiates runner-up rollback cascade (capped by `MAX_CASCADE_DEPTH`). Defined formally in `docs/ranker_v1_spec.md`.
 
 #### 3. Relationship-Detection Scope
 - **Architecture Diagram Text:**

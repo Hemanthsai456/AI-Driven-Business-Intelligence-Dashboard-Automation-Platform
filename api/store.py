@@ -4,7 +4,7 @@ Stores uploaded CanonicalDatasets and their generated DataProfiles,
 DatasetSemanticProfiles, and AnalysisReadiness assessments.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 import pandas as pd
 
@@ -26,7 +26,7 @@ class DatasetSessionRecord:
         self.profile = profile
         self.semantic_profile = semantic_profile
         self.readiness = readiness
-        self.created_at = datetime.utcnow().isoformat()
+        self.created_at = datetime.now(timezone.utc).isoformat()
 
     def to_metadata_dict(self) -> Dict:
         return {
