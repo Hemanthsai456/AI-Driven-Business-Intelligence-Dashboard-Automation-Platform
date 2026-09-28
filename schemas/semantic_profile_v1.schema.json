@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://bi-platform.local/schemas/semantic_profile_v1.schema.json",
+  "title": "DatasetSemanticProfileV1",
+  "description": "Frozen contract schema for serialized DatasetSemanticProfile artifacts.",
+  "type": "object",
+  "required": [
+    "dataset_id",
+    "generated_at",
+    "column_evidences"
+  ],
+  "properties": {
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier of the analyzed dataset."
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO-8601 formatted timestamp of profile generation."
+    },
+    "column_evidences": {
+      "type": "object",
+      "description": "Dictionary mapping column names to structured semantic evidence objects.",
+      "additionalProperties": {
+        "$ref": "#/definitions/ColumnSemanticEvidence"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "definitions": {
+    "ColumnRole": {
+      "type": "string",
+      "enum": [
+        "MEASURE",
+        "DIMENSION",
+        "DATETIME",
+        "IDENTIFIER",
+        "UNKNOWN"
+      ],
+      "description": "Enumerated column candidate semantic role."
+    },
+    "ConfidenceLevel": {
+      "type": "string",
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "NONE"
+      ],
+      "description": "Discrete confidence category."
+    },
+    "ColumnSemanticEvidence": {
+      "type": "object",
+      "required": [
+        "column_name",
+        "candidate_role",
+        "confidence",
+        "confidence_level",
+        "evidence"
+      ],
+      "properties": {
+        "column_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Original physical column name."
+        },
+        "candidate_role": {
+          "$ref": "#/definitions/ColumnRole"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Deterministic confidence score."
+        },
+        "confidence_level": {
+          "$ref": "#/definitions/ConfidenceLevel"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of deterministic evidence statements."
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

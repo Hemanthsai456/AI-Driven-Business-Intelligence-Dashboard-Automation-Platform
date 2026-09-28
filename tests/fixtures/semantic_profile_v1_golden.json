@@ -1,0 +1,62 @@
+{
+  "dataset_id": "ds_baseline_golden",
+  "generated_at": "2026-09-28T12:00:00.000000+00:00",
+  "column_evidences": {
+    "id": {
+      "column_name": "id",
+      "candidate_role": "IDENTIFIER",
+      "confidence": 0.95,
+      "confidence_level": "HIGH",
+      "evidence": [
+        "high uniqueness ratio (5/5 = 1.00)",
+        "identifier naming pattern ('id')",
+        "numeric identifier disambiguation (unique key overrides numeric dtype)"
+      ]
+    },
+    "customer_name": {
+      "column_name": "customer_name",
+      "candidate_role": "DIMENSION",
+      "confidence": 0.7,
+      "confidence_level": "MEDIUM",
+      "evidence": [
+        "text/categorical datatype (object)",
+        "distinct count: 5 out of 5 rows",
+        "dimension naming pattern ('customer_name')"
+      ]
+    },
+    "amount": {
+      "column_name": "amount",
+      "candidate_role": "MEASURE",
+      "confidence": 0.92,
+      "confidence_level": "HIGH",
+      "evidence": [
+        "numeric datatype (float64)",
+        "distinct count: 5",
+        "measure naming indicator: 'amount'"
+      ]
+    },
+    "order_date": {
+      "column_name": "order_date",
+      "candidate_role": "DATETIME",
+      "confidence": 0.92,
+      "confidence_level": "HIGH",
+      "evidence": [
+        "string/object datatype (object) with content-based datetime pattern",
+        "high sample datetime parse success ratio (1.00)",
+        "column name contains date token: 'order_date'",
+        "candidate datetime (read-only: no aggressive type conversion applied)"
+      ]
+    },
+    "is_active": {
+      "column_name": "is_active",
+      "candidate_role": "DIMENSION",
+      "confidence": 0.9,
+      "confidence_level": "HIGH",
+      "evidence": [
+        "boolean datatype (bool)",
+        "boolean naming pattern ('is_active')",
+        "binary true/false flags serve as categorical dimensions"
+      ]
+    }
+  }
+}
