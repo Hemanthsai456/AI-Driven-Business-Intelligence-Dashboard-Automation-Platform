@@ -127,12 +127,14 @@ class GeminiClient(LLMClient):
             )
 
         try:
+            # pyrefly: ignore [missing-import]
             from google import genai
             self._client = genai.Client(api_key=self.api_key)
         except Exception as e:
             raise LLMClientError(f"Failed to initialize google-genai Client: {str(e)}")
 
     def _call_api(self, prompt, schema, sys_inst):
+        # pyrefly: ignore [missing-import]
         from google.genai import types
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
