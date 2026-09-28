@@ -128,3 +128,43 @@ export interface APIError {
   message: string;
   status_code: number;
 }
+
+export interface ValidationIssue {
+  check: string;
+  status: 'PASSED' | 'FAILED' | 'WARNING';
+  message: string;
+  column?: string;
+}
+
+export interface Pass1aResult {
+  plan_id: string;
+  passed: boolean;
+  issues: ValidationIssue[];
+}
+
+export interface ExecutionResult {
+  plan_id: string;
+  status: 'SUCCESS' | 'TIMEOUT' | 'MEMORY_EXCEEDED' | 'SYNTAX_ERROR' | 'RUNTIME_ERROR';
+  rows: Record<string, any>[];
+  columns: string[];
+  row_count: number;
+  compiled_sql?: string;
+  failed_cast_count: number;
+  failed_cast_rate: number;
+  warnings: string[];
+  error_message?: string;
+  runtime_seconds: number;
+}
+
+export interface Pass1bResult {
+  plan_id: string;
+  passed: boolean;
+  issues: ValidationIssue[];
+}
+
+export interface PlanRunResponse {
+  plan_id: string;
+  pass1a: Pass1aResult;
+  execution?: ExecutionResult;
+  pass1b?: Pass1bResult;
+}

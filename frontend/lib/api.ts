@@ -69,3 +69,22 @@ export async function getDatasetReadiness(datasetId: string): Promise<AnalysisRe
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/readiness`);
   return handleResponse<AnalysisReadiness>(res);
 }
+
+export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {
+  const res = await fetch(`${API_BASE}/orchestrator/validate-plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(plan),
+  });
+  return handleResponse<import('./types').Pass1aResult>(res);
+}
+
+export async function runPlan(plan: any): Promise<import('./types').PlanRunResponse> {
+  const res = await fetch(`${API_BASE}/orchestrator/run-plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(plan),
+  });
+  return handleResponse<import('./types').PlanRunResponse>(res);
+}
+

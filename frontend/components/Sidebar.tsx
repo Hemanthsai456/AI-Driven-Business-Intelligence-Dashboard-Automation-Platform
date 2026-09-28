@@ -9,14 +9,17 @@ import {
   BarChart3,
   Settings,
   Sparkles,
+  Terminal,
 } from 'lucide-react';
 
 const navItems = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/upload', label: 'Upload Dataset', icon: FileSpreadsheet },
   { href: '/analysis', label: 'Analysis Workspace', icon: BarChart3 },
+  { href: '/plan-runner', label: 'Plan Runner', icon: Terminal },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
+
 
 export const Sidebar: React.FC = () => {
   const pathname = usePathname();

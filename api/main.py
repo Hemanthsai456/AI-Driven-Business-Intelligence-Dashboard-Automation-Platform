@@ -28,11 +28,16 @@ from api.schemas import (
     DataProfileResponse,
     DatasetListItem,
     DatasetMetadataResponse,
+    PlanRunResponse,
     SemanticProfileResponse,
 )
 from api.store import DatasetSessionRecord, session_store
+from orchestrator.executor import execute_plan
+from orchestrator.schemas import CandidatePlan, Pass1aResult
+from orchestrator.validator import validate_pass1a, validate_pass1b
 
 app = FastAPI(
+
     title="AI-Driven Business Intelligence Platform API",
     description="REST API wrapping Ingestion, Profiling, Semantic Intelligence, and Schema Readiness engines.",
     version="1.0.0",
@@ -254,6 +259,74 @@ def get_dataset_readiness(dataset_id: str):
             detail=f"Dataset '{dataset_id}' not found in current session.",
         )
     return record.readiness.to_dict()
+
+
+@app.post(
+    "/api/orchestrator/validate-plan",
+    response_model=Pass1aResult,
+)
+def validate_plan_endpoint(plan: CandidatePlan):
+    """Validate a candidate analytical plan against dataset semantic profile and readiness."""
+    record = session_store.get(plan.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{plan.dataset_id}' not found in current session.",
+        )
+    result = validate_pass1a(
+        plan=plan,
+        semantic_profile=record.semantic_profile,
+        readiness=record.readiness,
+    )
+    return result
+
+
+@app.post(
+    "/api/orchestrator/run-plan",
+    response_model=PlanRunResponse,
+)
+def run_plan_endpoint(plan: CandidatePlan):
+    """Validate, compile, execute on DuckDB, and verify a candidate analytical plan."""
+    record = session_store.get(plan.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{plan.dataset_id}' not found in current session.",
+        )
+
+    # 1. Pass 1a Pre-Dispatch Validation
+    pass1a_res = validate_pass1a(
+        plan=plan,
+        semantic_profile=record.semantic_profile,
+        readiness=record.readiness,
+    )
+    if not pass1a_res.passed:
+        return PlanRunResponse(
+            plan_id=plan.plan_id,
+            pass1a=pass1a_res.model_dump(),
+            execution=None,
+            pass1b=None,
+        )
+
+    # 2. DuckDB Execution
+    exec_res = execute_plan(
+        plan=plan,
+        dataset=record.dataset,
+        semantic_profile=record.semantic_profile,
+    )
+
+    # 3. Pass 1b Post-Execution Validation
+    pass1b_res = validate_pass1b(
+        plan=plan,
+        exec_result=exec_res,
+    )
+
+    return PlanRunResponse(
+        plan_id=plan.plan_id,
+        pass1a=pass1a_res.model_dump(),
+        execution=exec_res.model_dump(),
+        pass1b=pass1b_res.model_dump(),
+    )
 
 
 @app.exception_handler(HTTPException)

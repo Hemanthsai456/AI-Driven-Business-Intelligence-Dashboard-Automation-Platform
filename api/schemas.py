@@ -101,3 +101,11 @@ class DatasetListItem(BaseModel):
     column_count: int
     created_at: str
     readiness_status: str
+
+
+class PlanRunResponse(BaseModel):
+    plan_id: str
+    pass1a: Dict[str, Any]
+    execution: Optional[Dict[str, Any]] = None
+    pass1b: Optional[Dict[str, Any]] = None
+
