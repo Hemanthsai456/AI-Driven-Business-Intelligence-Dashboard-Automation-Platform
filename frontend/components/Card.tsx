@@ -1,11 +1,12 @@
 import React from 'react';
 
-interface CardProps {
+export interface CardProps {
   children: React.ReactNode;
   className?: string;
-  title?: string;
-  subtitle?: string;
+  title?: React.ReactNode;
+  subtitle?: React.ReactNode;
   headerAction?: React.ReactNode;
+  padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -14,16 +15,34 @@ export const Card: React.FC<CardProps> = ({
   title,
   subtitle,
   headerAction,
+  padding = 'md',
 }) => {
+  const paddingMap = {
+    none: 'p-0',
+    sm: 'p-3',
+    md: 'p-5',
+    lg: 'p-6',
+  };
+
   return (
-    <div className={`bg-slate-900/60 border border-slate-800 backdrop-blur-md rounded-xl p-5 shadow-xl ${className}`}>
+    <div
+      className={`bg-surface border border-border rounded-lg shadow-sm ${paddingMap[padding]} ${className}`}
+    >
       {(title || subtitle || headerAction) && (
-        <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
-          <div>
-            {title && <h3 className="text-base font-semibold text-slate-100">{title}</h3>}
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+        <div className="flex items-center justify-between pb-3.5 mb-4 border-b border-border">
+          <div className="min-w-0 pr-2">
+            {title && (
+              <h3 className="text-sm font-semibold text-foreground tracking-tight truncate">
+                {title}
+              </h3>
+            )}
+            {subtitle && (
+              <p className="text-2xs text-muted-foreground mt-0.5 font-normal">
+                {subtitle}
+              </p>
+            )}
           </div>
-          {headerAction && <div>{headerAction}</div>}
+          {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
       )}
       {children}

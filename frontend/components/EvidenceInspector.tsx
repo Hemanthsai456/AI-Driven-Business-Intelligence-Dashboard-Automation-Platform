@@ -42,67 +42,73 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl space-y-4">
+    <div className="bg-surface border border-border rounded-lg p-4 shadow-sm space-y-4 sticky top-16">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-        <div className="flex items-center space-x-2">
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <h3 className="font-bold text-slate-100 text-base">{column.column_name}</h3>
+      <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div className="flex items-center gap-2 min-w-0">
+          <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+          <h3 className="font-bold text-foreground text-sm truncate">{column.column_name}</h3>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-all"
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Role & Confidence Card */}
-      <div className="p-4 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
+      <div className="p-3 bg-surface-muted rounded border border-border space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-400 font-medium">Candidate Role:</span>
-          <Badge variant={getRoleVariant(column.candidate_role)} size="md">
+          <span className="text-2xs font-mono text-muted-foreground uppercase">Classified Role</span>
+          <Badge variant={getRoleVariant(column.candidate_role)} size="xs">
             {column.candidate_role}
           </Badge>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-400 font-medium">Engine Confidence:</span>
-          <div className="flex items-center space-x-2">
-            <span className="text-xs font-mono font-bold text-slate-200">
-              {(column.confidence * 100).toFixed(0)}%
-            </span>
-            <Badge variant={getConfidenceVariant(column.confidence_level)} size="sm">
-              {column.confidence_level}
-            </Badge>
-          </div>
+          <span className="text-2xs font-mono text-muted-foreground uppercase">Confidence Score</span>
+          <Badge variant={getConfidenceVariant(column.confidence_level)} size="xs" dot>
+            {(column.confidence * 100).toFixed(0)}% ({column.confidence_level})
+          </Badge>
         </div>
       </div>
 
-      {/* Evidence Checklist */}
+      {/* Evidence Signals List */}
       <div className="space-y-2">
-        <h4 className="text-xs font-semibold uppercase text-slate-400 tracking-wider">
+        <h4 className="text-2xs font-semibold uppercase text-muted-foreground tracking-wider font-mono">
           Rule-Based Evidence Signals
         </h4>
-        <div className="space-y-2 font-mono text-xs bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-          {column.evidence && column.evidence.length > 0 ? (
-            column.evidence.map((stmt, idx) => (
-              <div key={idx} className="flex items-start space-x-2.5 text-slate-300">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{stmt}</span>
+
+        {column.evidence.length === 0 ? (
+          <div className="p-3 bg-surface-muted/60 rounded text-2xs text-muted-foreground italic">
+            No specific heuristics matched. Defaulting to general data type rules.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {column.evidence.map((ev, idx) => (
+              <div
+                key={idx}
+                className="flex items-start gap-2 p-2 bg-surface-muted rounded border border-border text-2xs font-mono text-foreground"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <span className="leading-snug">{ev}</span>
               </div>
-            ))
-          ) : (
-            <div className="flex items-center space-x-2 text-slate-500">
-              <ShieldAlert className="w-4 h-4" />
-              <span>No explicit evidence signals recorded.</span>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <p className="text-[11px] text-slate-500 italic">
-        Evidence generated strictly by Step 4 Rule-Based Semantic Intelligence engine without external mock assumptions.
-      </p>
+      {/* Downstream Usage */}
+      <div className="p-3 bg-primary/5 rounded border border-primary/20 text-2xs space-y-1">
+        <div className="font-semibold text-primary">Orchestrator Role Usage:</div>
+        <p className="text-muted-foreground leading-relaxed">
+          {column.candidate_role === 'MEASURE' && 'Eligible for aggregations (SUM, AVG, COUNT, MIN, MAX) in candidate query generation.'}
+          {column.candidate_role === 'DIMENSION' && 'Eligible for GROUP BY dimensional grouping and categorical breakdowns.'}
+          {column.candidate_role === 'DATETIME' && 'Eligible for temporal bucketing (YEAR, MONTH, DAY) in trend analysis.'}
+          {column.candidate_role === 'IDENTIFIER' && 'Reserved for entity lookup, cardinality counting, or row identification.'}
+          {column.candidate_role === 'UNKNOWN' && 'Exempt from automated aggregations pending manual role mapping.'}
+        </p>
+      </div>
     </div>
   );
 };

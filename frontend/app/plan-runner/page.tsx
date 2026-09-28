@@ -5,10 +5,23 @@ import { Card } from '@/components/Card';
 import { Badge } from '@/components/Badge';
 import { Alert } from '@/components/Alert';
 import { Button } from '@/components/Button';
-import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { listDatasets, runPlan, validatePlan } from '@/lib/api';
 import { DatasetListItem, Pass1aResult, PlanRunResponse } from '@/lib/types';
-import { Play, CheckCircle2, XCircle, Code, Clock, Table, Database } from 'lucide-react';
+import {
+  Play,
+  CheckCircle2,
+  XCircle,
+  Code,
+  Clock,
+  Table as TableIcon,
+  Database,
+  Terminal,
+  ArrowRight,
+  ShieldCheck,
+  Cpu,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
 
 export default function PlanRunnerPage() {
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
@@ -101,263 +114,256 @@ export default function PlanRunnerPage() {
     }
   };
 
+  // Pipeline stages calculation
+  const pass1aPassed = validationResult?.passed ?? runResponse?.pass1a?.passed;
+  const executionSuccess = runResponse?.execution?.status === 'SUCCESS';
+  const pass1bPassed = runResponse?.pass1b?.passed;
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-            <Play className="w-6 h-6 text-sky-400" />
-            Deterministic Plan Runner
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            Validate candidate analytical plans via Pass 1a, compile safe DuckDB SQL, execute, and verify via Pass 1b.
-          </p>
-        </div>
+      <div className="pb-2 border-b border-border">
+        <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+          <Terminal className="w-5 h-5 text-primary" />
+          Plan Runner (Execution Pipeline)
+        </h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Execute CandidatePlans directly against the deterministic DuckDB compiler, Pass 1a/1b validation gates, and sandbox limits.
+        </p>
       </div>
 
-      {errorMsg && <Alert variant="error" title="Operation Failed" message={errorMsg} />}
+      {errorMsg && <Alert variant="error" title="Execution Error" message={errorMsg} />}
 
-      {/* Dataset Selection & Plan Editor */}
+      {/* Main Workspace Split */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Editor & Controls (5 Cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <Card title="Dataset & Plan Configuration">
-            <div className="space-y-4">
+          <Card
+            title="CandidatePlan JSON Editor"
+            subtitle="Adheres to schemas/candidate_plan.schema.json"
+            headerAction={
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={() => {
+                    try {
+                      setPlanJson(JSON.stringify(JSON.parse(planJson), null, 2));
+                    } catch {}
+                  }}
+                >
+                  Format
+                </Button>
+              </div>
+            }
+          >
+            <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  Select Active Dataset
+                <label className="block text-2xs font-semibold text-muted-foreground uppercase font-mono mb-1">
+                  Target Dataset
                 </label>
-                {datasets.length === 0 ? (
-                  <div className="p-3 bg-slate-800/50 border border-slate-700/60 rounded-lg text-xs text-slate-400">
-                    No active datasets found. Please upload a dataset first.
-                  </div>
-                ) : (
-                  <select
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    value={selectedDatasetId}
-                    onChange={(e) => handleDatasetChange(e.target.value)}
-                  >
-                    {datasets.map((d) => (
-                      <option key={d.dataset_id} value={d.dataset_id}>
-                        {d.filename} ({d.row_count} rows, {d.readiness_status})
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  value={selectedDatasetId}
+                  onChange={(e) => handleDatasetChange(e.target.value)}
+                  className="w-full text-xs bg-surface-muted border border-border rounded px-2.5 py-1.5 text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {datasets.map((d) => (
+                    <option key={d.dataset_id} value={d.dataset_id}>
+                      {d.filename} ({d.row_count} rows)
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                    Candidate Plan JSON
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => populateSamplePlan(selectedDatasetId || 'dataset-id')}
-                    className="text-xs text-sky-400 hover:text-sky-300"
-                  >
-                    Reset Sample Plan
-                  </button>
-                </div>
+                <label className="block text-2xs font-semibold text-muted-foreground uppercase font-mono mb-1">
+                  Plan Schema Definition
+                </label>
                 <textarea
-                  className="w-full h-80 bg-slate-950 font-mono text-xs text-slate-300 p-3 rounded-lg border border-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   value={planJson}
                   onChange={(e) => setPlanJson(e.target.value)}
-                  placeholder="Paste CandidatePlan JSON..."
+                  rows={14}
+                  className="w-full text-xs font-mono bg-surface-muted border border-border rounded p-3 text-foreground focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed"
+                  spellCheck={false}
                 />
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={handleValidate}
                   isLoading={isValidating}
-                  className="flex-1"
+                  disabled={isRunning}
+                  leftIcon={<ShieldCheck className="w-3.5 h-3.5" />}
                 >
-                  <CheckCircle2 className="w-4 h-4 mr-1.5 text-sky-400" />
-                  Validate Pass 1a
+                  Validate (Pass 1a)
                 </Button>
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={handleRun}
                   isLoading={isRunning}
-                  className="flex-1"
+                  disabled={isValidating}
+                  leftIcon={<Play className="w-3.5 h-3.5" />}
                 >
-                  <Play className="w-4 h-4 mr-1.5 text-white" />
-                  Execute on DuckDB
+                  Execute Plan Pipeline
                 </Button>
               </div>
             </div>
           </Card>
         </div>
 
-        {/* Validation & Execution Results */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Pass 1a Status */}
-          {validationResult && (
-            <Card
-              title="Pass 1a Pre-Dispatch Validation"
-              headerAction={
-                validationResult.passed ? (
-                  <Badge variant="green">PASSED</Badge>
-                ) : (
-                  <Badge variant="red">REJECTED</Badge>
-                )
-              }
-            >
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-xs text-slate-400">
-                  <span className="font-mono">Plan ID: {validationResult.plan_id}</span>
+        {/* Right Column: Execution Timeline & Results (7 Cols) */}
+        <div className="lg:col-span-7 space-y-4">
+          {/* Vertical Pipeline Timeline */}
+          <Card title="Execution Pipeline Timeline" subtitle="Deterministic validation gates and sandbox lifecycle">
+            <div className="space-y-4 pt-1 font-mono text-xs">
+              {/* Step 1: Schema & Pass 1a */}
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                    pass1aPassed === true
+                      ? 'bg-emerald-500 text-white'
+                      : pass1aPassed === false
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-surface-muted text-muted-foreground'
+                  }`}
+                >
+                  {pass1aPassed === true ? '✓' : pass1aPassed === false ? '✕' : '1'}
                 </div>
-                {validationResult.issues.length === 0 ? (
-                  <p className="text-xs text-emerald-400">All pre-dispatch checks passed cleanly.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {validationResult.issues.map((issue, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-lg border text-xs flex items-start justify-between gap-3 ${
-                          issue.status === 'FAILED'
-                            ? 'bg-rose-500/10 border-rose-500/20 text-rose-300'
-                            : issue.status === 'WARNING'
-                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-300'
-                            : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                        }`}
-                      >
-                        <div>
-                          <span className="font-semibold uppercase tracking-wider text-[10px] block opacity-80">
-                            {issue.check} {issue.column ? `(${issue.column})` : ''}
-                          </span>
-                          <span className="mt-0.5 block">{issue.message}</span>
-                        </div>
-                        <Badge
-                          variant={
-                            issue.status === 'FAILED'
-                              ? 'red'
-                              : issue.status === 'WARNING'
-                              ? 'amber'
-                              : 'green'
-                          }
-                          size="sm"
-                        >
-                          {issue.status}
-                        </Badge>
-                      </div>
-                    ))}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">Pass 1a: Static Schema Validation</span>
+                    <Badge
+                      variant={pass1aPassed === true ? 'green' : pass1aPassed === false ? 'red' : 'slate'}
+                      size="xs"
+                    >
+                      {pass1aPassed === true ? 'PASSED' : pass1aPassed === false ? 'FAILED' : 'WAITING'}
+                    </Badge>
                   </div>
-                )}
+                  <p className="text-2xs text-muted-foreground mt-0.5">
+                    Validates plan structure, column references, aggregation compatibility, and null rules.
+                  </p>
+                </div>
               </div>
-            </Card>
-          )}
 
-          {/* DuckDB Execution Result */}
-          {runResponse?.execution && (
-            <Card
-              title="DuckDB Execution Results"
-              headerAction={
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 flex items-center gap-1 font-mono">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    {runResponse.execution.runtime_seconds}s
-                  </span>
-                  <Badge
-                    variant={
-                      runResponse.execution.status === 'SUCCESS' ? 'green' : 'red'
-                    }
-                  >
-                    {runResponse.execution.status}
-                  </Badge>
+              <div className="h-4 w-px bg-border ml-3 -my-2" />
+
+              {/* Step 2: DuckDB Compilation & Execution */}
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                    executionSuccess === true
+                      ? 'bg-emerald-500 text-white'
+                      : runResponse?.execution?.status && runResponse.execution.status !== 'SUCCESS'
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-surface-muted text-muted-foreground'
+                  }`}
+                >
+                  {executionSuccess === true ? '✓' : runResponse?.execution?.status ? '✕' : '2'}
                 </div>
-              }
-            >
-              <div className="space-y-4">
-                {/* Metrics / Cast stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">Returned Rows</span>
-                    <span className="text-lg font-bold text-slate-100">{runResponse.execution.row_count}</span>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">DuckDB Sandboxed Compilation & Execution</span>
+                    <Badge
+                      variant={
+                        executionSuccess
+                          ? 'green'
+                          : runResponse?.execution?.status
+                          ? 'red'
+                          : 'slate'
+                      }
+                      size="xs"
+                    >
+                      {runResponse?.execution?.status || 'PENDING'}
+                    </Badge>
                   </div>
-                  <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">Failed Datetime Casts</span>
-                    <span className="text-lg font-bold text-slate-100">
-                      {runResponse.execution.failed_cast_count}{' '}
-                      <span className="text-xs font-normal text-slate-400">
-                        ({(runResponse.execution.failed_cast_rate * 100).toFixed(1)}%)
-                      </span>
-                    </span>
-                  </div>
-                  <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg">
-                    <span className="text-[10px] text-slate-400 uppercase font-mono block">Pass 1b Status</span>
-                    <span className="text-lg font-bold text-slate-100">
-                      {runResponse.pass1b?.passed ? (
-                        <span className="text-emerald-400 text-sm">VERIFIED</span>
-                      ) : (
-                        <span className="text-rose-400 text-sm">FAILED</span>
-                      )}
-                    </span>
-                  </div>
+                  <p className="text-2xs text-muted-foreground mt-0.5">
+                    Runs compiled SQL with limits: 256MB RAM cap, 1 worker thread, 30s timeout.
+                  </p>
+                  {runResponse?.execution?.runtime_seconds !== undefined && (
+                    <div className="text-2xs text-primary mt-1 font-semibold">
+                      Runtime: {(runResponse.execution.runtime_seconds * 1000).toFixed(1)}ms
+                    </div>
+                  )}
                 </div>
-
-                {/* Compiled SQL */}
-                {runResponse.execution.compiled_sql && (
-                  <div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 mb-1.5">
-                      <Code className="w-3.5 h-3.5 text-sky-400" />
-                      Compiled DuckDB SQL
-                    </div>
-                    <pre className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-sky-300 overflow-x-auto">
-                      {runResponse.execution.compiled_sql}
-                    </pre>
-                  </div>
-                )}
-
-                {/* Result Table Preview */}
-                {runResponse.execution.rows && runResponse.execution.rows.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 mb-2">
-                      <Table className="w-3.5 h-3.5 text-indigo-400" />
-                      Query Output Preview
-                    </div>
-                    <div className="border border-slate-800 rounded-lg overflow-x-auto max-h-60">
-                      <table className="w-full text-xs text-left text-slate-300">
-                        <thead className="bg-slate-950 text-slate-400 uppercase font-mono border-b border-slate-800 sticky top-0">
-                          <tr>
-                            {runResponse.execution.columns.map((col, idx) => (
-                              <th key={idx} className="px-3 py-2 font-medium">
-                                {col}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60">
-                          {runResponse.execution.rows.slice(0, 10).map((row, rIdx) => (
-                            <tr key={rIdx} className="hover:bg-slate-800/30">
-                              {runResponse.execution!.columns.map((col, cIdx) => (
-                                <td key={cIdx} className="px-3 py-2 whitespace-nowrap">
-                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : <span className="text-slate-600">null</span>}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
               </div>
-            </Card>
-          )}
 
-          {!validationResult && !runResponse && (
-            <div className="h-64 border border-dashed border-slate-800 rounded-xl flex flex-col items-center justify-center text-slate-500 space-y-2 p-6 text-center">
-              <Database className="w-8 h-8 text-slate-600 mb-1" />
-              <p className="text-sm font-medium text-slate-400">Ready to execute plan</p>
-              <p className="text-xs text-slate-500 max-w-sm">
-                Select a dataset, customize or keep the sample CandidatePlan, and click Validate or Execute.
-              </p>
+              <div className="h-4 w-px bg-border ml-3 -my-2" />
+
+              {/* Step 3: Pass 1b Result Validation */}
+              <div className="flex items-start gap-3">
+                <div
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                    pass1bPassed === true
+                      ? 'bg-emerald-500 text-white'
+                      : pass1bPassed === false
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-surface-muted text-muted-foreground'
+                  }`}
+                >
+                  {pass1bPassed === true ? '✓' : pass1bPassed === false ? '✕' : '3'}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">Pass 1b: Result Set Verification</span>
+                    <Badge
+                      variant={pass1bPassed === true ? 'green' : pass1bPassed === false ? 'red' : 'slate'}
+                      size="xs"
+                    >
+                      {pass1bPassed === true ? 'PASSED' : pass1bPassed === false ? 'FAILED' : 'PENDING'}
+                    </Badge>
+                  </div>
+                  <p className="text-2xs text-muted-foreground mt-0.5">
+                    Enforces 50,000 row cap and max 50% failed datetime cast rate.
+                  </p>
+                </div>
+              </div>
             </div>
+          </Card>
+
+          {/* Compiled SQL Query */}
+          {runResponse?.execution?.compiled_sql && (
+            <Card title="Compiled SQL" subtitle="DuckDB dialect">
+              <pre className="p-3 bg-surface-muted rounded text-2xs font-mono text-foreground overflow-x-auto">
+                <code>{runResponse.execution.compiled_sql}</code>
+              </pre>
+            </Card>
+          )}
+
+          {/* Result Data Rows */}
+          {runResponse?.execution?.rows && (
+            <Card
+              title="Execution Output Preview"
+              subtitle={`${runResponse.execution.row_count} rows returned`}
+              padding="none"
+            >
+              <div className="overflow-x-auto max-h-60">
+                <table className="w-full text-left border-collapse text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-muted/60 text-2xs uppercase text-muted-foreground">
+                      {runResponse.execution.columns.map((c) => (
+                        <th key={c} className="py-2 px-3 font-semibold text-foreground">
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {runResponse.execution.rows.slice(0, 8).map((r, i) => (
+                      <tr key={i} className="hover:bg-surface-muted/30">
+                        {runResponse.execution!.columns.map((c) => (
+                          <td key={c} className="py-1.5 px-3 text-muted-foreground whitespace-nowrap">
+                            {r[c] !== null ? String(r[c]) : <span className="text-rose-500 italic">null</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
         </div>
       </div>

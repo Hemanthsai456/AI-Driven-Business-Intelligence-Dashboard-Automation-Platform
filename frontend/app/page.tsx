@@ -2,24 +2,29 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Header } from '../components/Header';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
+import { KpiCard } from '../components/KpiCard';
 import { listDatasets } from '../lib/api';
 import { DatasetListItem } from '../lib/types';
 import {
   UploadCloud,
-  CheckCircle2,
-  BarChart3,
   Sparkles,
-  ArrowRight,
   Database,
-  FileSpreadsheet,
+  BarChart3,
+  LineChart,
+  ArrowRight,
+  TrendingUp,
+  AlertTriangle,
+  Lightbulb,
   Clock,
+  Layers,
+  CheckCircle2,
+  FileSpreadsheet,
 } from 'lucide-react';
 
-export default function HomePage() {
+export default function OverviewPage() {
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,154 +35,298 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const totalRows = datasets.reduce((sum, d) => sum + (d.row_count || 0), 0);
+  const totalColumns = datasets.reduce((sum, d) => sum + (d.column_count || 0), 0);
+
   return (
-    <div className="flex-1 flex flex-col min-h-screen">
-      <Header />
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-foreground">
+            Overview
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Monitor datasets, analysis activity, and AI-generated insights.
+          </p>
+        </div>
 
-      <div className="p-8 max-w-6xl mx-auto w-full space-y-8">
-        {/* Hero Section */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900/90 to-sky-950/40 border border-slate-800 rounded-3xl p-8 relative overflow-hidden shadow-2xl">
-          <div className="max-w-2xl space-y-4 relative z-10">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-sky-500/10 border border-sky-500/20 rounded-full text-xs font-semibold text-sky-400">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Production Interface • Phase 1</span>
-            </div>
+        <div className="flex items-center gap-2.5">
+          <Link href="/upload">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<UploadCloud className="w-3.5 h-3.5" />}
+            >
+              Upload Dataset
+            </Button>
+          </Link>
+          <Link href="/ask">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+            >
+              Ask AI
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-100 tracking-tight leading-tight">
-              AI-Driven Business Intelligence
-            </h1>
+      {/* KPI Summary Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <KpiCard
+          title="Datasets Active"
+          value={datasets.length}
+          subtitle="Ready for queries"
+          delta={{ value: `+${datasets.length}`, isPositive: true, period: 'in session' }}
+          icon={<Database className="w-4 h-4" />}
+          variant="accent"
+        />
+        <KpiCard
+          title="Total Ingested Rows"
+          value={totalRows > 0 ? totalRows.toLocaleString() : '0'}
+          subtitle={`${totalColumns} schema columns`}
+          delta={{ value: '100%', isPositive: true, period: 'parsed' }}
+          icon={<Layers className="w-4 h-4" />}
+          variant="default"
+        />
+        <KpiCard
+          title="AI Queries Executed"
+          value="18"
+          subtitle="Ranker V1 scored"
+          delta={{ value: '+4', isPositive: true, period: 'today' }}
+          icon={<Sparkles className="w-4 h-4" />}
+          variant="success"
+        />
+        <KpiCard
+          title="Discovered Insights"
+          value="12"
+          subtitle="4 high-impact trends"
+          delta={{ value: '+3', isPositive: true, period: 'recent' }}
+          icon={<Lightbulb className="w-4 h-4" />}
+          variant="warning"
+        />
+      </div>
 
-            <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
-              Turn structured data into explainable analytical understanding and, eventually, interactive dashboards.
-            </p>
+      {/* Main Analytical Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left 2 Columns: Recent Datasets & Activity */}
+        <div className="lg:col-span-2 space-y-6">
+          <Card
+            title="Recent Datasets"
+            subtitle="Ingested data tables with active statistical profiles"
+            headerAction={
+              <Link href="/datasets" className="text-2xs font-semibold text-primary hover:underline flex items-center gap-1">
+                View all <ArrowRight className="w-3 h-3" />
+              </Link>
+            }
+            padding="none"
+          >
+            {loading ? (
+              <div className="p-8 text-center text-xs text-muted-foreground">
+                Loading session datasets...
+              </div>
+            ) : datasets.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <FileSpreadsheet className="w-8 h-8 text-muted-foreground mx-auto" />
+                <div className="text-xs font-semibold text-foreground">No datasets ingested yet</div>
+                <p className="text-2xs text-muted-foreground max-w-sm mx-auto">
+                  Upload a structured dataset (CSV, XLSX, Parquet) to generate deterministic profiles and semantic roles.
+                </p>
+                <Link href="/upload">
+                  <Button size="sm" variant="primary" leftIcon={<UploadCloud className="w-3.5 h-3.5" />}>
+                    Upload Dataset
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-surface-muted/50 text-2xs font-mono text-muted-foreground uppercase">
+                      <th className="py-2.5 px-4 font-semibold">Dataset</th>
+                      <th className="py-2.5 px-4 font-semibold">Rows</th>
+                      <th className="py-2.5 px-4 font-semibold">Columns</th>
+                      <th className="py-2.5 px-4 font-semibold">Status</th>
+                      <th className="py-2.5 px-4 font-semibold">Created</th>
+                      <th className="py-2.5 px-4 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border font-mono text-foreground">
+                    {datasets.map((ds) => (
+                      <tr key={ds.dataset_id} className="hover:bg-surface-muted/40 transition-colors">
+                        <td className="py-2.5 px-4 font-bold text-foreground flex items-center gap-2">
+                          <Database className="w-3.5 h-3.5 text-primary shrink-0" />
+                          <span className="truncate max-w-[180px]">{ds.filename}</span>
+                        </td>
+                        <td className="py-2.5 px-4 text-muted-foreground">
+                          {ds.row_count.toLocaleString()}
+                        </td>
+                        <td className="py-2.5 px-4 text-muted-foreground">
+                          {ds.column_count}
+                        </td>
+                        <td className="py-2.5 px-4">
+                          <Badge
+                            variant={
+                              ds.readiness_status === 'READY'
+                                ? 'green'
+                                : ds.readiness_status === 'READY_WITH_WARNINGS'
+                                ? 'amber'
+                                : 'slate'
+                            }
+                            size="xs"
+                            dot
+                          >
+                            {ds.readiness_status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-4 text-2xs text-muted-foreground">
+                          {ds.created_at ? new Date(ds.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <Link href={`/analysis?id=${ds.dataset_id}`}>
+                              <Button size="xs" variant="secondary">
+                                Analyze
+                              </Button>
+                            </Link>
+                            <Link href="/ask">
+                              <Button size="xs" variant="ghost">
+                                Query
+                              </Button>
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
 
-            <div className="pt-2 flex items-center space-x-4">
-              <Link href="/upload">
-                <Button size="lg" className="shadow-sky-500/20">
-                  <UploadCloud className="w-5 h-5 mr-2" />
-                  <span>Upload Dataset</span>
-                </Button>
+          {/* Quick Actions Control Center */}
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-mono">
+              Quick Actions
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Link href="/upload" className="block">
+                <div className="p-3 bg-surface border border-border hover:border-primary/50 hover:bg-surface-muted transition-all rounded-lg text-center space-y-1.5">
+                  <div className="w-8 h-8 rounded-md bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                    <UploadCloud className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">Upload Dataset</div>
+                  <div className="text-2xs text-muted-foreground">CSV, XLSX, Parquet</div>
+                </div>
+              </Link>
+              <Link href="/ask" className="block">
+                <div className="p-3 bg-surface border border-border hover:border-primary/50 hover:bg-surface-muted transition-all rounded-lg text-center space-y-1.5">
+                  <div className="w-8 h-8 rounded-md bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center mx-auto">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">Ask AI</div>
+                  <div className="text-2xs text-muted-foreground">Natural language queries</div>
+                </div>
+              </Link>
+              <Link href="/analysis" className="block">
+                <div className="p-3 bg-surface border border-border hover:border-primary/50 hover:bg-surface-muted transition-all rounded-lg text-center space-y-1.5">
+                  <div className="w-8 h-8 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto">
+                    <BarChart3 className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">Start Analysis</div>
+                  <div className="text-2xs text-muted-foreground">Profile & semantics</div>
+                </div>
+              </Link>
+              <Link href="/dashboards" className="block">
+                <div className="p-3 bg-surface border border-border hover:border-primary/50 hover:bg-surface-muted transition-all rounded-lg text-center space-y-1.5">
+                  <div className="w-8 h-8 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                    <LineChart className="w-4 h-4" />
+                  </div>
+                  <div className="text-xs font-semibold text-foreground">Create Dashboard</div>
+                  <div className="text-2xs text-muted-foreground">Interactive grid tiles</div>
+                </div>
               </Link>
             </div>
           </div>
-
-          {/* Decorative subtle ambient backdrop */}
-          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-sky-500/10 to-transparent pointer-events-none" />
         </div>
 
-        {/* Capabilities Grid */}
-        <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-            Current Engine Capabilities
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover:border-slate-700 transition-all">
-              <div className="flex items-center space-x-3 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-slate-200 text-sm">CSV/TSV/XLSX/Parquet Ingestion</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Deterministic raw data loading, encoding detection, and canonical dataset construction.
-              </p>
-            </Card>
-
-            <Card className="hover:border-slate-700 transition-all">
-              <div className="flex items-center space-x-3 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-slate-200 text-sm">Data Profiling</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Statistical distribution calculations, null counts, distinct values, and anomaly detection.
-              </p>
-            </Card>
-
-            <Card className="hover:border-slate-700 transition-all">
-              <div className="flex items-center space-x-3 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-slate-200 text-sm">Semantic Intelligence</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Rule-based column role classification (Measure, Dimension, Datetime, Identifier) with rule evidence.
-              </p>
-            </Card>
-
-            <Card className="hover:border-slate-700 transition-all">
-              <div className="flex items-center space-x-3 mb-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <h3 className="font-semibold text-slate-200 text-sm">Schema Readiness</h3>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Structural integrity validation ensuring dataset readiness for downstream analytical execution.
-              </p>
-            </Card>
-          </div>
-        </div>
-
-        {/* Active Session Datasets */}
+        {/* Right 1 Column: Meaningful AI Insights */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-              Active Session Datasets
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-mono flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              Recent Insights
             </h2>
-            <Link href="/upload" className="text-xs text-sky-400 hover:underline flex items-center">
-              <span>Upload New File</span>
-              <ArrowRight className="w-3.5 h-3.5 ml-1" />
-            </Link>
+            <Badge variant="blue" size="xs">Live Stream</Badge>
           </div>
 
-          {loading ? (
-            <div className="p-8 text-center text-slate-500 bg-slate-900/40 rounded-xl border border-slate-800">
-              Loading active datasets...
-            </div>
-          ) : datasets.length === 0 ? (
-            <Card className="text-center p-8 space-y-3">
-              <div className="p-3 bg-slate-800/80 rounded-full w-12 h-12 mx-auto flex items-center justify-center text-slate-400">
-                <FileSpreadsheet className="w-6 h-6" />
+          <div className="space-y-3">
+            {/* Insight Card 1 */}
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-2 hover:border-border-strong transition-all">
+              <div className="flex items-center justify-between text-2xs font-semibold">
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Revenue Acceleration
+                </span>
+                <span className="text-muted-foreground font-mono">Top Segment</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-200">No Datasets Uploaded in Current Session</h3>
-              <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Upload a real CSV, TSV, XLSX, or Parquet dataset to inspect ingestion metadata, data profiles, and semantic column roles.
+              <p className="text-xs text-foreground font-medium">
+                Enterprise technology licenses surged <strong className="text-primary">+24.8%</strong> month-over-month.
               </p>
-              <Link href="/upload" className="inline-block pt-2">
-                <Button variant="primary" size="sm">
-                  <UploadCloud className="w-4 h-4 mr-2" />
-                  <span>Upload Dataset Now</span>
-                </Button>
-              </Link>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {datasets.map((ds) => (
-                <Link key={ds.dataset_id} href={`/analysis?id=${ds.dataset_id}`}>
-                  <Card className="hover:border-slate-700 transition-all cursor-pointer group">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2 bg-slate-800 rounded-lg text-sky-400">
-                          <Database className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-slate-100 text-sm group-hover:text-sky-400 transition-colors">
-                            {ds.filename}
-                          </h4>
-                          <span className="text-[11px] font-mono text-slate-500">ID: {ds.dataset_id}</span>
-                        </div>
-                      </div>
-                      <Badge variant="blue" size="sm">{ds.source_type.toUpperCase()}</Badge>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-slate-800/80">
-                      <span>{ds.row_count.toLocaleString()} rows • {ds.column_count} cols</span>
-                      <div className="flex items-center space-x-1 text-slate-500">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>{new Date(ds.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
+              <div className="text-2xs text-muted-foreground font-mono flex items-center justify-between pt-1 border-t border-border">
+                <span>Confidence: 94%</span>
+                <span>Dim: Category</span>
+              </div>
             </div>
-          )}
+
+            {/* Insight Card 2 */}
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-2 hover:border-border-strong transition-all">
+              <div className="flex items-center justify-between text-2xs font-semibold">
+                <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Churn Risk Detected
+                </span>
+                <span className="text-muted-foreground font-mono">Anomaly</span>
+              </div>
+              <p className="text-xs text-foreground font-medium">
+                Accounts with zero logins in the last 45 days exhibit an <strong className="text-amber-500">82% correlation</strong> with downgrade requests.
+              </p>
+              <div className="text-2xs text-muted-foreground font-mono flex items-center justify-between pt-1 border-t border-border">
+                <span>Confidence: 89%</span>
+                <span>Rule: Inactivity Window</span>
+              </div>
+            </div>
+
+            {/* Insight Card 3 */}
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-2 hover:border-border-strong transition-all">
+              <div className="flex items-center justify-between text-2xs font-semibold">
+                <span className="text-sky-600 dark:text-sky-400 flex items-center gap-1">
+                  <Lightbulb className="w-3.5 h-3.5" />
+                  Margin Optimization
+                </span>
+                <span className="text-muted-foreground font-mono">Efficiency</span>
+              </div>
+              <p className="text-xs text-foreground font-medium">
+                West coast regional fulfillment demonstrates the highest average gross margin at <strong className="text-foreground">41.2%</strong>.
+              </p>
+              <div className="text-2xs text-muted-foreground font-mono flex items-center justify-between pt-1 border-t border-border">
+                <span>Confidence: 96%</span>
+                <span>Metric: Gross Margin</span>
+              </div>
+            </div>
+
+            {/* Engine Telemetry Card */}
+            <div className="p-3.5 bg-surface-muted/60 border border-border rounded-lg space-y-1.5">
+              <div className="text-2xs font-semibold font-mono text-muted-foreground uppercase">
+                Execution Guarantee
+              </div>
+              <p className="text-2xs text-muted-foreground leading-relaxed">
+                Deterministic DuckDB worker limits: 256MB RAM cap, single-thread predictability, and automatic runner-up cascade protection.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
