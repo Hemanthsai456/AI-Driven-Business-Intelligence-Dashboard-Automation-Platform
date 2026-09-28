@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Sparkles, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { X, Sparkles, CheckCircle2 } from 'lucide-react';
 import { SemanticColumn } from '../lib/types';
 import { Badge } from './Badge';
 
@@ -46,7 +46,7 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="w-4 h-4 text-purple-500 shrink-0" />
+          <Sparkles className="w-4 h-4 text-[#EA6928] shrink-0" />
           <h3 className="font-bold text-foreground text-sm truncate">{column.column_name}</h3>
         </div>
         <button
@@ -90,7 +90,7 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
                 key={idx}
                 className="flex items-start gap-2 p-2 bg-surface-muted rounded border border-border text-2xs font-mono text-foreground"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                 <span className="leading-snug">{ev}</span>
               </div>
             ))}
@@ -99,8 +99,8 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
       </div>
 
       {/* Downstream Usage */}
-      <div className="p-3 bg-primary/5 rounded border border-primary/20 text-2xs space-y-1">
-        <div className="font-semibold text-primary">Orchestrator Role Usage:</div>
+      <div className="p-3 bg-[#E6D4B8]/40 rounded border border-[#DAC7AD] text-2xs space-y-1 font-mono">
+        <div className="font-semibold text-[#EA6928]">Orchestrator Role Usage:</div>
         <p className="text-muted-foreground leading-relaxed">
           {column.candidate_role === 'MEASURE' && 'Eligible for aggregations (SUM, AVG, COUNT, MIN, MAX) in candidate query generation.'}
           {column.candidate_role === 'DIMENSION' && 'Eligible for GROUP BY dimensional grouping and categorical breakdowns.'}

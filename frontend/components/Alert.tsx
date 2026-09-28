@@ -14,31 +14,31 @@ export const Alert: React.FC<AlertProps> = ({
 }) => {
   const styles = {
     error: {
-      bg: 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-200',
-      icon: <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />,
+      bg: 'bg-[#FFEBEE] border-[#FFCDD2] text-[#C62828] dark:bg-[#40181A] dark:border-[#C62828]/50 dark:text-[#EF9A9A]',
+      icon: <AlertCircle className="w-4 h-4 text-[#C62828] shrink-0 mt-0.5" />,
     },
     warning: {
-      bg: 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-200',
-      icon: <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />,
+      bg: 'bg-[#FFF8E1] border-[#FFE082] text-[#9A6700] dark:bg-[#3D2E14] dark:border-[#F2B22E]/40 dark:text-[#F2B22E]',
+      icon: <AlertTriangle className="w-4 h-4 text-[#F2B22E] shrink-0 mt-0.5" />,
     },
     success: {
-      bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-200',
-      icon: <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />,
+      bg: 'bg-[#E8F5E9] border-[#C8E6C9] text-[#2E7D32] dark:bg-[#1B3E20] dark:border-[#2E7D32]/50 dark:text-[#A5D6A7]',
+      icon: <CheckCircle2 className="w-4 h-4 text-[#2E7D32] shrink-0 mt-0.5" />,
     },
     info: {
-      bg: 'bg-primary/10 border-primary/20 text-foreground',
-      icon: <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />,
+      bg: 'bg-[#E6D4B8]/40 border-[#DAC7AD] text-[#212121] dark:bg-[#2A2A2A] dark:border-[#3A3530] dark:text-[#F5EBE1]',
+      icon: <Info className="w-4 h-4 text-[#EA6928] shrink-0 mt-0.5" />,
     },
   };
 
   const current = styles[variant];
 
   return (
-    <div className={`p-3.5 border rounded-lg flex items-start gap-2.5 text-xs ${current.bg}`}>
+    <div className={`p-3 border rounded flex items-start gap-2.5 text-xs ${current.bg}`}>
       {current.icon}
       <div className="min-w-0">
-        {title && <h4 className="font-semibold text-foreground">{title}</h4>}
-        <p className="mt-0.5 opacity-90 leading-relaxed">{message}</p>
+        {title && <h4 className="font-semibold leading-tight">{title}</h4>}
+        <p className="mt-0.5 opacity-90 leading-relaxed text-2xs">{message}</p>
       </div>
     </div>
   );

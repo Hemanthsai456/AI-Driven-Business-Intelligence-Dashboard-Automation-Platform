@@ -7,65 +7,19 @@ import { useTheme } from './ThemeProvider';
 import {
   LayoutDashboard,
   Sparkles,
-  BarChart3,
-  LineChart,
-  Database,
   UploadCloud,
-  Layers,
-  Brain,
+  BarChart3,
   Terminal,
   Settings,
-  ChevronRight,
 } from 'lucide-react';
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-}
-
-interface NavSection {
-  title: string;
-  items: NavItem[];
-}
-
-const NAV_SECTIONS: NavSection[] = [
-  {
-    title: 'WORKSPACE',
-    items: [
-      { href: '/', label: 'Overview', icon: LayoutDashboard },
-      { href: '/ask', label: 'Ask AI', icon: Sparkles, badge: 'NL' },
-      { href: '/analysis', label: 'Analysis', icon: BarChart3 },
-      { href: '/dashboards', label: 'Dashboards', icon: LineChart },
-    ],
-  },
-  {
-    title: 'DATA',
-    items: [
-      { href: '/datasets', label: 'Datasets', icon: Database },
-      { href: '/upload', label: 'Upload Dataset', icon: UploadCloud },
-    ],
-  },
-  {
-    title: 'INTELLIGENCE',
-    items: [
-      { href: '/analysis?tab=profile', label: 'Data Profiling', icon: Layers },
-      { href: '/analysis?tab=semantic', label: 'Semantic Layer', icon: Brain },
-    ],
-  },
-  {
-    title: 'WORKFLOW',
-    items: [
-      { href: '/plan-runner', label: 'Plan Runner', icon: Terminal },
-    ],
-  },
-  {
-    title: 'SYSTEM',
-    items: [
-      { href: '/settings', label: 'Settings', icon: Settings },
-    ],
-  },
+const NAV_ITEMS = [
+  { href: '/', label: 'Home', icon: LayoutDashboard },
+  { href: '/ask', label: 'Ask (NL Query)', icon: Sparkles },
+  { href: '/upload', label: 'Upload Dataset', icon: UploadCloud },
+  { href: '/analysis', label: 'Analysis Workspace', icon: BarChart3 },
+  { href: '/plan-runner', label: 'Plan Runner', icon: Terminal },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export const Sidebar: React.FC = () => {
@@ -74,101 +28,76 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`bg-surface border-r border-border flex flex-col justify-between h-screen sticky top-0 transition-all duration-200 select-none z-40 ${
+      className={`bg-[#212121] text-[#F5EBE1] flex flex-col justify-between h-screen sticky top-0 transition-all duration-200 select-none z-40 border-r border-[#333333] ${
         sidebarCollapsed ? 'w-16' : 'w-60'
       }`}
     >
-      {/* Brand Header */}
       <div>
-        <div className="h-13 px-4 border-b border-border flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-            <Sparkles className="w-4 h-4 text-primary" />
+        {/* Brand Header */}
+        <div className="h-14 px-4 border-b border-[#333333] flex items-center gap-3">
+          <div className="w-8 h-8 rounded bg-[#EA6928] text-white flex items-center justify-center shrink-0 font-bold text-xs">
+            BI
           </div>
           {!sidebarCollapsed && (
             <div className="min-w-0">
-              <h1 className="font-bold text-xs tracking-tight text-foreground truncate">
+              <h1 className="font-bold text-xs tracking-tight text-white truncate">
                 AI BI Platform
               </h1>
-              <span className="text-2xs text-muted-foreground font-mono tracking-wider uppercase block">
+              <span className="text-2xs text-[#A89D91] uppercase tracking-wider block font-mono">
                 Enterprise Studio
               </span>
             </div>
           )}
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="p-2 space-y-4 overflow-y-auto max-h-[calc(100vh-8rem)]">
-          {NAV_SECTIONS.map((section) => (
-            <div key={section.title} className="space-y-1">
-              {!sidebarCollapsed && (
-                <div className="px-2.5 py-1 text-2xs font-semibold text-muted-foreground/70 uppercase tracking-wider font-mono">
-                  {section.title}
-                </div>
-              )}
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const itemPath = item.href.split('?')[0];
-                  const isActive =
-                    pathname === itemPath ||
-                    (itemPath !== '/' && pathname.startsWith(itemPath));
+        {/* Navigation Items */}
+        <nav className="p-2 space-y-1">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== '/' && pathname.startsWith(item.href));
 
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={sidebarCollapsed ? item.label : undefined}
-                      className={`group flex items-center gap-2.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors relative ${
-                        isActive
-                          ? 'bg-primary/10 text-primary font-semibold border-l-2 border-primary'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-surface-muted'
-                      } ${sidebarCollapsed ? 'justify-center px-0' : ''}`}
-                    >
-                      <Icon
-                        className={`w-4 h-4 shrink-0 transition-colors ${
-                          isActive
-                            ? 'text-primary'
-                            : 'text-muted-foreground group-hover:text-foreground'
-                        }`}
-                      />
-                      {!sidebarCollapsed && (
-                        <div className="flex-1 flex items-center justify-between min-w-0">
-                          <span className="truncate">{item.label}</span>
-                          {item.badge && (
-                            <span className="px-1.5 py-0.2 rounded text-2xs font-mono font-bold bg-primary/10 text-primary border border-primary/20">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={sidebarCollapsed ? item.label : undefined}
+                className={`flex items-center gap-3 px-3 py-2 rounded text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#2E2B27] text-white font-semibold border-l-3 border-[#EA6928]'
+                    : 'text-[#A89D91] hover:text-white hover:bg-[#2A2A2A]'
+                } ${sidebarCollapsed ? 'justify-center px-0' : ''}`}
+              >
+                <Icon
+                  className={`w-4 h-4 shrink-0 transition-colors ${
+                    isActive ? 'text-[#EA6928]' : 'text-[#A89D91]'
+                  }`}
+                />
+                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+              </Link>
+            );
+          })}
         </nav>
       </div>
 
-      {/* Engine Status Footer */}
-      <div className="p-3 border-t border-border">
+      {/* Capabilities Summary Footer */}
+      <div className="p-3 border-t border-[#333333]">
         {!sidebarCollapsed ? (
-          <div className="p-2.5 bg-surface-muted rounded-md border border-border">
-            <div className="flex items-center justify-between">
-              <span className="text-2xs font-mono font-semibold text-muted-foreground">
-                Engine Core
-              </span>
-              <span className="flex items-center gap-1 text-2xs font-mono text-emerald-600 dark:text-emerald-400">
+          <div className="p-2.5 bg-[#2A2A2A] rounded border border-[#3A3530] text-2xs space-y-1">
+            <div className="flex items-center justify-between text-[#A89D91] font-mono">
+              <span>Engine Status</span>
+              <span className="flex items-center gap-1 text-emerald-400 font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                 Active
               </span>
             </div>
-            <p className="text-2xs text-muted-foreground mt-1 truncate">
-              Pass 1/2 Orchestrator v1
+            <p className="text-[#8E8377] font-mono truncate">
+              Deterministic DuckDB v1
             </p>
           </div>
         ) : (
-          <div className="flex justify-center" title="Engine Core Active">
+          <div className="flex justify-center" title="Engine Active">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
           </div>
         )}

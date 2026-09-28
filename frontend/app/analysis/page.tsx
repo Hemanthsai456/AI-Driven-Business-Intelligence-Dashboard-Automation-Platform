@@ -32,11 +32,7 @@ import {
   Brain,
   UploadCloud,
   Database,
-  Layers,
-  ChevronDown,
   Sparkles,
-  ArrowRight,
-  TrendingUp,
 } from 'lucide-react';
 
 function AnalysisContent() {
@@ -53,7 +49,7 @@ function AnalysisContent() {
   const [semanticProfile, setSemanticProfile] = useState<SemanticProfile | null>(null);
   const [readiness, setReadiness] = useState<AnalysisReadiness | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'preview' | 'profile' | 'semantic'>('overview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'profile' | 'semantic'>('preview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,7 +59,6 @@ function AnalysisContent() {
     }
   }, [initialTab]);
 
-  // 1. Fetch dataset list
   useEffect(() => {
     listDatasets()
       .then((items) => {
@@ -75,7 +70,6 @@ function AnalysisContent() {
       .catch((err) => console.error('Failed to list datasets:', err));
   }, [datasetIdParam]);
 
-  // 2. Fetch full analysis details when activeDatasetId changes
   useEffect(() => {
     if (!activeDatasetId) {
       setLoading(false);
@@ -108,7 +102,7 @@ function AnalysisContent() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-16 space-y-3">
-        <svg className="animate-spin w-8 h-8 text-primary" viewBox="0 0 24 24" fill="none">
+        <svg className="animate-spin w-6 h-6 text-[#EA6928]" viewBox="0 0 24 24" fill="none">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
         </svg>
@@ -122,7 +116,7 @@ function AnalysisContent() {
   if (error) {
     return (
       <Card className="max-w-xl mx-auto p-6 text-center space-y-4">
-        <div className="text-rose-500 font-bold text-sm">Failed to Load Dataset</div>
+        <div className="text-rose-700 font-bold text-sm">Failed to Load Dataset</div>
         <p className="text-xs text-muted-foreground">{error}</p>
         <Link href="/upload">
           <Button variant="primary" size="sm">Upload Dataset</Button>
@@ -152,11 +146,11 @@ function AnalysisContent() {
   const duplicateRows = profile?.dataset_summary?.duplicate_row_count ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-6xl mx-auto">
       {/* Workspace Header Toolbar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 border border-primary/20 rounded-md text-primary shrink-0">
+          <div className="p-2 bg-[#E6D4B8] border border-border rounded text-[#EA6928] shrink-0">
             <Database className="w-5 h-5" />
           </div>
           <div>
@@ -180,7 +174,7 @@ function AnalysisContent() {
             <select
               value={activeDatasetId}
               onChange={(e) => setActiveDatasetId(e.target.value)}
-              className="text-xs bg-surface-muted border border-border rounded px-2.5 py-1.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+              className="text-xs bg-surface border border-border rounded px-2.5 py-1.5 text-foreground focus:outline-none focus:border-[#EA6928] font-mono"
             >
               {allDatasets.map((ds) => (
                 <option key={ds.dataset_id} value={ds.dataset_id}>
@@ -192,31 +186,27 @@ function AnalysisContent() {
 
           <Link href={`/ask?dataset=${metadata.dataset_id}`}>
             <Button variant="primary" size="sm" leftIcon={<Sparkles className="w-3.5 h-3.5" />}>
-              Ask AI
+              Ask (NL Query)
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Workspace Tab Navigation */}
-      <div className="flex items-center gap-1 border-b border-border text-xs font-medium">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-3.5 py-2 border-b-2 transition-all ${
-            activeTab === 'overview'
-              ? 'border-primary text-primary font-semibold'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Overview & Health</span>
-        </button>
+      {/* Dataset Overview Cards & Schema Readiness Banner */}
+      <DatasetOverview
+        metadata={metadata}
+        readiness={readiness || undefined}
+        missingnessPct={missingnessPct}
+        duplicateRows={duplicateRows}
+      />
 
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-border text-xs font-medium">
         <button
           onClick={() => setActiveTab('preview')}
           className={`flex items-center gap-2 px-3.5 py-2 border-b-2 transition-all ${
             activeTab === 'preview'
-              ? 'border-primary text-primary font-semibold'
+              ? 'border-[#EA6928] text-[#EA6928] font-bold'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -228,7 +218,7 @@ function AnalysisContent() {
           onClick={() => setActiveTab('profile')}
           className={`flex items-center gap-2 px-3.5 py-2 border-b-2 transition-all ${
             activeTab === 'profile'
-              ? 'border-primary text-primary font-semibold'
+              ? 'border-[#EA6928] text-[#EA6928] font-bold'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -240,7 +230,7 @@ function AnalysisContent() {
           onClick={() => setActiveTab('semantic')}
           className={`flex items-center gap-2 px-3.5 py-2 border-b-2 transition-all ${
             activeTab === 'semantic'
-              ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-semibold'
+              ? 'border-[#EA6928] text-[#EA6928] font-bold'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -249,17 +239,8 @@ function AnalysisContent() {
         </button>
       </div>
 
-      {/* Tab Content */}
-      <div className="space-y-6">
-        {activeTab === 'overview' && (
-          <DatasetOverview
-            metadata={metadata}
-            readiness={readiness || undefined}
-            missingnessPct={missingnessPct}
-            duplicateRows={duplicateRows}
-          />
-        )}
-
+      {/* Tab Content Panels */}
+      <div>
         {activeTab === 'preview' && preview && (
           <DataPreviewTable preview={preview} />
         )}

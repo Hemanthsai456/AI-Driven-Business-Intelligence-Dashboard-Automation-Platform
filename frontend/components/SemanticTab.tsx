@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { SemanticProfile, SemanticColumn } from '../lib/types';
 import { EvidenceInspector } from './EvidenceInspector';
 import { Badge } from './Badge';
-import { Brain, Sparkles, ChevronRight, Search } from 'lucide-react';
+import { Brain, ChevronRight } from 'lucide-react';
 
 interface SemanticTabProps {
   semanticProfile: SemanticProfile;
@@ -55,7 +55,7 @@ export const SemanticTab: React.FC<SemanticTabProps> = ({ semanticProfile }) => 
         <div className="bg-surface border border-border rounded-lg overflow-hidden shadow-sm">
           <div className="p-3 bg-surface-muted/60 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <Brain className="w-4 h-4 text-purple-500" />
+              <Brain className="w-4 h-4 text-[#EA6928]" />
               <h3 className="text-xs font-semibold text-foreground">
                 Semantic Role Classifications ({columns.length})
               </h3>
@@ -66,7 +66,7 @@ export const SemanticTab: React.FC<SemanticTabProps> = ({ semanticProfile }) => 
                 placeholder="Filter semantic roles..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-2.5 pr-2 py-1 text-xs bg-surface border border-border rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full pl-2.5 pr-2 py-1 text-xs bg-surface border border-border rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#EA6928]"
               />
             </div>
           </div>
@@ -92,7 +92,7 @@ export const SemanticTab: React.FC<SemanticTabProps> = ({ semanticProfile }) => 
                       onClick={() => setSelectedColumn(col)}
                       className={`cursor-pointer transition-colors ${
                         isSelected
-                          ? 'bg-purple-500/10 border-l-2 border-purple-500'
+                          ? 'bg-[#E6D4B8]/40 border-l-2 border-[#EA6928]'
                           : 'hover:bg-surface-muted/40'
                       }`}
                     >
@@ -115,7 +115,7 @@ export const SemanticTab: React.FC<SemanticTabProps> = ({ semanticProfile }) => 
                       <td className="py-2.5 px-3 text-right">
                         <ChevronRight
                           className={`w-3.5 h-3.5 inline transition-transform ${
-                            isSelected ? 'text-purple-500 rotate-90' : 'text-muted-foreground'
+                            isSelected ? 'text-[#EA6928] rotate-90' : 'text-muted-foreground'
                           }`}
                         />
                       </td>

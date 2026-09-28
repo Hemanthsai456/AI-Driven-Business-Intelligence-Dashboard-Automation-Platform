@@ -36,37 +36,32 @@ module.exports = {
           DEFAULT: 'var(--accent)',
           foreground: 'var(--accent-foreground)',
         },
-        success: {
-          DEFAULT: 'var(--success)',
-          foreground: 'var(--success-foreground)',
-        },
         warning: {
           DEFAULT: 'var(--warning)',
           foreground: 'var(--warning-foreground)',
+        },
+        success: {
+          DEFAULT: 'var(--success)',
+          foreground: 'var(--success-foreground)',
         },
         danger: {
           DEFAULT: 'var(--danger)',
           foreground: 'var(--danger-foreground)',
         },
-        info: {
-          DEFAULT: 'var(--info)',
-          foreground: 'var(--info-foreground)',
-        },
-        chart: {
-          1: 'var(--chart-1)',
-          2: 'var(--chart-2)',
-          3: 'var(--chart-3)',
-          4: 'var(--chart-4)',
-          5: 'var(--chart-5)',
+        brand: {
+          beige: '#EBDBC5',
+          tertiary: '#E6D4B8',
+          charcoal: '#212121',
+          orange: '#EA6928',
+          amber: '#F2B22E',
         },
       },
       borderRadius: {
-        sm: '6px',
-        DEFAULT: '8px',
-        md: '10px',
-        lg: '12px',
-        xl: '14px',
-        '2xl': '16px',
+        sm: '4px',
+        DEFAULT: '6px',
+        md: '8px',
+        lg: '10px',
+        xl: '12px',
       },
       fontSize: {
         '2xs': '0.6875rem',

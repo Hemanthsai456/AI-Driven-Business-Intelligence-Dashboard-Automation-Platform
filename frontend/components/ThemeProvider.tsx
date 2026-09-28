@@ -4,7 +4,6 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 type Density = 'comfortable' | 'compact';
-type Accent = 'sky' | 'indigo' | 'emerald' | 'violet';
 
 interface ThemeContextType {
   theme: Theme;
@@ -12,21 +11,17 @@ interface ThemeContextType {
   resolvedTheme: 'light' | 'dark';
   density: Density;
   setDensity: (d: Density) => void;
-  accent: Accent;
-  setAccent: (a: Accent) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSidebar: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
+  theme: 'light',
   setTheme: () => {},
-  resolvedTheme: 'dark',
+  resolvedTheme: 'light',
   density: 'comfortable',
   setDensity: () => {},
-  accent: 'sky',
-  setAccent: () => {},
   sidebarCollapsed: false,
   setSidebarCollapsed: () => {},
   toggleSidebar: () => {},
@@ -35,23 +30,20 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>('dark');
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('dark');
+  const [theme, setThemeState] = useState<Theme>('light');
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
   const [density, setDensityState] = useState<Density>('comfortable');
-  const [accent, setAccentState] = useState<Accent>('sky');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [mounted, setMounted] = useState<boolean>(false);
 
   useEffect(() => {
     try {
-      const savedTheme = (localStorage.getItem('ai_bi_theme') as Theme) || 'dark';
+      const savedTheme = (localStorage.getItem('ai_bi_theme') as Theme) || 'light';
       const savedDensity = (localStorage.getItem('ai_bi_density') as Density) || 'comfortable';
-      const savedAccent = (localStorage.getItem('ai_bi_accent') as Accent) || 'sky';
       const savedSidebar = localStorage.getItem('ai_bi_sidebar_collapsed') === 'true';
 
       setThemeState(savedTheme);
       setDensityState(savedDensity);
-      setAccentState(savedAccent);
       setSidebarCollapsed(savedSidebar);
     } catch {
       // Ignore localStorage issues in private mode
@@ -64,7 +56,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const updateTheme = () => {
-      let active: 'light' | 'dark' = 'dark';
+      let active: 'light' | 'dark' = 'light';
       if (theme === 'system') {
         active = mediaQuery.matches ? 'dark' : 'light';
       } else {
@@ -105,13 +97,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
   };
 
-  const setAccent = (a: Accent) => {
-    setAccentState(a);
-    try {
-      localStorage.setItem('ai_bi_accent', a);
-    } catch {}
-  };
-
   const handleToggleSidebar = () => {
     setSidebarCollapsed((prev) => {
       const next = !prev;
@@ -130,8 +115,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         resolvedTheme,
         density,
         setDensity,
-        accent,
-        setAccent,
         sidebarCollapsed,
         setSidebarCollapsed,
         toggleSidebar: handleToggleSidebar,
