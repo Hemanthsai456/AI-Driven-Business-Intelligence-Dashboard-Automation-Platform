@@ -1,0 +1,11 @@
+CustomerID,CustomerName,Region,Segment
+1,Alice,North,Consumer
+2,Bob,South,Corporate
+3,Charlie,East,Consumer
+4,David,West,Home Office
+5,Eva,North,Consumer
+6,Frank,South,Corporate
+7,Grace,East,Consumer
+8,Hannah,West,Home Office
+9,Ian,North,Corporate
+10,Jane,South,Consumer

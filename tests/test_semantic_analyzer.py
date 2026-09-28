@@ -432,3 +432,94 @@ def test_numeric_year_wide_range():
     assert ev is not None
     assert ev.candidate_role == ColumnRole.DATETIME
     assert ev.confidence >= 0.85
+
+
+# ===========================================================================
+# Stage 2 Real-Data Fix Tests
+# ===========================================================================
+
+
+def test_real_data_unit_price_measure_override():
+    """Verify UnitPrice with 100% unique integer values classifies as MEASURE, not IDENTIFIER."""
+    df = pd.DataFrame({"ProductID": list(range(1, 11)), "UnitPrice": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]})
+    meta = DatasetMetadata(
+        "ds-products",
+        "Products",
+        "pandas",
+        10,
+        2,
+        [ColumnMetadata("ProductID", "ProductID", "int64"), ColumnMetadata("UnitPrice", "UnitPrice", "int64")],
+    )
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+    sem_profile = analyze_semantics(canonical, profile)
+
+    price_ev = sem_profile.get_evidence("UnitPrice")
+    assert price_ev is not None
+    assert price_ev.candidate_role == ColumnRole.MEASURE
+    assert price_ev.confidence >= 0.85
+
+    id_ev = sem_profile.get_evidence("ProductID")
+    assert id_ev is not None
+    assert id_ev.candidate_role == ColumnRole.IDENTIFIER
+
+
+def test_real_data_pascal_case_repeated_foreign_keys():
+    """Verify repeated PascalCase IDs (CustomerID, ProductID, StoreID) classify as IDENTIFIER, not MEASURE."""
+    df = pd.DataFrame({
+        "SaleID": list(range(1, 11)),
+        "CustomerID": [1, 2, 1, 3, 2, 4, 1, 5, 2, 3],
+        "ProductID": [10, 20, 10, 30, 20, 10, 40, 20, 10, 30],
+        "StoreID": [1, 1, 2, 2, 1, 2, 1, 2, 1, 2],
+    })
+    meta = DatasetMetadata(
+        "ds-sales",
+        "Sales",
+        "pandas",
+        10,
+        4,
+        [
+            ColumnMetadata("SaleID", "SaleID", "int64"),
+            ColumnMetadata("CustomerID", "CustomerID", "int64"),
+            ColumnMetadata("ProductID", "ProductID", "int64"),
+            ColumnMetadata("StoreID", "StoreID", "int64"),
+        ],
+    )
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+    sem_profile = analyze_semantics(canonical, profile)
+
+    for col in ["SaleID", "CustomerID", "ProductID", "StoreID"]:
+        ev = sem_profile.get_evidence(col)
+        assert ev is not None, f"Missing evidence for {col}"
+        assert ev.candidate_role == ColumnRole.IDENTIFIER, f"{col} was {ev.candidate_role}, expected IDENTIFIER"
+
+
+def test_real_data_calendar_month_day_quarter_temporal_dimensions():
+    """Verify calendar integer parts (Month 1-12, Day 1-31, Quarter 1-4) classify as DIMENSION, not MEASURE."""
+    df = pd.DataFrame({
+        "Month": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        "Day": list(range(1, 13)),
+        "Quarter": [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4],
+    })
+    meta = DatasetMetadata(
+        "ds-cal",
+        "Cal",
+        "pandas",
+        12,
+        3,
+        [
+            ColumnMetadata("Month", "Month", "int64"),
+            ColumnMetadata("Day", "Day", "int64"),
+            ColumnMetadata("Quarter", "Quarter", "int64"),
+        ],
+    )
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+    sem_profile = analyze_semantics(canonical, profile)
+
+    for col in ["Month", "Day", "Quarter"]:
+        ev = sem_profile.get_evidence(col)
+        assert ev is not None
+        assert ev.candidate_role == ColumnRole.DIMENSION, f"{col} was {ev.candidate_role}, expected DIMENSION"
+

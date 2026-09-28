@@ -1,0 +1,11 @@
+ProductID,ProductName,Category,UnitPrice
+1,Laptop,Electronics,900
+2,Smartphone,Electronics,600
+3,Tablet,Electronics,300
+4,Headphones,Accessories,50
+5,Smartwatch,Accessories,150
+6,TV,Electronics,1200
+7,Gaming Console,Gaming,400
+8,Camera,Electronics,500
+9,Printer,Office,200
+10,Router,Networking,100

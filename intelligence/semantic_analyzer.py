@@ -80,6 +80,7 @@ class SemanticAnalyzer:
         "balance", "age"
     }
     DATE_TOKENS = {"date", "time", "timestamp", "dt", "datetime", "created_at", "updated_at", "dob"}
+    TEMPORAL_PART_TOKENS = {"month", "day", "quarter", "qtr", "weekday", "dayofweek", "day_of_week"}
     DIMENSION_TOKENS = {
         "name", "category", "type", "kind", "class", "group", "status", "state", "city",
         "country", "region", "segment", "dept", "department", "brand", "model", "gender",
@@ -192,21 +193,29 @@ class SemanticAnalyzer:
         is_all_null = col_stats.get("is_all_null", False)
 
         # Name Token Extraction & Disambiguation Check
-        raw_name = col_name.lower().strip()
-        clean_name = raw_name
-        if re.search(r"\.\d+$", raw_name):
-            clean_name = re.sub(r"\.\d+$", "", raw_name)
+        stripped_name = col_name.strip()
+        if re.search(r"\.\d+$", stripped_name):
+            stripped_name = re.sub(r"\.\d+$", "", stripped_name)
             evidence_statements.append("header contains pandas duplicate-disambiguation suffix (.1, .2)")
 
-        tokens = set(re.split(r"[_\s#\-]+", clean_name))
+        clean_name = stripped_name.lower()
+        # Extract tokens from delimiters AND CamelCase/PascalCase boundaries
+        camel_words = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\b)|\d+", stripped_name)
+        tokens = set()
+        for w in camel_words:
+            tokens.update(re.split(r"[_\s#\-]+", w.lower()))
+        tokens.update(re.split(r"[_\s#\-]+", clean_name))
+        tokens = {t for t in tokens if t}
 
         has_id_token = (
             any(t in self.ID_TOKENS for t in tokens)
             or clean_name.endswith(("_id", "_guid", "_uuid", "_code", "_key", "_pk", "_fk"))
+            or (clean_name.endswith("id") and len(clean_name) > 2 and clean_name not in {"grid", "solid", "fluid", "acid", "hybrid", "pyramid", "squid", "lipid"})
             or clean_name in self.ID_TOKENS
         )
         has_measure_token = any(t in self.MEASURE_TOKENS for t in tokens)
         has_date_token = any(t in self.DATE_TOKENS for t in tokens)
+        has_temporal_part_token = any(t in self.TEMPORAL_PART_TOKENS for t in tokens)
         has_dimension_token = any(t in self.DIMENSION_TOKENS for t in tokens)
         has_boolean_token = clean_name.startswith(self.BOOLEAN_PREFIXES) or clean_name in self.BOOLEAN_EXACT
 
@@ -310,6 +319,44 @@ class SemanticAnalyzer:
                                     confidence_level="HIGH",
                                     evidence=evidence_statements,
                                 )
+                except Exception:
+                    pass
+
+        # Dedicated Temporal Calendar Parts (Month 1-12, Day 1-31, Quarter 1-4)
+        if is_numeric and has_temporal_part_token and not has_measure_token:
+            min_val = col_stats.get("min")
+            max_val = col_stats.get("max")
+            if min_val is not None and max_val is not None:
+                try:
+                    min_f = float(min_val)
+                    max_f = float(max_val)
+                    if "month" in tokens and 1 <= min_f and max_f <= 12:
+                        evidence_statements.append("numeric calendar component (month 1-12 represents temporal dimension, not an aggregatable measure)")
+                        return ColumnSemanticEvidence(
+                            column_name=col_name,
+                            candidate_role=ColumnRole.DIMENSION,
+                            confidence=0.88,
+                            confidence_level="HIGH",
+                            evidence=evidence_statements,
+                        )
+                    if "day" in tokens and 1 <= min_f and max_f <= 31:
+                        evidence_statements.append("numeric calendar component (day 1-31 represents temporal dimension, not an aggregatable measure)")
+                        return ColumnSemanticEvidence(
+                            column_name=col_name,
+                            candidate_role=ColumnRole.DIMENSION,
+                            confidence=0.85,
+                            confidence_level="HIGH",
+                            evidence=evidence_statements,
+                        )
+                    if ("quarter" in tokens or "qtr" in tokens) and 1 <= min_f and max_f <= 4:
+                        evidence_statements.append("numeric calendar component (quarter 1-4 represents temporal dimension, not an aggregatable measure)")
+                        return ColumnSemanticEvidence(
+                            column_name=col_name,
+                            candidate_role=ColumnRole.DIMENSION,
+                            confidence=0.88,
+                            confidence_level="HIGH",
+                            evidence=evidence_statements,
+                        )
                 except Exception:
                     pass
 
