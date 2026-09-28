@@ -43,12 +43,13 @@ from orchestrator.config import (
     RANK_W2_COVERAGE,
     RANK_W3_STABILITY,
     RANK_W4_ASSUMPTIONS,
+    RANK_W5_AGREEMENT,
 )
 from orchestrator.context_builder import build_llm_context
 from orchestrator.executor import execute_plan
 from orchestrator.generator import (
     ExternalAgentGenerator,
-    LLMDirectGenerator,
+    MultiProviderGenerator,
     PlanGenerationCoordinator,
     PlanGenerator,
 )
@@ -179,7 +180,7 @@ def run_orchestration_pipeline(
         active_generator = generator
     else:
         llm_client = get_default_llm_client()
-        direct_gen = LLMDirectGenerator(llm_client)
+        direct_gen = MultiProviderGenerator()
         agent_gen = ExternalAgentGenerator(llm_client=llm_client)
         active_generator = PlanGenerationCoordinator(
             direct_generator=direct_gen,
@@ -279,6 +280,7 @@ def run_orchestration_pipeline(
         w2_coverage=RANK_W2_COVERAGE,
         w3_stability=RANK_W3_STABILITY,
         w4_assumptions=RANK_W4_ASSUMPTIONS,
+        w5_agreement=RANK_W5_AGREEMENT,
     )
     intent_tokens = intent.lower().split()
     semantic_evidences = semantic_profile.column_evidences

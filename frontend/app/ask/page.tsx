@@ -263,6 +263,33 @@ export default function AskPage() {
       {/* Results Workspace */}
       {(response || pipelineResponse || winnerResponse) && (
         <div className="space-y-4">
+          {/* Provider Progress Cards */}
+          {(response?.logs || pipelineResponse?.decision_log_entry?.generator_logs) && (
+            <div className="mb-6">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase font-mono mb-2">Provider Responses</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(response?.logs || pipelineResponse?.decision_log_entry?.generator_logs || []).map((log: any, i: number) => (
+                  <div key={i} className={`p-3 rounded border flex flex-col justify-between ${log.output_tokens > 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="text-xs font-bold block">{log.provider || 'unknown'}</span>
+                        <span className="text-2xs text-muted-foreground">{log.model}</span>
+                      </div>
+                      <Badge variant={log.output_tokens > 0 ? 'green' : 'red'} size="xs">
+                        {log.output_tokens > 0 ? 'Valid' : (log.latency_seconds === 0 ? 'Timed Out' : 'Failed')}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-end mt-2">
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {(log.latency_seconds).toFixed(2)}s
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Result Tabs */}
           <div className="flex items-center justify-between border-b border-border">
             <div className="flex items-center gap-1 text-xs font-medium">

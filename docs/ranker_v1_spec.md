@@ -16,7 +16,7 @@ It operates without any LLM calls and uses only structured, deterministic scorin
 ## 2. Score Formula
 
 ```
-score = w1 * evidence + w2 * coverage + w3 * stability - w4 * assumptions
+score = w1 * evidence + w2 * coverage + w3 * stability - w4 * assumptions + w5 * agreement
 ```
 
 All weights are **project decisions (configurable hypotheses)** logged alongside
@@ -31,6 +31,7 @@ initial design choices subject to revision.
 | `RANK_W2_COVERAGE` | w2 | 0.30 | Fraction of request terms mapped to plan fields |
 | `RANK_W3_STABILITY` | w3 | 0.20 | Result agreement under small perturbations (V1 proxy) |
 | `RANK_W4_ASSUMPTIONS` | w4 | 0.15 | Penalty for defaults filled without request support |
+| `RANK_W5_AGREEMENT` | w5 | 0.10 | Multi-provider agreement score |
 
 Final score is clamped to **[0.0, 1.0]**.
 
@@ -87,6 +88,17 @@ V1 proxy uses execution quality signals:
 ```
 assumptions = assumption_count / 4.0  (normalised over max 4)
 ```
+
+### 3.5 Agreement Score (Multi-Provider)
+
+**Formula:** Ratio of supporting providers to total responding providers.
+
+```
+agreement = supporting_count / providers_responded
+```
+
+- When multiple providers return the exact same plan (deduped by `plan_signature`), `supporting_count` increases.
+- High agreement across different models indicates high confidence.
 
 ---
 
@@ -150,6 +162,7 @@ Every `RankedCandidate` carries a `ScoreBreakdown` with:
 | `coverage` | Raw coverage component (pre-weight) |
 | `stability` | Raw stability component (pre-weight) |
 | `assumptions` | Raw assumption penalty (pre-weight) |
+| `agreement` | Multi-provider agreement component (pre-weight) |
 | `total` | Weighted final score, clamped [0, 1] |
 
 The `OrchestratorTrace.ranker_weights` field records which weights were used,

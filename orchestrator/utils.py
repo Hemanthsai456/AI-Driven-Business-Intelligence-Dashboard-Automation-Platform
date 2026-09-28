@@ -177,18 +177,21 @@ def compute_score(
             w2_coverage=RANK_W2_COVERAGE,
             w3_stability=RANK_W3_STABILITY,
             w4_assumptions=RANK_W4_ASSUMPTIONS,
+            w5_agreement=0.10, # default if not configured
         )
 
     evidence = _compute_evidence(plan, semantic_evidences)
     coverage = _compute_coverage(plan, intent_tokens)
     stability = _compute_stability(execution_result)
     assumptions = _compute_assumptions(plan)
+    agreement = plan.supporting_count / plan.providers_responded if plan.providers_responded > 0 else 0.0
 
     total = (
         weights.w1_evidence * evidence
         + weights.w2_coverage * coverage
         + weights.w3_stability * stability
         - weights.w4_assumptions * assumptions
+        + getattr(weights, 'w5_agreement', 0.0) * agreement
     )
     total = max(0.0, min(1.0, total))  # clamp to [0, 1]
 
@@ -197,6 +200,7 @@ def compute_score(
         coverage=coverage,
         stability=stability,
         assumptions=assumptions,
+        agreement=agreement,
         total=total,
     )
 

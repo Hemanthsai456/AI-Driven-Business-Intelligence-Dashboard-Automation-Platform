@@ -47,6 +47,7 @@ RANK_W1_EVIDENCE: float = 0.35    # mean role confidence of columns used
 RANK_W2_COVERAGE: float = 0.30    # fraction of request terms mapped to plan fields
 RANK_W3_STABILITY: float = 0.20   # result agreement under small perturbations
 RANK_W4_ASSUMPTIONS: float = 0.15 # count of defaults filled without request support
+RANK_W5_AGREEMENT: float = 0.10   # supporting_count / providers_responded
 
 # ---------------------------------------------------------------------------
 # DuckDB Worker Resource Limits  (Project Decisions)
@@ -98,6 +99,21 @@ AGENT_TIMEOUT_S: float = 30.0
 GEMINI_API_KEY_ENV: str = "GEMINI_API_KEY"
 GEMINI_MODEL_ENV: str = "GEMINI_MODEL"
 DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+
+GROQ_API_KEY_ENV: str = "GROQ_API_KEY"
+GROQ_MODEL_ENV: str = "GROQ_MODEL"
+DEFAULT_GROQ_MODEL: str = "llama3-70b-8192"
+
+OLLAMA_HOST_ENV: str = "OLLAMA_HOST"
+OLLAMA_MODEL_ENV: str = "OLLAMA_MODEL"
+DEFAULT_OLLAMA_MODEL: str = "llama3"
+DEFAULT_OLLAMA_HOST: str = "http://localhost:11434"
+
+PROVIDER_ENV: str = "PROVIDER"
+DEFAULT_PROVIDER: str = "gemini"
+
+EVAL_MODE_ENV: str = "EVAL_MODE"
+RUN_LIVE_TESTS_ENV: str = "RUN_LIVE_TESTS"
 
 # Cost estimation constants ($ per 1M tokens, gemini-2.5-flash baseline)
 ESTIMATED_INPUT_COST_PER_M: float = 0.075

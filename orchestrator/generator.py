@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import os
 import time
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -28,13 +30,86 @@ from orchestrator.config import (
     ESTIMATED_OUTPUT_COST_PER_M,
     GENERATOR_MODE,
 )
-from orchestrator.llm import LLMClient, LLMClientError, MockLLMClient
+from orchestrator.llm import LLMClient, LLMClientError, MockLLMClient, GeminiClient, GroqClient, OllamaClient, get_strict_json_schema
 from orchestrator.schemas import (
     CandidatePlan,
     ColumnContextEntry,
     GeneratorCallLog,
     LLMContext,
 )
+
+
+class QuotaExceededError(RuntimeError):
+    pass
+
+
+class RateLimiter:
+    """Per-provider rate limiter + daily call counter."""
+    
+    def __init__(self, limits_per_day: Dict[str, int] = None):
+        self.limits = limits_per_day or {"gemini": 1000, "groq": 500, "ollama": 10000}
+        self.state_file = "artifacts/quotas.json"
+        self._load()
+
+    def _load(self):
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, 'r') as f:
+                    self.counts = json.load(f)
+            except:
+                self.counts = {}
+        else:
+            self.counts = {}
+
+    def _save(self):
+        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+        with open(self.state_file, 'w') as f:
+            json.dump(self.counts, f)
+
+    def check_and_increment(self, provider: str):
+        today = time.strftime("%Y-%m-%d")
+        key = f"{provider}_{today}"
+        current = self.counts.get(key, 0)
+        limit = self.limits.get(provider, 1000)
+        
+        if current >= limit:
+            raise QuotaExceededError(f"Daily quota reached for {provider}")
+            
+        self.counts[key] = current + 1
+        self._save()
+
+
+class ResponseCache:
+    """Record/replay cache for multi-provider responses."""
+    
+    def __init__(self):
+        self.cache_dir = "artifacts/llm_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+
+    def _get_key(self, provider: str, model: str, prompt: str, context_hash: str) -> str:
+        prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
+        return f"{provider}_{model}_{prompt_hash}_{context_hash}"
+
+    def get(self, provider: str, model: str, prompt: str, context_hash: str) -> Optional[Dict[str, Any]]:
+        key = self._get_key(provider, model, prompt, context_hash)
+        filepath = os.path.join(self.cache_dir, f"{key}.json")
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, 'r') as f:
+                    return json.load(f)
+            except:
+                return None
+        return None
+
+    def set(self, provider: str, model: str, prompt: str, context_hash: str, data: Dict[str, Any]):
+        key = self._get_key(provider, model, prompt, context_hash)
+        filepath = os.path.join(self.cache_dir, f"{key}.json")
+        with open(filepath, 'w') as f:
+            json.dump(data, f)
+
+
+RATE_LIMITER = RateLimiter()
+RESPONSE_CACHE = ResponseCache()
 
 
 class PlanGenerator(ABC):
@@ -50,11 +125,28 @@ class PlanGenerator(ABC):
         pass
 
 
-class LLMDirectGenerator(PlanGenerator):
-    """Generates candidate plans directly via structured LLM schema prompts."""
+class MultiProviderGenerator(PlanGenerator):
+    """Calls Gemini, Groq, and Ollama in parallel. Returns valid schema-checked plans."""
 
-    def __init__(self, llm_client: LLMClient):
-        self.client = llm_client
+    def __init__(self):
+        self.clients = []
+        
+        try:
+            self.clients.append(GeminiClient())
+        except Exception:
+            pass
+            
+        try:
+            self.clients.append(GroqClient())
+        except Exception:
+            pass
+            
+        try:
+            self.clients.append(OllamaClient())
+        except Exception:
+            pass
+            
+        self.eval_mode = os.getenv("EVAL_MODE", "false").lower() == "true"
 
     def _build_prompt(self, context: LLMContext, k: int, retry_error: Optional[str] = None) -> str:
         cols_summary = "\n".join(
@@ -76,47 +168,133 @@ class LLMDirectGenerator(PlanGenerator):
             prompt += f"\nPrevious attempt failed with error: {retry_error}. Please correct the schema.\n"
         return prompt
 
+    def _call_provider(self, client: LLMClient, prompt: str, schema: Dict[str, Any], context: LLMContext, k: int) -> Tuple[List[CandidatePlan], GeneratorCallLog]:
+        provider = client.provider
+        model = client.model_name
+        
+        # Check quota
+        RATE_LIMITER.check_and_increment(provider)
+        
+        # Check cache
+        if self.eval_mode:
+            cached = RESPONSE_CACHE.get(provider, model, prompt, context.context_hash)
+            if cached:
+                # Mock a call log
+                call_log = GeneratorCallLog(
+                    model=model,
+                    generator="llm_direct",
+                    steps=1,
+                    input_tokens=100,
+                    output_tokens=100,
+                    latency_seconds=0.01,
+                    estimated_cost_usd=0.0,
+                )
+                
+                valid_plans = []
+                candidates = cached if isinstance(cached, list) else [cached]
+                for item in candidates:
+                    if isinstance(item, dict):
+                        item["dataset_id"] = context.dataset_id
+                        item["generator"] = "llm_direct"
+                        item["provider"] = provider
+                        if "intent" not in item:
+                            item["intent"] = context.intent
+                        valid_plans.append(CandidatePlan.model_validate(item))
+                
+                return valid_plans, call_log
+
+        # Make real call
+        raw_json, call_log = client.generate_structured(
+            prompt=prompt,
+            response_schema=schema,
+            generator_label="llm_direct",
+        )
+        
+        # Save to cache
+        RESPONSE_CACHE.set(provider, model, prompt, context.context_hash, raw_json)
+        
+        valid_plans = []
+        candidates = raw_json if isinstance(raw_json, list) else [raw_json]
+        for item in candidates:
+            if isinstance(item, dict):
+                item["dataset_id"] = context.dataset_id
+                item["generator"] = "llm_direct"
+                item["provider"] = provider
+                if "intent" not in item:
+                    item["intent"] = context.intent
+                valid_plans.append(CandidatePlan.model_validate(item))
+                
+        return valid_plans, call_log
+
     def generate_plans(
         self,
         context: LLMContext,
         k: int = 1,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
-        logs: List[GeneratorCallLog] = []
-        valid_plans: List[CandidatePlan] = []
-        schema = CandidatePlan.model_json_schema()
-
+        
+        all_logs: List[GeneratorCallLog] = []
+        all_plans: List[CandidatePlan] = []
+        schema = get_strict_json_schema(CandidatePlan)
+        
         attempts = 1 + AI_MAX_RETRIES
         last_error = None
-
+        
         for attempt in range(attempts):
             prompt = self._build_prompt(context, k=k, retry_error=last_error)
-            try:
-                raw_json, call_log = self.client.generate_structured(
-                    prompt=prompt,
-                    response_schema=schema,
-                    generator_label="llm_direct",
-                )
-                logs.append(call_log)
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {
+                    executor.submit(self._call_provider, client, prompt, schema, context, k): client
+                    for client in self.clients
+                }
+                
+                for future in concurrent.futures.as_completed(futures):
+                    client = futures[future]
+                    try:
+                        # Timeout isolated per provider
+                        plans, log = future.result(timeout=15.0)
+                        all_logs.append(log)
+                        all_plans.extend(plans)
+                    except Exception as e:
+                        # Failures are logged, never fatal
+                        err_log = GeneratorCallLog(
+                            model=client.model_name,
+                            generator="llm_direct",
+                            steps=1,
+                            input_tokens=0,
+                            output_tokens=0,
+                            latency_seconds=0.0,
+                            estimated_cost_usd=0.0,
+                        )
+                        all_logs.append(err_log)
+                        last_error = str(e)
 
-                # Output can be single plan dict or list of plan dicts
-                candidates = raw_json if isinstance(raw_json, list) else [raw_json]
-                for item in candidates:
-                    if isinstance(item, dict):
-                        # Ensure dataset_id and generator match
-                        item["dataset_id"] = context.dataset_id
-                        item["generator"] = "llm_direct"
-                        if "intent" not in item:
-                            item["intent"] = context.intent
-                        plan = CandidatePlan.model_validate(item)
-                        valid_plans.append(plan)
+            if all_plans:
+                break
+                
+        # Dedupe by plan_signature, aggregate supporting_count and provider lists
+        unique_plans: Dict[str, CandidatePlan] = {}
+        providers_responded = sum(1 for log in all_logs if log.output_tokens > 0)
+        if providers_responded == 0:
+            providers_responded = 1
+            
+        for plan in all_plans:
+            sig = plan.plan_signature()
+            if sig not in unique_plans:
+                unique_plans[sig] = plan.model_copy(update={
+                    "supporting_count": 1,
+                    "providers_responded": providers_responded,
+                    "supporting_providers": [plan.provider]
+                })
+            else:
+                curr = unique_plans[sig]
+                new_providers = curr.supporting_providers + [plan.provider]
+                unique_plans[sig] = curr.model_copy(update={
+                    "supporting_count": curr.supporting_count + 1,
+                    "supporting_providers": list(set(new_providers))
+                })
 
-                if valid_plans:
-                    break
-
-            except (ValidationError, LLMClientError, Exception) as e:
-                last_error = str(e)
-
-        return valid_plans[:k], logs
+        return list(unique_plans.values())[:k], all_logs
 
 
 # ---------------------------------------------------------------------------
@@ -125,13 +303,7 @@ class LLMDirectGenerator(PlanGenerator):
 
 
 class AgentMetadataEnvironment:
-    """Read-only sandbox providing metadata exploration tools to external agents.
-
-    Guarantees:
-    - NO row access
-    - NO SQL execution
-    - Only accesses sanitized LLMContext structures
-    """
+    """Read-only sandbox providing metadata exploration tools to external agents."""
 
     def __init__(self, context: LLMContext):
         self._columns_by_name: Dict[str, ColumnContextEntry] = {
@@ -140,7 +312,6 @@ class AgentMetadataEnvironment:
         self.context = context
 
     def list_columns(self) -> List[Dict[str, Any]]:
-        """List all available dataset columns with candidate role and confidence."""
         return [
             {
                 "column_name": c.column_name,
@@ -152,7 +323,6 @@ class AgentMetadataEnvironment:
         ]
 
     def get_column_stats(self, column_name: str) -> Dict[str, Any]:
-        """Get summary statistics for a column (null %, distinct count, dtype). NO raw rows."""
         col = self._columns_by_name.get(column_name.strip().lower())
         if not col:
             return {"error": f"Column '{column_name}' not found."}
@@ -164,7 +334,6 @@ class AgentMetadataEnvironment:
         }
 
     def get_column_evidence(self, column_name: str) -> Dict[str, Any]:
-        """Get semantic evidence statements supporting role classification."""
         col = self._columns_by_name.get(column_name.strip().lower())
         if not col:
             return {"error": f"Column '{column_name}' not found."}
@@ -175,11 +344,7 @@ class AgentMetadataEnvironment:
 
 
 class ExternalAgentGenerator(PlanGenerator):
-    """Generates candidate plans via an autonomous reasoning agent with bounded steps.
-
-    Uses an external agent loop constrained by AGENT_MAX_STEPS, AGENT_MAX_TOKENS,
-    and AGENT_TIMEOUT_S. Has access to read-only metadata tools only.
-    """
+    """Generates candidate plans via an autonomous reasoning agent with bounded steps."""
 
     def __init__(
         self,
@@ -200,17 +365,15 @@ class ExternalAgentGenerator(PlanGenerator):
     ) -> Tuple[List[CandidatePlan], GeneratorCallLog]:
         start_time = time.perf_counter()
         env = AgentMetadataEnvironment(context)
-        schema = CandidatePlan.model_json_schema()
+        schema = get_strict_json_schema(CandidatePlan)
 
         steps_taken = 0
         total_input_tokens = 0
         total_output_tokens = 0
 
-        # Step 1: Agent inspects available columns via list_columns
         cols = env.list_columns()
         steps_taken += 1
 
-        # Identify candidate measures and dimensions for the user intent
         prompt = (
             f"You are an analytical agent constructing an optimal CandidatePlan.\n"
             f"Dataset ID: {context.dataset_id}\n"
@@ -239,6 +402,7 @@ class ExternalAgentGenerator(PlanGenerator):
                 if isinstance(raw_json, dict):
                     raw_json["dataset_id"] = context.dataset_id
                     raw_json["generator"] = "external_agent"
+                    raw_json["provider"] = getattr(self.client, "provider", "unknown")
                     if "intent" not in raw_json:
                         raw_json["intent"] = context.intent
                     plan = CandidatePlan.model_validate(raw_json)
@@ -271,7 +435,6 @@ class ExternalAgentGenerator(PlanGenerator):
         context: LLMContext,
         k: int = 1,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
-        """Run external agent with strict failure isolation and timeout boundaries."""
         start_time = time.perf_counter()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
@@ -280,7 +443,6 @@ class ExternalAgentGenerator(PlanGenerator):
                 plans, log = future.result(timeout=self.timeout_seconds)
                 return plans, [log]
             except concurrent.futures.TimeoutError:
-                # Failure isolation: timeout must NOT fail the request
                 latency = time.perf_counter() - start_time
                 timeout_log = GeneratorCallLog(
                     model=getattr(self.client, "model_name", "agent-orchestrator"),
@@ -294,7 +456,6 @@ class ExternalAgentGenerator(PlanGenerator):
                 )
                 return [], [timeout_log]
             except Exception as e:
-                # Failure isolation: runtime exception must NOT fail the request
                 latency = time.perf_counter() - start_time
                 error_log = GeneratorCallLog(
                     model=getattr(self.client, "model_name", "agent-orchestrator"),
@@ -309,76 +470,13 @@ class ExternalAgentGenerator(PlanGenerator):
                 return [], [error_log]
 
 
-class MockAgent(PlanGenerator):
-    """Mock agent implementation for unit tests verifying timeouts, isolation, and metadata tool access."""
-
-    def __init__(
-        self,
-        canned_plans: Optional[List[CandidatePlan]] = None,
-        simulate_timeout: bool = False,
-        simulate_error: bool = False,
-        sleep_seconds: float = 0.0,
-    ):
-        self.canned_plans = canned_plans or []
-        self.simulate_timeout = simulate_timeout
-        self.simulate_error = simulate_error
-        self.sleep_seconds = sleep_seconds
-        self.tools_called: List[str] = []
-
-    def generate_plans(
-        self,
-        context: LLMContext,
-        k: int = 1,
-    ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
-        env = AgentMetadataEnvironment(context)
-        # Record metadata tool calls
-        self.tools_called.append("list_columns")
-        _ = env.list_columns()
-
-        if self.sleep_seconds > 0:
-            time.sleep(self.sleep_seconds)
-
-        if self.simulate_timeout:
-            # Simulate timeout scenario directly
-            log = GeneratorCallLog(
-                model="mock-agent",
-                generator="external_agent",
-                steps=1,
-                input_tokens=0,
-                output_tokens=0,
-                thinking_tokens=0,
-                latency_seconds=round(self.sleep_seconds, 4),
-                estimated_cost_usd=0.0,
-            )
-            return [], [log]
-
-        if self.simulate_error:
-            raise RuntimeError("Mock agent encountered unexpected error.")
-
-        plans = [
-            p.model_copy(update={"generator": "external_agent"})
-            for p in self.canned_plans[:k]
-        ]
-        log = GeneratorCallLog(
-            model="mock-agent",
-            generator="external_agent",
-            steps=2,
-            input_tokens=100,
-            output_tokens=80,
-            thinking_tokens=0,
-            latency_seconds=0.02,
-            estimated_cost_usd=0.000030,
-        )
-        return plans, [log]
-
-
 # ---------------------------------------------------------------------------
 # Coordinator dispatching according to GENERATOR_MODE
 # ---------------------------------------------------------------------------
 
 
 class PlanGenerationCoordinator:
-    """Dispatches candidate generation according to GENERATOR_MODE ('llm_only', 'agent_only', 'both')."""
+    """Dispatches candidate generation according to GENERATOR_MODE."""
 
     def __init__(
         self,
@@ -389,13 +487,13 @@ class PlanGenerationCoordinator:
         self.direct_generator = direct_generator
         self.agent_generator = agent_generator
         self.mode = mode or GENERATOR_MODE
+        self.agent_loop = os.getenv("AGENT_LOOP", "false").lower() == "true"
 
     def generate_candidates(
         self,
         context: LLMContext,
         k: int = 3,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
-        """Generate candidates based on configured mode with failure isolation."""
         all_plans: List[CandidatePlan] = []
         all_logs: List[GeneratorCallLog] = []
 
@@ -404,13 +502,12 @@ class PlanGenerationCoordinator:
             all_plans.extend(plans)
             all_logs.extend(logs)
 
-        elif self.mode == "agent_only":
+        elif self.mode == "agent_only" and self.agent_loop:
             plans, logs = self.agent_generator.generate_plans(context, k=k)
             all_plans.extend(plans)
             all_logs.extend(logs)
 
         elif self.mode == "both":
-            # Generate from direct LLM
             try:
                 d_plans, d_logs = self.direct_generator.generate_plans(context, k=k)
                 all_plans.extend(d_plans)
@@ -418,23 +515,15 @@ class PlanGenerationCoordinator:
             except Exception:
                 pass
 
-            # Generate from external agent (with failure isolation)
-            try:
-                a_plans, a_logs = self.agent_generator.generate_plans(context, k=k)
-                all_plans.extend(a_plans)
-                all_logs.extend(a_logs)
-            except Exception:
-                pass
+            if self.agent_loop:
+                try:
+                    a_plans, a_logs = self.agent_generator.generate_plans(context, k=k)
+                    all_plans.extend(a_plans)
+                    all_logs.extend(a_logs)
+                except Exception:
+                    pass
 
-        # Deduplicate while preserving order
-        unique_plans: List[CandidatePlan] = []
-        seen_sigs = set()
-        for p in all_plans:
-            sig = p.plan_signature()
-            if sig not in seen_sigs:
-                seen_sigs.add(sig)
-                unique_plans.append(p)
-
-        return unique_plans[:k], all_logs
+        # Since MultiProviderGenerator already dedupes, we just return
+        return all_plans[:k], all_logs
 
     generate_plans = generate_candidates

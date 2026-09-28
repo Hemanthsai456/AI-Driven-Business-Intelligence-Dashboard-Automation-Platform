@@ -199,6 +199,16 @@ class CandidatePlan(BaseModel):
         default="llm_direct",
         description="Generator identifier (e.g. 'llm_direct', 'external_agent').",
     )
+    provider: str = Field(
+        default="unknown",
+        description="LLM provider (e.g. 'gemini', 'groq', 'ollama').",
+    )
+    supporting_providers: List[str] = Field(
+        default_factory=list,
+        description="List of providers that generated identical plans.",
+    )
+    supporting_count: int = Field(default=1)
+    providers_responded: int = Field(default=1)
     reasoning: PlanReasoning = Field(description="LLM interpretation and evidence.")
 
     model_config = {"frozen": True}
@@ -433,12 +443,13 @@ class RankerWeights(BaseModel):
     w2_coverage: float = Field(description="Weight for coverage score (fraction of request terms mapped to plan).")
     w3_stability: float = Field(description="Weight for stability score (result agreement under perturbations).")
     w4_assumptions: float = Field(description="Penalty weight for assumptions (defaults filled without request support).")
+    w5_agreement: float = Field(description="Weight for agreement score (supporting_count / providers_responded).")
 
     model_config = {"frozen": True}
 
     @model_validator(mode="after")
     def weights_positive(self) -> "RankerWeights":
-        for attr in ("w1_evidence", "w2_coverage", "w3_stability", "w4_assumptions"):
+        for attr in ("w1_evidence", "w2_coverage", "w3_stability", "w4_assumptions", "w5_agreement"):
             if getattr(self, attr) < 0.0:
                 raise ValueError(f"Ranker weight {attr} must be non-negative.")
         return self
@@ -451,7 +462,8 @@ class ScoreBreakdown(BaseModel):
     coverage: float = Field(description="Fraction of request terms mapped to plan fields (0.0-1.0).")
     stability: float = Field(description="Result agreement under small perturbations (0.0-1.0).")
     assumptions: float = Field(description="Normalised count of defaults filled without request support (0.0-1.0).")
-    total: float = Field(description="Weighted total score: w1*evidence + w2*coverage + w3*stability - w4*assumptions.")
+    agreement: float = Field(default=0.0, description="Agreement score from multiple providers (0.0-1.0).")
+    total: float = Field(description="Weighted total score: w1*evidence + w2*coverage + w3*stability - w4*assumptions + w5*agreement.")
 
     model_config = {"frozen": True}
 
@@ -489,6 +501,7 @@ class GeneratorCallLog(BaseModel):
     """Execution telemetry for a single generator call (LLM direct or external agent)."""
 
     model: str = Field(description="Model identifier or agent name.")
+    provider: str = Field(default="unknown", description="LLM provider name.")
     generator: str = Field(description="Generator type: 'llm_direct' or 'external_agent'.")
     steps: int = Field(default=1, description="Number of agent reasoning/tool execution steps.")
     input_tokens: int = Field(default=0)

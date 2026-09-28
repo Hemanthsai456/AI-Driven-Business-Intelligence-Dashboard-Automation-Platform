@@ -26,8 +26,7 @@ from orchestrator.executor import (
 )
 from orchestrator.generator import (
     ExternalAgentGenerator,
-    LLMDirectGenerator,
-    MockAgent,
+    MultiProviderGenerator,
     PlanGenerationCoordinator,
     PlanGenerator,
 )
@@ -118,9 +117,9 @@ __all__ = [
     "LLMClientError",
     # Plan Generators
     "PlanGenerator",
-    "LLMDirectGenerator",
+    "MultiProviderGenerator",
     "ExternalAgentGenerator",
-    "MockAgent",
+    "PlanGenerationCoordinator",
     "PlanGenerationCoordinator",
     # Pipeline & Logging
     "run_orchestration_pipeline",
