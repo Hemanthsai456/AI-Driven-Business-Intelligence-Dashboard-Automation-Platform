@@ -2,7 +2,8 @@
 
 **Total Prompts**: 22  
 **Passed**: 21 / 22  
-**Overall Accuracy**: 95.5%
+**Overall Accuracy**: 95.5%  
+**High-Agreement Wrong Rate**: 5.0% (1/20)
 
 ## Agreement & Consensus-Failure Analysis (Q3 Risk)
 
@@ -11,10 +12,11 @@
 | Total Consensus Prompts (Agreement = 1.0) | 20 | 90.9% |
 | Consensus on Correct Signature | 19 | 86.4% |
 | **Consensus on WRONG Signature** | **1** | **4.5%** |
+| **High-Agreement Wrong Rate** | **1/20** | **5.0%** |
 | Non-Consensus / Dissenting Providers | 2 | 9.1% |
 
 > [!WARNING]
-> **Agreement-on-Wrong-Answer Risk Detected**: In **1** case(s), all 3 providers independently agreed on an incorrect plan signature. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.
+> **Agreement-on-Wrong-Answer Risk Detected**: In **1** case(s), all 3 providers independently agreed on an incorrect plan signature. High-agreement wrong rate is **5.0%**. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.
 
 ## Per-Prompt Evaluation Details
 

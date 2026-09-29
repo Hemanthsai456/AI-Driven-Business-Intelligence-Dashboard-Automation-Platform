@@ -40,14 +40,25 @@ RANK_TIE_EPSILON: float = 0.05
 # ---------------------------------------------------------------------------
 # Ranker V1 — Score Weights  (Project Decisions / Configurable Hypotheses)
 # ---------------------------------------------------------------------------
-# score = w1*evidence + w2*coverage + w3*stability - w4*assumptions
+# score = w1*evidence + w2*coverage + w3*stability + agreement_contribution - w4*assumptions
+# where agreement_contribution = w5 * agreement * coverage
 # These weights are hypotheses; they are configurable and logged with every ranking.
 
 RANK_W1_EVIDENCE: float = 0.35    # mean role confidence of columns used
 RANK_W2_COVERAGE: float = 0.30    # fraction of request terms mapped to plan fields
 RANK_W3_STABILITY: float = 0.20   # result agreement under small perturbations
 RANK_W4_ASSUMPTIONS: float = 0.15 # count of defaults filled without request support
-RANK_W5_AGREEMENT: float = 0.10   # supporting_count / providers_responded
+RANK_W5_AGREEMENT: float = 0.10   # multi-provider agreement weight
+
+# ---------------------------------------------------------------------------
+# Ranker V1 — Low Coverage Confidence Cap (PROVISIONAL)
+# ---------------------------------------------------------------------------
+# Minimum coverage required before a candidate can achieve an un-capped score.
+# If a candidate's coverage falls below this threshold, its final score is capped
+# below a threshold that forces ties/clarification rather than an outright automatic win,
+# even when multi-provider agreement is 1.0.
+# PROVISIONAL: Set to 0.40 until derived from eval data.
+LOW_COVERAGE_CONFIDENCE_CAP: float = 0.40
 
 # ---------------------------------------------------------------------------
 # DuckDB Worker Resource Limits  (Project Decisions)

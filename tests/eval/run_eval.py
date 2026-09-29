@@ -617,12 +617,14 @@ def main():
     consensus_total = sum(1 for r in results if r["is_consensus"])
     consensus_correct = sum(1 for r in results if r["is_consensus"] and r["passed"])
     consensus_wrong = sum(1 for r in results if r["is_consensus"] and not r["passed"])
+    high_agreement_wrong_rate = (consensus_wrong / consensus_total) if consensus_total > 0 else 0.0
 
     print("\n" + "=" * 60)
     print(f"EVALUATION COMPLETE: {passed_count}/{total} passed ({accuracy:.1f}% accuracy)")
     print(f"Consensus Count (Agreement = 1.0): {consensus_total}/{total}")
     print(f"  - Consensus on Correct Signature: {consensus_correct}")
     print(f"  - Consensus on WRONG Signature:   {consensus_wrong} (Agreement-on-Wrong-Answer Risk)")
+    print(f"  - High-Agreement Wrong Rate:      {high_agreement_wrong_rate:.1%} ({consensus_wrong}/{consensus_total})")
     print("=" * 60)
 
     # Generate Markdown Report
@@ -630,7 +632,8 @@ def main():
     md.append("# Orchestrator Multi-Provider Benchmark Evaluation Report\n")
     md.append(f"**Total Prompts**: {total}  ")
     md.append(f"**Passed**: {passed_count} / {total}  ")
-    md.append(f"**Overall Accuracy**: {accuracy:.1f}%\n")
+    md.append(f"**Overall Accuracy**: {accuracy:.1f}%  ")
+    md.append(f"**High-Agreement Wrong Rate**: {high_agreement_wrong_rate:.1%} ({consensus_wrong}/{consensus_total})\n")
 
     md.append("## Agreement & Consensus-Failure Analysis (Q3 Risk)\n")
     md.append("| Metric | Count | Percentage |")
@@ -638,10 +641,11 @@ def main():
     md.append(f"| Total Consensus Prompts (Agreement = 1.0) | {consensus_total} | {(consensus_total/total)*100:.1f}% |")
     md.append(f"| Consensus on Correct Signature | {consensus_correct} | {(consensus_correct/total)*100:.1f}% |")
     md.append(f"| **Consensus on WRONG Signature** | **{consensus_wrong}** | **{(consensus_wrong/total)*100:.1f}%** |")
+    md.append(f"| **High-Agreement Wrong Rate** | **{consensus_wrong}/{consensus_total}** | **{high_agreement_wrong_rate*100:.1f}%** |")
     md.append(f"| Non-Consensus / Dissenting Providers | {total - consensus_total} | {((total - consensus_total)/total)*100:.1f}% |\n")
 
     md.append("> [!WARNING]")
-    md.append(f"> **Agreement-on-Wrong-Answer Risk Detected**: In **{consensus_wrong}** case(s), all 3 providers independently agreed on an incorrect plan signature. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.\n")
+    md.append(f"> **Agreement-on-Wrong-Answer Risk Detected**: In **{consensus_wrong}** case(s), all 3 providers independently agreed on an incorrect plan signature. High-agreement wrong rate is **{high_agreement_wrong_rate:.1%}**. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.\n")
 
     md.append("## Per-Prompt Evaluation Details\n")
     md.append("| # | Prompt | Dataset | Category | Agreement | Status | Consensus Analysis | Winning Signature |")
