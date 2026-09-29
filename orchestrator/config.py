@@ -104,24 +104,28 @@ AGENT_MAX_TOKENS: int = 4096
 AGENT_TIMEOUT_S: float = 30.0
 
 # ---------------------------------------------------------------------------
-# Gemini LLM Client Configuration
+# LLM Provider Configuration (Re-exported from providers.config)
 # ---------------------------------------------------------------------------
 
-GEMINI_API_KEY_ENV: str = "GEMINI_API_KEY"
-GEMINI_MODEL_ENV: str = "GEMINI_MODEL"
-DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+from providers.config import (
+    ACTIVE_PROVIDERS_ENV,
+    DEFAULT_ACTIVE_PROVIDERS,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_GROQ_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_PROVIDER,
+    GEMINI_API_KEY_ENV,
+    GEMINI_MODEL_ENV,
+    GROQ_API_KEY_ENV,
+    GROQ_MODEL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    OLLAMA_MODEL_ENV,
+    PROVIDER_ENV,
+)
 
-GROQ_API_KEY_ENV: str = "GROQ_API_KEY"
-GROQ_MODEL_ENV: str = "GROQ_MODEL"
-DEFAULT_GROQ_MODEL: str = "llama3-70b-8192"
-
-OLLAMA_HOST_ENV: str = "OLLAMA_HOST"
-OLLAMA_MODEL_ENV: str = "OLLAMA_MODEL"
-DEFAULT_OLLAMA_MODEL: str = "llama3"
-DEFAULT_OLLAMA_HOST: str = "http://localhost:11434"
-
-PROVIDER_ENV: str = "PROVIDER"
-DEFAULT_PROVIDER: str = "gemini"
+OLLAMA_HOST_ENV: str = OLLAMA_BASE_URL_ENV
+DEFAULT_OLLAMA_HOST: str = DEFAULT_OLLAMA_BASE_URL
 
 EVAL_MODE_ENV: str = "EVAL_MODE"
 RUN_LIVE_TESTS_ENV: str = "RUN_LIVE_TESTS"

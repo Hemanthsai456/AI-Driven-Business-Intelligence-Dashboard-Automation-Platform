@@ -1,18 +1,12 @@
 """End-to-End Orchestrator Pipeline (Stage 7).
 
-Coordinates:
-1. Pre-dispatch Readiness Gate (C3 check): Refuses dispatch if NOT_READY.
-2. Ambiguity Detection (rules + lightweight check).
-3. Sanitized LLM Context Building (no raw rows, injection sanitized).
-4. Candidate Generation (LLM Direct + External Agent).
-5. Pass 1a Pre-Dispatch Validation.
-6. Safe Query Compilation & DuckDB Execution (with C2 TRY_CAST).
-7. Pass 1b Post-Execution Validation.
-8. Deterministic Ranker V1 Scoring.
-9. Pass 2 Winner-Only Validation with Runner-Up Cascade (capped at MAX_CASCADE_DEPTH).
-10. Isolated per-candidate artifact emission.
-11. Structured Decision & Explainability JSONL log emission.
-12. Emission of final canonical DashboardSpec with alternate interpretations.
+Coordinates the 6-step cognitive loop:
+1. Intent Interpretation: User Request -> StructuredIntent
+2. Ambiguity Detection & Active Gating: StructuredIntent -> Ambiguity Gate (blocking vs item-level)
+3. Discrete Interpretation Generation: StructuredIntent -> SemanticInterpretation[]
+4. Planning x K: SemanticInterpretation[] -> CandidatePlan[] (MultiProvider/Agent)
+5. Validation / Execution Coordination: Pass 1a -> Deterministic Engine Execution -> Pass 1b
+6. Ranking & Winner Selection: Deterministic Ranker V1 -> Pass 2 Cascade -> DashboardSpec
 
 Architecture references:
 - orchestrator_conformance.md §1, §Binding Resolutions
@@ -26,16 +20,14 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
+from engine.executor import AnalyticsEngine, get_default_engine
 from ingestion.models import CanonicalDataset
 from intelligence.profiler import DataProfile
 from intelligence.schema_validator import AnalysisReadiness, ReadinessStatus
 from intelligence.semantic_analyzer import DatasetSemanticProfile
-from orchestrator.ambiguity import AmbiguityResult, assess_ambiguity
+from orchestrator.ambiguity import AmbiguityResult, assess_ambiguity, is_blocking_ambiguity
 from orchestrator.config import (
     AI_MAX_RETRIES,
-    DEFAULT_GEMINI_MODEL,
-    GEMINI_API_KEY_ENV,
-    GEMINI_MODEL_ENV,
     GENERATOR_MODE,
     MAX_CASCADE_DEPTH,
     MAX_K,
@@ -46,20 +38,21 @@ from orchestrator.config import (
     RANK_W5_AGREEMENT,
 )
 from orchestrator.context_builder import build_llm_context
-from orchestrator.executor import execute_plan
 from orchestrator.generator import (
     ExternalAgentGenerator,
     MultiProviderGenerator,
     PlanGenerationCoordinator,
     PlanGenerator,
 )
-from orchestrator.llm import GeminiClient, LLMClient, MockLLMClient
+from orchestrator.intent import interpret_user_request
+from orchestrator.interpretation import generate_interpretations
 from orchestrator.logger import (
     emit_decision_log,
     emit_explainability_log,
     save_candidate_artifact,
 )
 from orchestrator.schemas import (
+    AmbiguityStatus,
     CandidatePlan,
     DashboardSpec,
     ExecutionResult,
@@ -70,19 +63,24 @@ from orchestrator.schemas import (
     Pass2Result,
     RankerWeights,
     ScoreBreakdown,
+    SemanticInterpretation,
+    StructuredIntent,
 )
 from orchestrator.utils import check_candidate_output_consistency, rank_candidates
 from orchestrator.validator import validate_pass1a, validate_pass1b, validate_pass2
 from orchestrator.winner import WinnerSelectionError, select_winner
+from providers import LLMClient, MockLLMClient, get_llm_client
 
 
 @dataclass
 class OrchestrationPipelineResult:
     """Complete result from an end-to-end orchestration pipeline run."""
-    status: str  # "SUCCESS", "REFUSED", "UNANSWERABLE"
+    status: str  # "SUCCESS", "REFUSED", "UNANSWERABLE", "AMBIGUOUS"
     message: str
     dashboard_spec: Optional[DashboardSpec] = None
     ambiguity: Optional[AmbiguityResult] = None
+    structured_intent: Optional[StructuredIntent] = None
+    interpretations: Optional[List[SemanticInterpretation]] = None
     ranked_candidates: List[Tuple[CandidatePlan, ExecutionResult, ScoreBreakdown, int]] = None
     is_tie: bool = False
     cascade_depth: int = 0
@@ -91,12 +89,11 @@ class OrchestrationPipelineResult:
 
 
 def get_default_llm_client() -> LLMClient:
-    """Return configured GeminiClient if API key present, else MockLLMClient."""
-    api_key = os.getenv(GEMINI_API_KEY_ENV)
-    model = os.getenv(GEMINI_MODEL_ENV, DEFAULT_GEMINI_MODEL)
-    if api_key:
-        return GeminiClient(api_key=api_key, model_name=model)
-    return MockLLMClient()
+    """Return configured LLMClient via provider factory or MockLLMClient."""
+    try:
+        return get_llm_client()
+    except Exception:
+        return MockLLMClient()
 
 
 def run_orchestration_pipeline(
@@ -109,9 +106,10 @@ def run_orchestration_pipeline(
     mode: str = "both",
     k: int = 3,
     generator: Optional[PlanGenerator] = None,
+    engine: Optional[AnalyticsEngine] = None,
     max_cascade_depth: int = MAX_CASCADE_DEPTH,
 ) -> OrchestrationPipelineResult:
-    """Execute the full end-to-end analytical pipeline.
+    """Execute the full 6-step cognitive analytical orchestration pipeline.
 
     Args:
         dataset: The canonical tabular dataset.
@@ -122,6 +120,7 @@ def run_orchestration_pipeline(
         mode: Generator mode ("llm_only", "agent_only", "both").
         k: Number of candidate plans to generate (capped at MAX_K).
         generator: Optional generator override (for testing).
+        engine: Optional deterministic AnalyticsEngine override.
         max_cascade_depth: Cascade depth limit.
 
     Returns:
@@ -129,8 +128,9 @@ def run_orchestration_pipeline(
     """
     request_id = str(uuid4())
     k_eff = min(max(1, k), MAX_K)
+    exec_engine = engine or get_default_engine()
 
-    # 1. Pre-dispatch Readiness Gate (C3 check)
+    # Pre-dispatch Readiness Gate (C3 check)
     if readiness.status == ReadinessStatus.NOT_READY:
         reasons = [
             chk.message
@@ -161,11 +161,41 @@ def run_orchestration_pipeline(
             message=refusal_msg,
         )
 
-    # 2. Ambiguity Detection
-    ambiguity = assess_ambiguity(
-        intent=intent,
+    # 1. Step 1: Intent Interpretation
+    structured_intent = interpret_user_request(
+        request_text=intent,
         semantic_profile=semantic_profile,
     )
+
+    # 2. Step 2: Ambiguity Detection & Active Gate
+    ambiguity = assess_ambiguity(
+        intent=structured_intent,
+        semantic_profile=semantic_profile,
+    )
+
+    if is_blocking_ambiguity(ambiguity, structured_intent):
+        refusal_msg = f"Clarification required: {ambiguity.message}"
+        emit_decision_log(
+            request_id=request_id,
+            dataset_id=dataset.metadata.dataset_id,
+            intent=intent,
+            context_hash="N/A",
+            mode=mode,
+            plans_generated=0,
+            plans_valid_pass1a=0,
+            plans_valid_pass1b=0,
+            winner_plan_id=None,
+            is_tie=False,
+            cascade_depth=0,
+            status="UNANSWERABLE" if ambiguity.status == AmbiguityStatus.UNANSWERABLE else "AMBIGUOUS",
+            generator_logs=[],
+        )
+        return OrchestrationPipelineResult(
+            status="UNANSWERABLE" if ambiguity.status == AmbiguityStatus.UNANSWERABLE else "AMBIGUOUS",
+            message=refusal_msg,
+            ambiguity=ambiguity,
+            structured_intent=structured_intent,
+        )
 
     # 3. Compact Sanitized LLM Context
     context = build_llm_context(
@@ -175,7 +205,15 @@ def run_orchestration_pipeline(
         data_profile=data_profile,
     )
 
-    # 4. Candidate Generation
+    # 4. Step 3: Discrete Interpretation Generation
+    interpretations = generate_interpretations(
+        structured_intent=structured_intent,
+        semantic_profile=semantic_profile,
+        ambiguity=ambiguity,
+        k=k_eff,
+    )
+
+    # 5. Step 4: Planning x K (consuming interpretations)
     if generator is not None:
         active_generator = generator
     else:
@@ -188,7 +226,11 @@ def run_orchestration_pipeline(
             mode=mode,
         )
 
-    candidates, generator_logs = active_generator.generate_plans(context, k=k_eff)
+    candidates, generator_logs = active_generator.generate_plans(
+        context,
+        k=k_eff,
+        interpretations=interpretations,
+    )
 
     if not candidates:
         emit_decision_log(
@@ -210,15 +252,17 @@ def run_orchestration_pipeline(
             status="UNANSWERABLE",
             message="No candidate plans could be generated for the given analytical intent.",
             ambiguity=ambiguity,
+            structured_intent=structured_intent,
+            interpretations=interpretations,
         )
 
-    # 5. Pass 1a Pre-Dispatch Validation + Execution + Pass 1b Post-Execution
+    # 6. Step 5: Validation / Execution Coordination
     surviving_candidates: List[Tuple[CandidatePlan, ExecutionResult]] = []
     pass1a_counts = 0
     pass1b_counts = 0
 
     for cand in candidates:
-        # Pass 1a
+        # Pass 1a: Pre-dispatch validation
         pass1a_res = validate_pass1a(
             plan=cand,
             semantic_profile=semantic_profile,
@@ -229,14 +273,14 @@ def run_orchestration_pipeline(
             continue
         pass1a_counts += 1
 
-        # Execution
-        exec_res = execute_plan(
+        # Deterministic engine execution
+        exec_res = exec_engine.execute(
             plan=cand,
             dataset=dataset,
             semantic_profile=semantic_profile,
         )
 
-        # Pass 1b
+        # Pass 1b: Post-execution validation
         pass1b_res = validate_pass1b(
             plan=cand,
             exec_result=exec_res,
@@ -269,12 +313,13 @@ def run_orchestration_pipeline(
             status="UNANSWERABLE",
             message="All generated candidate plans failed validation (Pass 1a or Pass 1b).",
             ambiguity=ambiguity,
+            structured_intent=structured_intent,
+            interpretations=interpretations,
         )
 
-    # 6. Consistency Check
+    # 7. Step 6: Consistency Check, Ranking, and Winner Selection
     consistency = check_candidate_output_consistency(surviving_candidates)
 
-    # 7. Deterministic Ranker V1
     weights = RankerWeights(
         w1_evidence=RANK_W1_EVIDENCE,
         w2_coverage=RANK_W2_COVERAGE,
@@ -299,7 +344,7 @@ def run_orchestration_pipeline(
             score=score,
         )
 
-    # 8. Winner Selection with Pass 2 Cascade
+    # Winner Selection with Pass 2 Cascade
     try:
         dashboard_spec = select_winner(
             ranked=ranked,
@@ -334,11 +379,13 @@ def run_orchestration_pipeline(
                 "No viable winner could be selected."
             ),
             ambiguity=ambiguity,
+            structured_intent=structured_intent,
+            interpretations=interpretations,
             ranked_candidates=ranked,
             cascade_depth=e.cascade_depth,
         )
 
-    # 9. Structured Logging
+    # Structured Logging
     decision_entry = emit_decision_log(
         request_id=request_id,
         dataset_id=dataset.metadata.dataset_id,
@@ -365,6 +412,8 @@ def run_orchestration_pipeline(
         message="Orchestration pipeline completed successfully.",
         dashboard_spec=dashboard_spec,
         ambiguity=ambiguity,
+        structured_intent=structured_intent,
+        interpretations=interpretations,
         ranked_candidates=ranked,
         is_tie=dashboard_spec.is_tie,
         cascade_depth=dashboard_spec.trace.cascade_depth,

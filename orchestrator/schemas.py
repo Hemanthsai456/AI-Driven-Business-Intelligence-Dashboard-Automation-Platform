@@ -260,6 +260,10 @@ class AmbiguityDetail(BaseModel):
         default_factory=list,
         description="Candidate alternatives the user can choose from.",
     )
+    is_blocking: bool = Field(
+        default=False,
+        description="Whether this ambiguity blocks candidate generation (request-level) or can be resolved/branched (item-level).",
+    )
 
     model_config = {"frozen": True}
 
@@ -276,8 +280,93 @@ class AmbiguityResult(BaseModel):
         default=None,
         description="Human-readable summary of why the request is ambiguous or unanswerable.",
     )
+    is_blocking: bool = Field(
+        default=False,
+        description="True if this ambiguity requires clarification and cannot proceed to planning.",
+    )
 
     model_config = {"frozen": True}
+
+
+# ---------------------------------------------------------------------------
+# StructuredIntent & SemanticInterpretation — 6-step cognitive loop contracts
+# ---------------------------------------------------------------------------
+
+
+class StructuredIntent(BaseModel):
+    """Structured representation of interpreted user analytical intent.
+
+    Captures only information justified by the request and available schema/semantic evidence.
+    """
+
+    original_request: str
+    analytical_goal: Optional[str] = Field(
+        default=None,
+        description="High-level analytical goal (e.g. 'aggregation', 'trend', 'distribution', 'comparison').",
+    )
+    requested_metrics: List[str] = Field(
+        default_factory=list,
+        description="Candidate measure/metric columns identified from request.",
+    )
+    requested_dimensions: List[str] = Field(
+        default_factory=list,
+        description="Grouping or categorical dimension columns identified.",
+    )
+    temporal_scope: Optional[str] = Field(
+        default=None,
+        description="Identified date/time column if temporal analysis was requested.",
+    )
+    grouping_granularity: Optional[str] = Field(
+        default=None,
+        description="Temporal granularity (e.g. 'month', 'year', 'day') if specified.",
+    )
+    comparison_requirements: Optional[str] = Field(
+        default=None,
+        description="Comparison or period-over-period requirement if specified.",
+    )
+    requested_visual_preferences: Optional[str] = Field(
+        default=None,
+        description="Explicit visual preference (e.g. 'bar', 'line', 'table') if mentioned.",
+    )
+    filters: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Filter constraints identified from intent.",
+    )
+    unresolved_terms: List[str] = Field(
+        default_factory=list,
+        description="Terms from request that could not be mapped to semantic columns.",
+    )
+    confidence: float = Field(
+        default=1.0,
+        description="Confidence score for the interpreted intent.",
+    )
+
+    model_config = {"frozen": True}
+
+
+class SemanticInterpretation(BaseModel):
+    """A coherent, concrete semantic interpretation of the user request.
+
+    Bridges between the structured intent and candidate planning.
+    """
+
+    interpretation_id: str = Field(default_factory=lambda: str(uuid4()))
+    intent_summary: str = Field(description="Summary of this interpretation.")
+    metric_column: str = Field(description="Selected metric measure column.")
+    aggregation: AggregationType = Field(description="Aggregation function.")
+    dimension_columns: List[str] = Field(default_factory=list)
+    granularity: Optional[Granularity] = Field(default=None)
+    filter_specs: List[FilterSpec] = Field(default_factory=list)
+    visualization: VisualizationType = Field(default=VisualizationType.TABLE)
+    resolved_intent_elements: Dict[str, Any] = Field(default_factory=dict)
+    referenced_columns: List[str] = Field(default_factory=list)
+    assumptions: List[str] = Field(default_factory=list)
+    unresolved_elements: List[str] = Field(default_factory=list)
+    evidence: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=1.0)
+
+    model_config = {"frozen": True}
+
 
 
 # ---------------------------------------------------------------------------
@@ -497,20 +586,7 @@ class AlternateInterpretation(BaseModel):
     model_config = {"frozen": True}
 
 
-class GeneratorCallLog(BaseModel):
-    """Execution telemetry for a single generator call (LLM direct or external agent)."""
-
-    model: str = Field(description="Model identifier or agent name.")
-    provider: str = Field(default="unknown", description="LLM provider name.")
-    generator: str = Field(description="Generator type: 'llm_direct' or 'external_agent'.")
-    steps: int = Field(default=1, description="Number of agent reasoning/tool execution steps.")
-    input_tokens: int = Field(default=0)
-    output_tokens: int = Field(default=0)
-    thinking_tokens: int = Field(default=0)
-    latency_seconds: float = Field(default=0.0)
-    estimated_cost_usd: float = Field(default=0.0)
-
-    model_config = {"frozen": True}
+from providers.types import GeneratorCallLog
 
 
 class OrchestratorTrace(BaseModel):

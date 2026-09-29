@@ -1,13 +1,14 @@
 """Orchestrator package for AI-driven dashboard query planning and execution.
 
-This package provides schemas, configuration, and logic for the K-way
-parallel orchestrator that translates natural-language analytical requests
-into DuckDB query plans, validates them, ranks results, and produces
-DashboardSpec outputs.
+This package provides schemas, configuration, and cognitive coordination for the
+6-step cognitive loop that interprets user requests, gates ambiguity, generates
+interpretations, plans K-way candidates, coordinates deterministic engine execution,
+ranks candidates, and produces DashboardSpec outputs.
 """
 
 from orchestrator.ambiguity import (
     assess_ambiguity,
+    is_blocking_ambiguity,
 )
 from orchestrator.compiler import (
     QueryCompilationError,
@@ -20,9 +21,12 @@ from orchestrator.context_builder import (
     sanitize_text,
 )
 from orchestrator.executor import (
+    AnalyticsEngine,
+    DuckDBEngine,
     DuckDBExecutor,
     default_executor,
     execute_plan,
+    get_default_engine,
 )
 from orchestrator.generator import (
     ExternalAgentGenerator,
@@ -30,11 +34,22 @@ from orchestrator.generator import (
     PlanGenerationCoordinator,
     PlanGenerator,
 )
+from orchestrator.intent import (
+    interpret_user_request,
+)
+from orchestrator.interpretation import (
+    generate_interpretations,
+)
 from orchestrator.llm import (
     GeminiClient,
+    GroqClient,
     LLMClient,
     LLMClientError,
+    LLMProviderFactory,
     MockLLMClient,
+    OllamaClient,
+    get_llm_client,
+    get_multi_provider_clients,
 )
 from orchestrator.schemas import (
     AggregationType,
@@ -60,6 +75,8 @@ from orchestrator.schemas import (
     RankedCandidate,
     RankerWeights,
     ScoreBreakdown,
+    SemanticInterpretation,
+    StructuredIntent,
     ValidationIssue,
     ValidationStatus,
     VisualizationType,
@@ -89,73 +106,83 @@ from orchestrator.pipeline import (
 )
 
 __all__ = [
+    # Cognitive Loop
+    "interpret_user_request",
+    "assess_ambiguity",
+    "is_blocking_ambiguity",
+    "generate_interpretations",
+    "StructuredIntent",
+    "SemanticInterpretation",
     # Compiler
     "compile_plan_to_sql",
     "quote_identifier",
     "format_sql_literal",
     "QueryCompilationError",
-    # Executor
+    # Executor / Engine
+    "AnalyticsEngine",
+    "DuckDBEngine",
     "DuckDBExecutor",
     "default_executor",
     "execute_plan",
-    # Validator
-    "validate_pass1a",
-    "validate_pass1b",
-    "validate_pass2",
-    # Winner Selection
-    "select_winner",
-    "WinnerSelectionError",
-    # Ambiguity
-    "assess_ambiguity",
-    # Context Builder
+    "get_default_engine",
+    # Context
     "build_llm_context",
     "sanitize_text",
-    # LLM Clients
-    "LLMClient",
-    "GeminiClient",
-    "MockLLMClient",
-    "LLMClientError",
-    # Plan Generators
+    # Generators
     "PlanGenerator",
     "MultiProviderGenerator",
     "ExternalAgentGenerator",
     "PlanGenerationCoordinator",
-    "PlanGenerationCoordinator",
-    # Pipeline & Logging
-    "run_orchestration_pipeline",
-    "OrchestrationPipelineResult",
-    "emit_decision_log",
-    "emit_explainability_log",
-    "save_candidate_artifact",
+    # LLM
+    "LLMClient",
+    "LLMClientError",
+    "LLMProviderFactory",
+    "get_llm_client",
+    "get_multi_provider_clients",
+    "GeminiClient",
+    "GroqClient",
+    "OllamaClient",
+    "MockLLMClient",
     # Schemas
     "AggregationType",
     "Granularity",
     "VisualizationType",
-    "ValidationStatus",
-    "ExecutionStatus",
     "AmbiguityStatus",
     "AmbiguityType",
+    "ValidationStatus",
+    "ExecutionStatus",
     "MetricSpec",
     "DimensionSpec",
     "FilterSpec",
     "CandidatePlan",
+    "AmbiguityDetail",
+    "AmbiguityResult",
+    "LLMContext",
     "ExecutionResult",
-    "ValidationIssue",
     "Pass1aResult",
     "Pass1bResult",
     "Pass2Result",
-    "RankedCandidate",
-    "DashboardSpec",
-    "CandidateConsistencyCheck",
-    "ScoreBreakdown",
+    "ValidationIssue",
     "RankerWeights",
-    "LLMContext",
-    "AmbiguityResult",
-    "AmbiguityDetail",
-    "GeneratorCallLog",
+    "ScoreBreakdown",
+    "RankedCandidate",
+    "CandidateConsistencyCheck",
     "OrchestratorTrace",
-    # Utils
-    "compute_score",
-    "rank_candidates",
+    "DashboardSpec",
+    "GeneratorCallLog",
+    # Validation & Ranking
+    "validate_pass1a",
+    "validate_pass1b",
+    "validate_pass2",
     "check_candidate_output_consistency",
+    "rank_candidates",
+    "compute_score",
+    "select_winner",
+    "WinnerSelectionError",
+    # Logging & Pipeline
+    "save_candidate_artifact",
+    "emit_decision_log",
+    "emit_explainability_log",
+    "run_orchestration_pipeline",
+    "OrchestrationPipelineResult",
 ]
