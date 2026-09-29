@@ -8,7 +8,7 @@ import time
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-DEFAULT_GROQ_MODEL: str = "llama3-70b-8192"
+DEFAULT_GROQ_MODEL: str = "openai/gpt-oss-120b"
 GROQ_API_KEY_ENV: str = "GROQ_API_KEY"
 GROQ_MODEL_ENV: str = "GROQ_MODEL"
 
@@ -39,6 +39,7 @@ class GroqClient(LLMClient):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "bi-platform/1.0",
         }
 
         messages = []

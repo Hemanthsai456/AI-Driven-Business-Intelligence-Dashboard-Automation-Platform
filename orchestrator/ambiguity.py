@@ -48,6 +48,27 @@ def assess_ambiguity(
             is_blocking=True,
         )
 
+    # General Rule: Unresolvable Request / Missing Target Schema
+    # If requested_metrics AND requested_dimensions are both empty AND unresolved_terms is non-empty,
+    # the request cannot be answered from the dataset schema -> blocking ambiguity / UNANSWERABLE.
+    from orchestrator.intent import interpret_user_request
+    structured = intent if isinstance(intent, StructuredIntent) else interpret_user_request(raw_intent, semantic_profile)
+
+    if not structured.requested_metrics and not structured.requested_dimensions and structured.unresolved_terms:
+        return AmbiguityResult(
+            status=AmbiguityStatus.UNANSWERABLE,
+            ambiguities=[
+                AmbiguityDetail(
+                    type=AmbiguityType.MULTIPLE_MEASURES,
+                    field="intent_terms",
+                    alternatives=list(structured.unresolved_terms),
+                    is_blocking=True,
+                )
+            ],
+            message=f"Request contains unmapped terms {structured.unresolved_terms} with no identifiable metrics or dimensions in dataset schema.",
+            is_blocking=True,
+        )
+
     tokens = _tokenize(raw_intent)
     ambiguities: List[AmbiguityDetail] = []
 

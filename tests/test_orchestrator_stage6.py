@@ -61,11 +61,12 @@ def _make_plan(
     dimensions: Optional[List[DimensionSpec]] = None,
     visualization: VisualizationType = VisualizationType.BAR,
     generator: str = "llm_direct",
+    intent: str = "show revenue by category",
 ) -> CandidatePlan:
     return CandidatePlan(
         plan_id=str(uuid.uuid4()),
         dataset_id=dataset_id,
-        intent="show revenue by category",
+        intent=intent,
         metric=MetricSpec(column=metric_col, aggregation=agg),
         dimensions=dimensions or [DimensionSpec(column="Category")],
         filters=[],
@@ -493,3 +494,27 @@ def test_ranker_low_coverage_confidence_cap_forces_tie():
         intent_tokens=["completely", "unrelated", "tokens", "here", "xyz"],
     )
     assert is_tie is True
+
+
+def test_compute_coverage_taxi_off_topic_not_inflated_by_intent():
+    """Verify that off-topic request against taxi dataset yields near-zero coverage.
+
+    _compute_coverage must not match tokens against plan.intent, which trivially contains itself.
+    """
+    from orchestrator.utils import _compute_coverage
+    from orchestrator.config import LOW_COVERAGE_CONFIDENCE_CAP
+
+    query = "Show total sales by category"
+    tokens = query.lower().split()
+
+    # Plan on yellow_tripdata with total_amount and payment_type
+    plan = _make_plan(
+        metric_col="total_amount",
+        dimensions=[DimensionSpec(column="payment_type")],
+        intent=query,
+    )
+
+    cov = _compute_coverage(plan, tokens)
+    # 'sales' and 'category' do not appear in fields; coverage is <= 0.20 (only 'total' in 'total_amount')
+    assert cov <= 0.20
+    assert cov < LOW_COVERAGE_CONFIDENCE_CAP

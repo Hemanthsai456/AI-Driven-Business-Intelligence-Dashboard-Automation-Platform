@@ -489,3 +489,33 @@ def test_22_orchestrator_depends_only_on_llm_abstraction():
     from orchestrator.pipeline import get_default_llm_client
     client = get_default_llm_client()
     assert isinstance(client, LLMClient)
+
+
+def test_23_ambiguity_gap_empty_metrics_and_dimensions_is_unanswerable():
+    """Test 23: Off-topic request with empty metrics/dimensions and unresolved terms is blocking UNANSWERABLE."""
+    from intelligence.semantic_analyzer import ColumnRole, ColumnSemanticEvidence, DatasetSemanticProfile
+    from orchestrator.intent import interpret_user_request
+    from orchestrator.ambiguity import assess_ambiguity, is_blocking_ambiguity
+    from orchestrator.schemas import AmbiguityStatus
+
+    # Taxi-like schema
+    taxi_prof = DatasetSemanticProfile(
+        dataset_id="taxi_test",
+        generated_at="now",
+        column_evidences={
+            "VendorID": ColumnSemanticEvidence("VendorID", ColumnRole.IDENTIFIER, 0.88, "HIGH", []),
+            "total_amount": ColumnSemanticEvidence("total_amount", ColumnRole.MEASURE, 0.92, "HIGH", []),
+            "payment_type": ColumnSemanticEvidence("payment_type", ColumnRole.DIMENSION, 0.70, "MEDIUM", []),
+        },
+    )
+
+    query = "Show total sales by category"
+    structured = interpret_user_request(query, taxi_prof)
+    assert not structured.requested_metrics
+    assert not structured.requested_dimensions
+    assert "sales" in structured.unresolved_terms or "category" in structured.unresolved_terms
+
+    amb_res = assess_ambiguity(structured, taxi_prof)
+    assert amb_res.status == AmbiguityStatus.UNANSWERABLE
+    assert amb_res.is_blocking is True
+    assert is_blocking_ambiguity(amb_res) is True

@@ -18,6 +18,10 @@ from typing import Any, Dict, List, Optional, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from dotenv import load_dotenv
+load_dotenv(PROJECT_ROOT / ".env")
+print(f"[EVAL STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
+
 from ingestion.loaders import load_dataset
 from intelligence.profiler import profile_dataset
 from intelligence.schema_validator import assess_readiness, ReadinessStatus

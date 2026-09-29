@@ -41,11 +41,26 @@ class GeminiClient(LLMClient):
         except Exception as e:
             raise LLMClientError(f"Failed to initialize google-genai Client: {str(e)}")
 
+    @staticmethod
+    def _sanitize_gemini_schema(schema: Any) -> Any:
+        """Strip additionalProperties and additional_properties that Google GenAI proto rejects."""
+        if isinstance(schema, dict):
+            clean = {}
+            for k, v in schema.items():
+                if k in ("additionalProperties", "additional_properties"):
+                    continue
+                clean[k] = GeminiClient._sanitize_gemini_schema(v)
+            return clean
+        elif isinstance(schema, list):
+            return [GeminiClient._sanitize_gemini_schema(x) for x in schema]
+        return schema
+
     def _call_api(self, prompt, schema, sys_inst):
         from google.genai import types
+        gemini_schema = self._sanitize_gemini_schema(schema) if (schema and self.capabilities["strict_schema"]) else None
         config = types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=schema if self.capabilities["strict_schema"] else None,
+            response_schema=gemini_schema,
             system_instruction=sys_inst,
             temperature=0.0,
         )

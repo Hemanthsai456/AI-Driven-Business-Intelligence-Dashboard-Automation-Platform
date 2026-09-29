@@ -1,22 +1,22 @@
 # Orchestrator Multi-Provider Benchmark Evaluation Report
 
 **Total Prompts**: 22  
-**Passed**: 21 / 22  
-**Overall Accuracy**: 95.5%  
-**High-Agreement Wrong Rate**: 5.0% (1/20)
+**Passed**: 20 / 22  
+**Overall Accuracy**: 90.9%  
+**High-Agreement Wrong Rate**: 10.0% (2/20)
 
 ## Agreement & Consensus-Failure Analysis (Q3 Risk)
 
 | Metric | Count | Percentage |
 | :--- | :--- | :--- |
 | Total Consensus Prompts (Agreement = 1.0) | 20 | 90.9% |
-| Consensus on Correct Signature | 19 | 86.4% |
-| **Consensus on WRONG Signature** | **1** | **4.5%** |
-| **High-Agreement Wrong Rate** | **1/20** | **5.0%** |
+| Consensus on Correct Signature | 18 | 81.8% |
+| **Consensus on WRONG Signature** | **2** | **9.1%** |
+| **High-Agreement Wrong Rate** | **2/20** | **10.0%** |
 | Non-Consensus / Dissenting Providers | 2 | 9.1% |
 
 > [!WARNING]
-> **Agreement-on-Wrong-Answer Risk Detected**: In **1** case(s), all 3 providers independently agreed on an incorrect plan signature. High-agreement wrong rate is **5.0%**. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.
+> **Agreement-on-Wrong-Answer Risk Detected**: In **2** case(s), all 3 providers independently agreed on an incorrect plan signature. High-agreement wrong rate is **10.0%**. Because consensus was 100% (agreement = 1.0), the ranker awarded maximum agreement bonus, crowning the erroneous plan as winner without detection. This validates the Q3 architectural limitation.
 
 ## Per-Prompt Evaluation Details
 
@@ -31,7 +31,7 @@
 | 7 | Customer sales aggregation | `Sales_2024.csv` | `aggregation_ambiguity` | `0.67` | PASS | Dissenting / Disambiguated | `SUM(TotalSales) BY CustomerID` |
 | 8 | Quarterly revenue for 2024 | `Sales_2024.csv` | `time_granularity` | `1.00` | PASS | Consensus on Correct | `SUM(TotalSales) BY Date:quarter` |
 | 9 | Daily sales volume | `Sales_2024.csv` | `time_granularity` | `1.00` | PASS | Consensus on Correct | `SUM(Quantity) BY Date:day` |
-| 10 | Total sales for Store 101 | `Sales_2024.csv` | `filter_scope` | `1.00` | PASS | Consensus on Correct | `SUM(TotalSales) WHERE StoreID = 101` |
+| 10 | Total sales for Store 101 | `Sales_2024.csv` | `filter_scope` | `1.00` | **FAIL** | Consensus on WRONG (Risk Triggered) | `UNANSWERABLE` |
 | 11 | Average order value by store | `Sales_2024.csv` | `aggregation_ambiguity` | `1.00` | PASS | Consensus on Correct | `AVG(TotalSales) BY StoreID` |
 | 12 | High value sales over 500 dollars | `Sales_2024.csv` | `filter_scope` | `1.00` | PASS | Consensus on Correct | `SUM(TotalSales) WHERE TotalSales > 500` |
 | 13 | Sales volume by product in 2025 | `Sales_2025.csv` | `grouping_dimension` | `1.00` | PASS | Consensus on Correct | `SUM(Quantity) BY ProductID` |

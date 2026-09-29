@@ -88,7 +88,6 @@ def _compute_coverage(plan: CandidatePlan, intent_tokens: Sequence[str]) -> floa
         [
             plan.metric.column.lower(),
             plan.metric.aggregation.lower(),
-            plan.intent.lower(),
         ]
         + [d.column.lower() for d in plan.dimensions]
         + [f.column.lower() for f in plan.filters]
