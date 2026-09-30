@@ -15,7 +15,7 @@ Algorithm:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from orchestrator.config import (
@@ -25,16 +25,21 @@ from orchestrator.config import (
 )
 from orchestrator.schemas import (
     AlternateInterpretation,
+    AmbiguityResult,
     CandidatePlan,
     CandidateConsistencyCheck,
     DashboardSpec,
     ExecutionResult,
     GeneratorCallLog,
     OrchestratorTrace,
+    Pass1aResult,
+    Pass1bResult,
     Pass2Result,
+    PassResult,
     RankedCandidate,
     RankerWeights,
     ScoreBreakdown,
+    StructuredIntent,
 )
 from orchestrator.utils import rank_candidates, check_candidate_output_consistency
 from orchestrator.validator import validate_pass2
@@ -59,6 +64,13 @@ def select_winner(
     ranker_weights: Optional[RankerWeights] = None,
     consistency_check: Optional[CandidateConsistencyCheck] = None,
     max_cascade_depth: int = MAX_CASCADE_DEPTH,
+    structured_intent: Optional[StructuredIntent] = None,
+    ambiguity_result: Optional[AmbiguityResult] = None,
+    candidate_records: Optional[List[Dict[str, Any]]] = None,
+    plans_generated: Optional[int] = None,
+    plans_passed_pass1a: Optional[int] = None,
+    plans_passed_pass1b: Optional[int] = None,
+    candidate_validations: Optional[Dict[str, Tuple[Pass1aResult, Pass1bResult]]] = None,
 ) -> DashboardSpec:
     """Select the winning candidate, apply Pass 2, and cascade if needed.
 
@@ -71,6 +83,13 @@ def select_winner(
         ranker_weights: Weights used during ranking (for trace).
         consistency_check: Output of check_candidate_output_consistency (for trace).
         max_cascade_depth: Override cascade cap (default from config).
+        structured_intent: Structured intent stage result for full trace.
+        ambiguity_result: Ambiguity stage result for full trace.
+        candidate_records: Detailed candidate records across all stages for trace.
+        plans_generated: Total count of plans generated.
+        plans_passed_pass1a: Count of plans that passed Pass 1a.
+        plans_passed_pass1b: Count of plans that passed Pass 1b.
+        candidate_validations: Map of plan_id to real (pass1a, pass1b) results.
 
     Returns:
         DashboardSpec with the winning RankedCandidate, alternate interpretations, and trace.
@@ -129,17 +148,21 @@ def select_winner(
 
     winner_plan, winner_result, winner_score, winner_rank = winning_ranked
 
-    # Build RankedCandidate for the winner
-    # Pass1a/Pass1b results are not re-derived here; they were already validated.
-    # We reconstruct minimal shells to satisfy schema — the full records live in
-    # the generate-candidates trace. Pass2 is the new gate here.
-    from orchestrator.schemas import Pass1aResult, Pass1bResult, ValidationStatus
+    # Retrieve real Pass1a and Pass1b results if provided
+    real_pass1a = None
+    real_pass1b = None
+    if candidate_validations and winner_plan.plan_id in candidate_validations:
+        real_pass1a, real_pass1b = candidate_validations[winner_plan.plan_id]
+    if real_pass1a is None:
+        real_pass1a = Pass1aResult(plan_id=winner_plan.plan_id, passed=True, issues=[])
+    if real_pass1b is None:
+        real_pass1b = Pass1bResult(plan_id=winner_plan.plan_id, passed=True, issues=[])
 
     winner_ranked_candidate = RankedCandidate(
         plan=winner_plan,
         execution_result=winner_result,
-        pass1a=Pass1aResult(plan_id=winner_plan.plan_id, passed=True, issues=[]),
-        pass1b=Pass1bResult(plan_id=winner_plan.plan_id, passed=True, issues=[]),
+        pass1a=real_pass1a,
+        pass1b=real_pass1b,
         score_breakdown=winner_score,
         rank=1,
         is_winner=True,
@@ -148,7 +171,7 @@ def select_winner(
     # Build AlternateInterpretations from remaining losers
     alternate_interpretations: List[AlternateInterpretation] = []
     for plan, result, score, rank in remaining[1:]:  # skip the winner itself (already removed)
-        reason = "Lower Ranker V1 score"
+        reason = f"Rank {rank} (score: {score.total:.3f})"
         alternate_interpretations.append(
             AlternateInterpretation(
                 plan=plan,
@@ -158,10 +181,9 @@ def select_winner(
         )
     # Also add those that failed Pass 2 as alternates with explanation
     for p2_fail in failed_pass2:
-        # find matching plan from original ranked list
         for plan, result, score, rank in ranked:
             if plan.plan_id == p2_fail.plan_id:
-                fail_reasons = "; ".join(
+                fail_reasons = "; ".join(p2_fail.reasons) or "; ".join(
                     issue.message for issue in p2_fail.issues
                     if issue.status.value == "FAILED"
                 )
@@ -174,26 +196,29 @@ def select_winner(
                 )
                 break
 
-    # Build OrchestratorTrace
+    # Build full OrchestratorTrace
     trace = OrchestratorTrace(
         request_id=str(uuid4()),
         dataset_id=dataset_id,
         intent=intent,
         context_hash=context_hash,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        structured_intent=structured_intent,
+        ambiguity_result=ambiguity_result,
         llm_call_count=sum(1 for log in (generator_logs or []) if log.generator == "llm_direct"),
         llm_token_usage=sum(
             (log.input_tokens + log.output_tokens)
             for log in (generator_logs or [])
         ),
         generator_logs=generator_logs or [],
-        plans_generated=len(ranked),
-        plans_passed_pass1a=len(ranked),   # all ranked candidates passed 1a
-        plans_passed_pass1b=len(ranked),   # all ranked candidates passed 1b
+        plans_generated=plans_generated if plans_generated is not None else len(ranked),
+        plans_passed_pass1a=plans_passed_pass1a if plans_passed_pass1a is not None else len(ranked),
+        plans_passed_pass1b=plans_passed_pass1b if plans_passed_pass1b is not None else len(ranked),
         cascade_depth=cascade_depth,
         ranker_weights=ranker_weights,
         pass2_result=winning_pass2,
         consistency_check=consistency_check,
+        candidate_records=candidate_records or [],
     )
 
     return DashboardSpec(

@@ -51,6 +51,18 @@ RANK_W4_ASSUMPTIONS: float = 0.15 # count of defaults filled without request sup
 RANK_W5_AGREEMENT: float = 0.10   # multi-provider agreement weight
 
 # ---------------------------------------------------------------------------
+# Ranker V1 — Multi-Provider Response Completeness & Quorum
+# ---------------------------------------------------------------------------
+# Expected total providers in the consensus pool.
+# Agreement confidence scales by (providers_responded / TOTAL_ACTIVE_PROVIDERS).
+TOTAL_ACTIVE_PROVIDERS: int = 3
+
+# Minimum number of responding providers required for full cross-model consensus.
+# When providers_responded < MIN_CONSENSUS_RESPONDENTS (e.g. solo response 1 of 1),
+# agreement is penalized to prevent an uncorroborated plan from receiving full consensus bonus.
+MIN_CONSENSUS_RESPONDENTS: int = 2
+
+# ---------------------------------------------------------------------------
 # Ranker V1 — Low Coverage Confidence Cap (PROVISIONAL)
 # ---------------------------------------------------------------------------
 # Minimum coverage required before a candidate can achieve an un-capped score.

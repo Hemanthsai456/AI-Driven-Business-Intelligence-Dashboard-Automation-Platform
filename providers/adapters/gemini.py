@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any, Dict, Optional, Tuple
 
-DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL: str = "gemini-3.8-flash"
 GEMINI_API_KEY_ENV: str = "GEMINI_API_KEY"
 GEMINI_MODEL_ENV: str = "GEMINI_MODEL"
 ESTIMATED_INPUT_COST_PER_M: float = 0.075
