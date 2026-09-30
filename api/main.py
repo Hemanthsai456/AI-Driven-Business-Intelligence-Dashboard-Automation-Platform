@@ -3,6 +3,11 @@
 import os
 import tempfile
 import uuid
+from dotenv import load_dotenv
+
+load_dotenv()
+print(f"[STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
+
 import pandas as pd
 from typing import Dict, List, Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile, status

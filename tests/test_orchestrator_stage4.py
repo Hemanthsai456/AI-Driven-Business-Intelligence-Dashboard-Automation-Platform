@@ -443,9 +443,36 @@ def test_executor_timeout_enforcement(sample_sales_data):
         plan, canonical, sem_profile, custom_sql=slow_sql
     )
 
-    assert exec_result.status in (ExecutionStatus.TIMEOUT, ExecutionStatus.SUCCESS)
-    if exec_result.status == ExecutionStatus.TIMEOUT:
-        assert "timed out" in (exec_result.error_message or "").lower()
+    assert exec_result.status == ExecutionStatus.TIMEOUT
+    assert "timed out" in (exec_result.error_message or "").lower()
+
+
+def test_executor_memory_cap_enforcement(sample_sales_data):
+    """Verify DuckDB memory cap is enforced on oversized queries and returns ExecutionStatus.MEMORY_EXCEEDED."""
+    canonical, profile, sem_profile, readiness = sample_sales_data
+
+    # Create executor with tight 1MB memory limit
+    low_mem_executor = DuckDBExecutor(memory_limit="1MB")
+
+    plan = CandidatePlan(
+        dataset_id="test-sales-ds",
+        intent="Oversized query exceeding memory",
+        metric=MetricSpec(column="Revenue", aggregation=AggregationType.SUM),
+        reasoning=PlanReasoning(interpretation="Memory cap stress", evidence=[]),
+    )
+
+    # 20M-row cross-join exceeding 1MB DuckDB memory cap
+    oom_sql = (
+        "SELECT COUNT(*) FROM "
+        "(SELECT range AS a, range AS b FROM range(20000000)) t1 "
+        "JOIN (SELECT range AS a, range AS b FROM range(20000000)) t2 ON t1.b = t2.b;"
+    )
+    exec_result = low_mem_executor.execute_plan(
+        plan, canonical, sem_profile, custom_sql=oom_sql
+    )
+
+    assert exec_result.status == ExecutionStatus.MEMORY_EXCEEDED
+    assert "memory limit exceeded" in (exec_result.error_message or "").lower()
 
 
 # ---------------------------------------------------------------------------

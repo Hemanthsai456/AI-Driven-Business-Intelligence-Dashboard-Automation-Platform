@@ -30,12 +30,19 @@ from orchestrator.config import (
     ESTIMATED_OUTPUT_COST_PER_M,
     GENERATOR_MODE,
 )
-from orchestrator.llm import LLMClient, LLMClientError, MockLLMClient, GeminiClient, GroqClient, OllamaClient, get_strict_json_schema
+from providers import (
+    LLMClient,
+    LLMClientError,
+    MockLLMClient,
+    get_multi_provider_clients,
+    get_strict_json_schema,
+)
 from orchestrator.schemas import (
     CandidatePlan,
     ColumnContextEntry,
     GeneratorCallLog,
     LLMContext,
+    SemanticInterpretation,
 )
 
 
@@ -120,8 +127,9 @@ class PlanGenerator(ABC):
         self,
         context: LLMContext,
         k: int = 1,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
-        """Generate up to k candidate plans for the given analytical context."""
+        """Generate up to k candidate plans for the given analytical context and interpretations."""
         pass
 
 
@@ -131,17 +139,32 @@ class LLMDirectGenerator(PlanGenerator):
     def __init__(self, llm_client: LLMClient):
         self.client = llm_client
 
-    def _build_prompt(self, context: LLMContext, k: int, retry_error: Optional[str] = None) -> str:
+    def _build_prompt(
+        self,
+        context: LLMContext,
+        k: int,
+        retry_error: Optional[str] = None,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
+    ) -> str:
         cols_summary = "\n".join(
             f"- {c.column_name} (Role: {c.candidate_role}, Confidence: {c.confidence:.2f}, Type: {c.dtype or 'N/A'})"
             for c in context.columns
         )
 
+        interp_section = ""
+        if interpretations:
+            interp_lines = [
+                f"- Interpretation {i+1}: {interp.intent_summary} (Metric: {interp.metric_column} [{interp.aggregation.value}], Dimensions: {interp.dimension_columns})"
+                for i, interp in enumerate(interpretations)
+            ]
+            interp_section = "\nTarget Semantic Interpretations:\n" + "\n".join(interp_lines) + "\n"
+
         prompt = (
             f"You are a Business Intelligence Analyst. Generate {k} analytical query plan(s) for the dataset.\n"
             f"Dataset ID: {context.dataset_id}\n"
             f"User Intent: {context.intent}\n\n"
-            f"Available Columns (Read-only Metadata):\n{cols_summary}\n\n"
+            f"Available Columns (Read-only Metadata):\n{cols_summary}\n"
+            f"{interp_section}\n"
             "Rules:\n"
             "1. Metric must use a MEASURE role column for SUM/AVG/STDDEV/MEDIAN.\n"
             "2. Temporal granularity (YEAR, MONTH, DAY, etc.) requires a DATETIME column.\n"
@@ -155,6 +178,7 @@ class LLMDirectGenerator(PlanGenerator):
         self,
         context: LLMContext,
         k: int = 1,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
         logs: List[GeneratorCallLog] = []
         valid_plans: List[CandidatePlan] = []
@@ -164,7 +188,7 @@ class LLMDirectGenerator(PlanGenerator):
         last_error = None
 
         for attempt in range(attempts):
-            prompt = self._build_prompt(context, k=k, retry_error=last_error)
+            prompt = self._build_prompt(context, k=k, retry_error=last_error, interpretations=interpretations)
             try:
                 raw_json, call_log = self.client.generate_structured(
                     prompt=prompt,
@@ -192,40 +216,44 @@ class LLMDirectGenerator(PlanGenerator):
         return valid_plans[:k], logs
 
 
-class MultiProviderGenerator(PlanGenerator):
-    """Calls Gemini, Groq, and Ollama in parallel. Returns valid schema-checked plans."""
 
-    def __init__(self):
-        self.clients = []
-        
-        try:
-            self.clients.append(GeminiClient())
-        except Exception:
-            pass
-            
-        try:
-            self.clients.append(GroqClient())
-        except Exception:
-            pass
-            
-        try:
-            self.clients.append(OllamaClient())
-        except Exception:
-            pass
-            
+class MultiProviderGenerator(PlanGenerator):
+    """Calls configured providers (Gemini, Groq, Ollama) in parallel. Returns valid schema-checked plans."""
+
+    def __init__(self, clients: Optional[List[LLMClient]] = None):
+        if clients is not None:
+            self.clients = clients
+        else:
+            self.clients = get_multi_provider_clients()
+
         self.eval_mode = os.getenv("EVAL_MODE", "false").lower() == "true"
 
-    def _build_prompt(self, context: LLMContext, k: int, retry_error: Optional[str] = None) -> str:
+    def _build_prompt(
+        self,
+        context: LLMContext,
+        k: int,
+        retry_error: Optional[str] = None,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
+    ) -> str:
         cols_summary = "\n".join(
             f"- {c.column_name} (Role: {c.candidate_role}, Confidence: {c.confidence:.2f}, Type: {c.dtype or 'N/A'})"
             for c in context.columns
         )
 
+        interp_section = ""
+        if interpretations:
+            interp_lines = [
+                f"- Interpretation {i+1}: {interp.intent_summary} (Metric: {interp.metric_column} [{interp.aggregation.value}], Dimensions: {interp.dimension_columns})"
+                for i, interp in enumerate(interpretations)
+            ]
+            interp_section = "\nTarget Semantic Interpretations:\n" + "\n".join(interp_lines) + "\n"
+
         prompt = (
             f"You are a Business Intelligence Analyst. Generate {k} analytical query plan(s) for the dataset.\n"
             f"Dataset ID: {context.dataset_id}\n"
             f"User Intent: {context.intent}\n\n"
-            f"Available Columns (Read-only Metadata):\n{cols_summary}\n\n"
+            f"Available Columns (Read-only Metadata):\n{cols_summary}\n"
+            f"{interp_section}\n"
             "Rules:\n"
             "1. Metric must use a MEASURE role column for SUM/AVG/STDDEV/MEDIAN.\n"
             "2. Temporal granularity (YEAR, MONTH, DAY, etc.) requires a DATETIME column.\n"
@@ -297,6 +325,7 @@ class MultiProviderGenerator(PlanGenerator):
         self,
         context: LLMContext,
         k: int = 1,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
         
         all_logs: List[GeneratorCallLog] = []
@@ -307,7 +336,8 @@ class MultiProviderGenerator(PlanGenerator):
         last_error = None
         
         for attempt in range(attempts):
-            prompt = self._build_prompt(context, k=k, retry_error=last_error)
+            prompt = self._build_prompt(context, k=k, retry_error=last_error, interpretations=interpretations)
+
             
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 futures = {
@@ -501,6 +531,7 @@ class ExternalAgentGenerator(PlanGenerator):
         self,
         context: LLMContext,
         k: int = 1,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
         start_time = time.perf_counter()
 
@@ -557,6 +588,8 @@ class MockAgent(PlanGenerator):
         self,
         context: LLMContext,
         k: int = 1,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
+        **kwargs: Any,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
         env = AgentMetadataEnvironment(context)
         self.tools_called.append("list_columns")
@@ -622,23 +655,24 @@ class PlanGenerationCoordinator:
         self,
         context: LLMContext,
         k: int = 3,
+        interpretations: Optional[List[SemanticInterpretation]] = None,
     ) -> Tuple[List[CandidatePlan], List[GeneratorCallLog]]:
         all_plans: List[CandidatePlan] = []
         all_logs: List[GeneratorCallLog] = []
 
         if self.mode == "llm_only":
-            plans, logs = self.direct_generator.generate_plans(context, k=k)
+            plans, logs = self.direct_generator.generate_plans(context, k=k, interpretations=interpretations)
             all_plans.extend(plans)
             all_logs.extend(logs)
 
         elif self.mode == "agent_only" and self.agent_loop:
-            plans, logs = self.agent_generator.generate_plans(context, k=k)
+            plans, logs = self.agent_generator.generate_plans(context, k=k, interpretations=interpretations)
             all_plans.extend(plans)
             all_logs.extend(logs)
 
         elif self.mode == "both":
             try:
-                d_plans, d_logs = self.direct_generator.generate_plans(context, k=k)
+                d_plans, d_logs = self.direct_generator.generate_plans(context, k=k, interpretations=interpretations)
                 all_plans.extend(d_plans)
                 all_logs.extend(d_logs)
             except Exception:
@@ -646,7 +680,7 @@ class PlanGenerationCoordinator:
 
             if self.agent_loop:
                 try:
-                    a_plans, a_logs = self.agent_generator.generate_plans(context, k=k)
+                    a_plans, a_logs = self.agent_generator.generate_plans(context, k=k, interpretations=interpretations)
                     all_plans.extend(a_plans)
                     all_logs.extend(a_logs)
                 except Exception:
@@ -656,3 +690,4 @@ class PlanGenerationCoordinator:
         return all_plans[:k], all_logs
 
     generate_plans = generate_candidates
+

@@ -61,11 +61,12 @@ def _make_plan(
     dimensions: Optional[List[DimensionSpec]] = None,
     visualization: VisualizationType = VisualizationType.BAR,
     generator: str = "llm_direct",
+    intent: str = "show revenue by category",
 ) -> CandidatePlan:
     return CandidatePlan(
         plan_id=str(uuid.uuid4()),
         dataset_id=dataset_id,
-        intent="show revenue by category",
+        intent=intent,
         metric=MetricSpec(column=metric_col, aggregation=agg),
         dimensions=dimensions or [DimensionSpec(column="Category")],
         filters=[],
@@ -434,3 +435,86 @@ def test_api_select_winner_422_all_fail_pass2(api_client_with_dataset):
     # Error message must mention unanswerable / cascade
     detail = resp.json().get("message", "").lower()
     assert "unanswerable" in detail or "cascade" in detail or "pass 2" in detail.lower()
+
+
+def test_ranker_gated_agreement_not_dominated_by_low_coverage():
+    """Prove two candidates with identical scores except one has agreement=1.0/coverage=0.2
+
+    and the other has agreement=0.33/coverage=0.9 — the second must NOT be dominated by the first.
+    """
+    from intelligence.semantic_analyzer import ColumnRole, ColumnSemanticEvidence
+
+    sem_ev = {
+        "Revenue": ColumnSemanticEvidence("Revenue", ColumnRole.MEASURE, 0.95, "HIGH", []),
+        "Category": ColumnSemanticEvidence("Category", ColumnRole.DIMENSION, 0.95, "HIGH", []),
+    }
+    exec_res = _make_exec_result("p1", columns=["Category", "sum_Revenue"], row_count=5)
+
+    # Candidate 1: agreement=1.0, coverage=0.2
+    plan1 = _make_plan(metric_col="Revenue")
+    plan1 = plan1.model_copy(update={"supporting_count": 3, "providers_responded": 3})
+    sb1 = compute_score(plan1, exec_res, sem_ev, intent_tokens=[], coverage_override=0.2)
+
+    # Candidate 2: agreement=0.33, coverage=0.9
+    plan2 = _make_plan(metric_col="Revenue")
+    plan2 = plan2.model_copy(update={"supporting_count": 1, "providers_responded": 3})
+    sb2 = compute_score(plan2, exec_res, sem_ev, intent_tokens=[], coverage_override=0.9)
+
+    print(f"Candidate 1 (agg=1.0, cov=0.2): score={sb1.total:.4f}")
+    print(f"Candidate 2 (agg=0.33, cov=0.9): score={sb2.total:.4f}")
+
+    # The second candidate (higher coverage) must NOT be dominated by the first
+    assert sb2.total > sb1.total
+
+
+def test_ranker_low_coverage_confidence_cap_forces_tie():
+    """Verify that candidate with coverage < LOW_COVERAGE_CONFIDENCE_CAP has score capped
+
+    and triggers is_tie = True rather than an outright automatic win, even at agreement=1.0.
+    """
+    from orchestrator.config import LOW_COVERAGE_CONFIDENCE_CAP
+    from intelligence.semantic_analyzer import ColumnRole, ColumnSemanticEvidence
+
+    sem_ev = {
+        "Revenue": ColumnSemanticEvidence("Revenue", ColumnRole.MEASURE, 0.95, "HIGH", []),
+    }
+    exec_res = _make_exec_result("p1", columns=["sum_Revenue"], row_count=1)
+
+    plan = _make_plan(metric_col="Revenue", dimensions=[], visualization=VisualizationType.KPI)
+    plan = plan.model_copy(update={"supporting_count": 3, "providers_responded": 3})
+
+    # Coverage 0.2 < LOW_COVERAGE_CONFIDENCE_CAP (0.40)
+    sb = compute_score(plan, exec_res, sem_ev, intent_tokens=[], coverage_override=0.2)
+    assert sb.total <= LOW_COVERAGE_CONFIDENCE_CAP
+    assert sb.total == LOW_COVERAGE_CONFIDENCE_CAP
+
+    ranked, is_tie = rank_candidates(
+        candidates=[(plan, exec_res)],
+        semantic_evidences=sem_ev,
+        intent_tokens=["completely", "unrelated", "tokens", "here", "xyz"],
+    )
+    assert is_tie is True
+
+
+def test_compute_coverage_taxi_off_topic_not_inflated_by_intent():
+    """Verify that off-topic request against taxi dataset yields near-zero coverage.
+
+    _compute_coverage must not match tokens against plan.intent, which trivially contains itself.
+    """
+    from orchestrator.utils import _compute_coverage
+    from orchestrator.config import LOW_COVERAGE_CONFIDENCE_CAP
+
+    query = "Show total sales by category"
+    tokens = query.lower().split()
+
+    # Plan on yellow_tripdata with total_amount and payment_type
+    plan = _make_plan(
+        metric_col="total_amount",
+        dimensions=[DimensionSpec(column="payment_type")],
+        intent=query,
+    )
+
+    cov = _compute_coverage(plan, tokens)
+    # 'sales' and 'category' do not appear in fields; coverage is <= 0.20 (only 'total' in 'total_amount')
+    assert cov <= 0.20
+    assert cov < LOW_COVERAGE_CONFIDENCE_CAP

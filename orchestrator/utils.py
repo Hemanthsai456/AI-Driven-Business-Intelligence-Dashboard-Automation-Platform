@@ -17,11 +17,13 @@ import json
 from typing import List, Optional, Sequence, Tuple
 
 from orchestrator.config import (
+    LOW_COVERAGE_CONFIDENCE_CAP,
     RANK_TIE_EPSILON,
     RANK_W1_EVIDENCE,
     RANK_W2_COVERAGE,
     RANK_W3_STABILITY,
     RANK_W4_ASSUMPTIONS,
+    RANK_W5_AGREEMENT,
     RESULT_ROW_CAP,
 )
 from orchestrator.schemas import (
@@ -86,7 +88,6 @@ def _compute_coverage(plan: CandidatePlan, intent_tokens: Sequence[str]) -> floa
         [
             plan.metric.column.lower(),
             plan.metric.aggregation.lower(),
-            plan.intent.lower(),
         ]
         + [d.column.lower() for d in plan.dimensions]
         + [f.column.lower() for f in plan.filters]
@@ -158,6 +159,7 @@ def compute_score(
     semantic_evidences: dict,
     intent_tokens: Sequence[str],
     weights: Optional[RankerWeights] = None,
+    coverage_override: Optional[float] = None,
 ) -> ScoreBreakdown:
     """Compute Ranker V1 score for a candidate plan.
 
@@ -181,19 +183,27 @@ def compute_score(
         )
 
     evidence = _compute_evidence(plan, semantic_evidences)
-    coverage = _compute_coverage(plan, intent_tokens)
+    coverage = coverage_override if coverage_override is not None else _compute_coverage(plan, intent_tokens)
     stability = _compute_stability(execution_result)
     assumptions = _compute_assumptions(plan)
     agreement = plan.supporting_count / plan.providers_responded if plan.providers_responded > 0 else 0.0
+
+    w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
+    agreement_contribution = w5 * agreement * coverage
 
     total = (
         weights.w1_evidence * evidence
         + weights.w2_coverage * coverage
         + weights.w3_stability * stability
+        + agreement_contribution
         - weights.w4_assumptions * assumptions
-        + getattr(weights, 'w5_agreement', 0.0) * agreement
     )
     total = max(0.0, min(1.0, total))  # clamp to [0, 1]
+
+    # Gate agreement by coverage: if coverage falls below LOW_COVERAGE_CONFIDENCE_CAP,
+    # cap candidate's final score to force ties/clarification rather than an automatic win
+    if coverage < LOW_COVERAGE_CONFIDENCE_CAP:
+        total = min(total, LOW_COVERAGE_CONFIDENCE_CAP)
 
     return ScoreBreakdown(
         evidence=evidence,
@@ -224,7 +234,7 @@ def rank_candidates(
     Returns:
         Tuple of:
             - List of (plan, result, score_breakdown, rank) sorted descending by total score.
-            - is_tie: True when top-2 candidates differ by < RANK_TIE_EPSILON.
+            - is_tie: True when top-2 candidates differ by < RANK_TIE_EPSILON or top candidate has low coverage.
     """
     if not candidates:
         return [], False
@@ -242,8 +252,13 @@ def rank_candidates(
     if len(ranked) >= 2:
         top_score = ranked[0][2].total
         second_score = ranked[1][2].total
-        if abs(top_score - second_score) < RANK_TIE_EPSILON:
+        if (
+            abs(top_score - second_score) < RANK_TIE_EPSILON
+            or ranked[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP
+        ):
             is_tie = True
+    elif len(ranked) == 1 and ranked[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP:
+        is_tie = True
 
     return ranked, is_tie
 

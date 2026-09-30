@@ -18,7 +18,11 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from uuid import uuid4
 
-from orchestrator.config import MAX_CASCADE_DEPTH, RANK_TIE_EPSILON
+from orchestrator.config import (
+    LOW_COVERAGE_CONFIDENCE_CAP,
+    MAX_CASCADE_DEPTH,
+    RANK_TIE_EPSILON,
+)
 from orchestrator.schemas import (
     AlternateInterpretation,
     CandidatePlan,
@@ -85,13 +89,18 @@ def select_winner(
     failed_pass2: List[Pass2Result] = []
     remaining = list(ranked)  # mutable copy, rank-1 first
 
-    # Determine tie at the top
+    # Determine tie at the top or low-coverage clarification
     is_tie = False
     if len(remaining) >= 2:
         top_score = remaining[0][2].total
         second_score = remaining[1][2].total
-        if abs(top_score - second_score) < RANK_TIE_EPSILON:
+        if (
+            abs(top_score - second_score) < RANK_TIE_EPSILON
+            or remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP
+        ):
             is_tie = True
+    elif len(remaining) == 1 and remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP:
+        is_tie = True
 
     winning_ranked: Optional[Tuple[CandidatePlan, ExecutionResult, ScoreBreakdown, int]] = None
     winning_pass2: Optional[Pass2Result] = None

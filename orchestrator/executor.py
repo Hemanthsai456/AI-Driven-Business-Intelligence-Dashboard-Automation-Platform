@@ -1,219 +1,23 @@
-"""DuckDB sandboxed executor with isolated in-memory worker instances.
+"""Compatibility wrapper for engine execution.
 
-Architecture references:
-- orchestrator_conformance.md §1 & §4.2 (DuckDB Worker Isolation, Binding Resolution C2)
-- ranker_v1_spec.md §Pass 1b
+Deprecated: Import directly from `engine.executor` or `engine.duckdb_executor`.
+This module contains NO DuckDB connection management and NO execution implementation logic.
 """
 
-from __future__ import annotations
-
-import threading
-import time
-from typing import Any, Dict, List, Optional
-import duckdb
-import pandas as pd
-
-from ingestion.models import CanonicalDataset
-from intelligence.semantic_analyzer import ColumnRole, DatasetSemanticProfile
-from orchestrator.compiler import compile_plan_to_sql, quote_identifier
-from orchestrator.config import (
-    DUCKDB_MEMORY_LIMIT,
-    DUCKDB_THREAD_LIMIT,
-    DUCKDB_TIMEOUT_SECONDS,
-    RESULT_ROW_CAP,
-)
-from orchestrator.schemas import (
-    CandidatePlan,
-    ExecutionResult,
-    ExecutionStatus,
+from engine import (
+    AnalyticsEngine,
+    DuckDBEngine,
+    DuckDBExecutor,
+    default_executor,
+    execute_plan,
+    get_default_engine,
 )
 
-
-class DuckDBExecutor:
-    """Executes compiled analytical plans in sandboxed, in-memory DuckDB sessions."""
-
-    def __init__(
-        self,
-        thread_limit: int = DUCKDB_THREAD_LIMIT,
-        memory_limit: str = DUCKDB_MEMORY_LIMIT,
-        timeout_seconds: float = DUCKDB_TIMEOUT_SECONDS,
-    ):
-        self.thread_limit = thread_limit
-        self.memory_limit = memory_limit
-        self.timeout_seconds = timeout_seconds
-
-    def execute_plan(
-        self,
-        plan: CandidatePlan,
-        dataset: CanonicalDataset,
-        semantic_profile: DatasetSemanticProfile,
-        custom_sql: Optional[str] = None,
-    ) -> ExecutionResult:
-        """Execute a plan against a dataset within an isolated DuckDB instance.
-
-        Guarantees:
-        1. Read-only: Never mutates CanonicalDataset.data.
-        2. C2 Binding Resolution: DATETIME string columns are TRY_CAST in the DuckDB view.
-           Failed cast counts and rates are computed and returned in ExecutionResult.
-        3. Sandboxing: Isolated in-memory instance, threads=1, memory_limit=256MB, timeout=30s.
-        """
-        start_time = time.perf_counter()
-        df = dataset.data
-        plan_id = plan.plan_id
-        warnings: List[str] = []
-        total_failed_casts = 0
-
-        # Create isolated in-memory connection
-        con = duckdb.connect(":memory:")
-        timeout_timer: Optional[threading.Timer] = None
-
-        try:
-            # Set resource limits
-            con.execute(f"SET threads TO {int(self.thread_limit)};")
-            con.execute(f"SET max_memory = '{self.memory_limit}';")
-
-            # Register source dataframe (zero-copy read-only reference)
-            con.register("raw_dataframe", df)
-
-            # C2 Implementation: Build TRY_CAST expressions for DATETIME columns in the view
-            view_expressions: List[str] = []
-            for col in df.columns:
-                ev = semantic_profile.get_evidence(col)
-                col_quoted = quote_identifier(col)
-
-                # Check if classified as DATETIME and stored as string/object in pandas
-                is_datetime_role = ev is not None and ev.candidate_role == ColumnRole.DATETIME
-                is_string_dtype = not pd.api.types.is_datetime64_any_dtype(df[col])
-
-                if is_datetime_role and is_string_dtype:
-                    # TRY_CAST in view
-                    view_expressions.append(f"TRY_CAST({col_quoted} AS TIMESTAMP) AS {col_quoted}")
-
-                    # Measure failed cast count on non-empty values
-                    cast_check_query = (
-                        f"SELECT COUNT(*) FROM raw_dataframe "
-                        f"WHERE {col_quoted} IS NOT NULL "
-                        f"  AND TRIM(CAST({col_quoted} AS VARCHAR)) != '' "
-                        f"  AND TRY_CAST({col_quoted} AS TIMESTAMP) IS NULL;"
-                    )
-                    try:
-                        failed_count = con.execute(cast_check_query).fetchone()[0]
-                    except Exception:
-                        failed_count = 0
-
-                    if failed_count > 0:
-                        total_failed_casts += failed_count
-                        rate = failed_count / max(len(df), 1)
-                        warnings.append(
-                            f"Column '{col}' had {failed_count} failed datetime casts ({rate:.1%}) via TRY_CAST."
-                        )
-                else:
-                    view_expressions.append(f"{col_quoted} AS {col_quoted}")
-
-            # Create clean DuckDB view
-            create_view_sql = f"CREATE VIEW source_data AS SELECT {', '.join(view_expressions)} FROM raw_dataframe;"
-            con.execute(create_view_sql)
-
-            # Compile or use provided SQL
-            compiled_sql = custom_sql or compile_plan_to_sql(plan, source_view="source_data")
-
-            # Setup timeout interrupt timer
-            timed_out = threading.Event()
-
-            def interrupt_worker():
-                timed_out.set()
-                try:
-                    con.interrupt()
-                except Exception:
-                    pass
-
-            timeout_timer = threading.Timer(self.timeout_seconds, interrupt_worker)
-            timeout_timer.start()
-
-            # Execute query
-            cursor = con.execute(compiled_sql)
-            res_df = cursor.fetchdf()
-
-            # Query succeeded; cancel timer
-            if timeout_timer:
-                timeout_timer.cancel()
-
-            elapsed = time.perf_counter() - start_time
-            total_rows = len(df)
-            failed_cast_rate = total_failed_casts / max(total_rows, 1)
-
-            # Sanitize output rows for JSON serialization
-            # Replace NaN/NaT/inf with None
-            clean_res_df = res_df.where(pd.notnull(res_df), None)
-            for col_name in clean_res_df.columns:
-                if pd.api.types.is_datetime64_any_dtype(clean_res_df[col_name]):
-                    clean_res_df[col_name] = clean_res_df[col_name].astype(str)
-
-            rows: List[Dict[str, Any]] = clean_res_df.to_dict(orient="records")
-            columns: List[str] = list(res_df.columns)
-
-            return ExecutionResult(
-                plan_id=plan_id,
-                status=ExecutionStatus.SUCCESS,
-                rows=rows,
-                columns=columns,
-                row_count=len(rows),
-                compiled_sql=compiled_sql,
-                failed_cast_count=total_failed_casts,
-                failed_cast_rate=failed_cast_rate,
-                warnings=warnings,
-                runtime_seconds=round(elapsed, 4),
-            )
-
-        except duckdb.InterruptException:
-            elapsed = time.perf_counter() - start_time
-            return ExecutionResult(
-                plan_id=plan_id,
-                status=ExecutionStatus.TIMEOUT,
-                error_message=f"Query execution timed out after {self.timeout_seconds} seconds.",
-                runtime_seconds=round(elapsed, 4),
-            )
-        except duckdb.OutOfMemoryException as e:
-            elapsed = time.perf_counter() - start_time
-            return ExecutionResult(
-                plan_id=plan_id,
-                status=ExecutionStatus.MEMORY_EXCEEDED,
-                error_message=f"DuckDB memory limit exceeded: {str(e)}",
-                runtime_seconds=round(elapsed, 4),
-            )
-        except (duckdb.ParserException, duckdb.BinderException) as e:
-            elapsed = time.perf_counter() - start_time
-            return ExecutionResult(
-                plan_id=plan_id,
-                status=ExecutionStatus.SYNTAX_ERROR,
-                error_message=f"SQL compilation or binder error: {str(e)}",
-                runtime_seconds=round(elapsed, 4),
-            )
-        except Exception as e:
-            elapsed = time.perf_counter() - start_time
-            return ExecutionResult(
-                plan_id=plan_id,
-                status=ExecutionStatus.RUNTIME_ERROR,
-                error_message=f"Execution runtime error: {str(e)}",
-                runtime_seconds=round(elapsed, 4),
-            )
-        finally:
-            if timeout_timer:
-                timeout_timer.cancel()
-            try:
-                con.close()
-            except Exception:
-                pass
-
-
-# Singleton default executor
-default_executor = DuckDBExecutor()
-
-
-def execute_plan(
-    plan: CandidatePlan,
-    dataset: CanonicalDataset,
-    semantic_profile: DatasetSemanticProfile,
-) -> ExecutionResult:
-    """Convenience helper using the default sandboxed DuckDBExecutor."""
-    return default_executor.execute_plan(plan, dataset, semantic_profile)
+__all__ = [
+    "AnalyticsEngine",
+    "DuckDBEngine",
+    "DuckDBExecutor",
+    "default_executor",
+    "execute_plan",
+    "get_default_engine",
+]

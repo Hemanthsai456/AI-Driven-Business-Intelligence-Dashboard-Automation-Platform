@@ -40,14 +40,25 @@ RANK_TIE_EPSILON: float = 0.05
 # ---------------------------------------------------------------------------
 # Ranker V1 — Score Weights  (Project Decisions / Configurable Hypotheses)
 # ---------------------------------------------------------------------------
-# score = w1*evidence + w2*coverage + w3*stability - w4*assumptions
+# score = w1*evidence + w2*coverage + w3*stability + agreement_contribution - w4*assumptions
+# where agreement_contribution = w5 * agreement * coverage
 # These weights are hypotheses; they are configurable and logged with every ranking.
 
 RANK_W1_EVIDENCE: float = 0.35    # mean role confidence of columns used
 RANK_W2_COVERAGE: float = 0.30    # fraction of request terms mapped to plan fields
 RANK_W3_STABILITY: float = 0.20   # result agreement under small perturbations
 RANK_W4_ASSUMPTIONS: float = 0.15 # count of defaults filled without request support
-RANK_W5_AGREEMENT: float = 0.10   # supporting_count / providers_responded
+RANK_W5_AGREEMENT: float = 0.10   # multi-provider agreement weight
+
+# ---------------------------------------------------------------------------
+# Ranker V1 — Low Coverage Confidence Cap (PROVISIONAL)
+# ---------------------------------------------------------------------------
+# Minimum coverage required before a candidate can achieve an un-capped score.
+# If a candidate's coverage falls below this threshold, its final score is capped
+# below a threshold that forces ties/clarification rather than an outright automatic win,
+# even when multi-provider agreement is 1.0.
+# PROVISIONAL: Set to 0.40 until derived from eval data.
+LOW_COVERAGE_CONFIDENCE_CAP: float = 0.40
 
 # ---------------------------------------------------------------------------
 # DuckDB Worker Resource Limits  (Project Decisions)
@@ -93,24 +104,28 @@ AGENT_MAX_TOKENS: int = 4096
 AGENT_TIMEOUT_S: float = 30.0
 
 # ---------------------------------------------------------------------------
-# Gemini LLM Client Configuration
+# LLM Provider Configuration (Re-exported from providers.config)
 # ---------------------------------------------------------------------------
 
-GEMINI_API_KEY_ENV: str = "GEMINI_API_KEY"
-GEMINI_MODEL_ENV: str = "GEMINI_MODEL"
-DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+from providers.config import (
+    ACTIVE_PROVIDERS_ENV,
+    DEFAULT_ACTIVE_PROVIDERS,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_GROQ_MODEL,
+    DEFAULT_OLLAMA_BASE_URL,
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_PROVIDER,
+    GEMINI_API_KEY_ENV,
+    GEMINI_MODEL_ENV,
+    GROQ_API_KEY_ENV,
+    GROQ_MODEL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    OLLAMA_MODEL_ENV,
+    PROVIDER_ENV,
+)
 
-GROQ_API_KEY_ENV: str = "GROQ_API_KEY"
-GROQ_MODEL_ENV: str = "GROQ_MODEL"
-DEFAULT_GROQ_MODEL: str = "llama3-70b-8192"
-
-OLLAMA_HOST_ENV: str = "OLLAMA_HOST"
-OLLAMA_MODEL_ENV: str = "OLLAMA_MODEL"
-DEFAULT_OLLAMA_MODEL: str = "llama3"
-DEFAULT_OLLAMA_HOST: str = "http://localhost:11434"
-
-PROVIDER_ENV: str = "PROVIDER"
-DEFAULT_PROVIDER: str = "gemini"
+OLLAMA_HOST_ENV: str = OLLAMA_BASE_URL_ENV
+DEFAULT_OLLAMA_HOST: str = DEFAULT_OLLAMA_BASE_URL
 
 EVAL_MODE_ENV: str = "EVAL_MODE"
 RUN_LIVE_TESTS_ENV: str = "RUN_LIVE_TESTS"
