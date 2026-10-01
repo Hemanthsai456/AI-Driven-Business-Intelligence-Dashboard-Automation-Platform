@@ -82,6 +82,12 @@ class AmbiguityType(str, Enum):
     UNKNOWN_KPI = "UNKNOWN_KPI"
     UNKNOWN_ROLE = "UNKNOWN_ROLE"
 
+    # Stage 3 typed ambiguity categories
+    LEXICAL = "lexical"
+    GRANULARITY = "granularity"
+    AGGREGATION = "aggregation"
+    SCOPE = "scope"
+
 
 class ValidationStatus(str, Enum):
     """Per-candidate validation outcome."""
@@ -263,6 +269,10 @@ class AmbiguityDetail(BaseModel):
     is_blocking: bool = Field(
         default=False,
         description="Whether this ambiguity blocks candidate generation (request-level) or can be resolved/branched (item-level).",
+    )
+    category: Optional[str] = Field(
+        default=None,
+        description="One of: lexical, granularity, aggregation, scope.",
     )
 
     model_config = {"frozen": True}

@@ -26,9 +26,10 @@ from providers.config import (
 )
 from providers.adapters.gemini import GeminiClient
 from providers.adapters.groq import GroqClient
+from providers.adapters.local import RuleBasedBaselineClient, ZeroCostLocalClient
 from providers.adapters.mock import MockLLMClient
 from providers.adapters.ollama import OllamaClient
-from providers.base import LLMClient, LLMClientError
+from providers.base import LLMClient, LLMClientError, ProviderInitializationError
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,12 @@ class LLMProviderFactory:
     _registry: Dict[str, Type[LLMClient]] = {
         "gemini": GeminiClient,
         "groq": GroqClient,
+        "groq_secondary": GroqClient,
         "ollama": OllamaClient,
         "mock": MockLLMClient,
+        "local": RuleBasedBaselineClient,
+        "zero_cost_local": RuleBasedBaselineClient,
+        "rule_based_baseline": RuleBasedBaselineClient,
     }
 
     @classmethod
@@ -63,7 +68,7 @@ class LLMProviderFactory:
         """Instantiate an LLMClient for the requested or configured provider.
 
         Args:
-            provider: Provider name ('gemini', 'groq', 'ollama', 'mock').
+            provider: Provider name ('gemini', 'groq', 'groq_secondary', 'ollama', 'mock', 'rule_based_baseline').
                       If None, reads from os.getenv('PROVIDER').
             model_name: Optional model override.
             **kwargs: Extra arguments passed to client constructor.
@@ -89,17 +94,21 @@ class LLMProviderFactory:
             elif p_name == "groq":
                 model = model_name or os.getenv(GROQ_MODEL_ENV, DEFAULT_GROQ_MODEL)
                 return client_cls(model_name=model, **kwargs)
+            elif p_name == "groq_secondary":
+                return client_cls(model_name=model_name or "openai/gpt-oss-20b", **kwargs)
             elif p_name == "ollama":
                 model = model_name or os.getenv(OLLAMA_MODEL_ENV, DEFAULT_OLLAMA_MODEL)
                 return client_cls(model_name=model, **kwargs)
+            elif p_name in ("local", "zero_cost_local", "rule_based_baseline"):
+                return client_cls(model_name=model_name or "rule_based_baseline", **kwargs)
             elif p_name == "mock":
                 return client_cls(model_name=model_name or "mock-model", **kwargs)
             else:
-                return client_cls(model_name=model_name, **kwargs)
+                return client_cls(model_name=model_name or "default", **kwargs)
         except Exception as e:
-            if isinstance(e, LLMClientError):
+            if isinstance(e, ProviderInitializationError):
                 raise
-            raise LLMClientError(f"Failed to instantiate {p_name} client: {str(e)}") from e
+            raise ProviderInitializationError(p_name, str(e)) from e
 
     create_from_env = create_client
 
@@ -111,20 +120,27 @@ class LLMProviderFactory:
         """Instantiate available clients for configured active multi-providers.
 
         Parses ACTIVE_PROVIDERS comma-separated string.
-        Gracefully handles unavailable optional providers without failing the pool.
+        Gracefully handles unavailable optional providers in test environments,
+        but raises typed ProviderInitializationError outside tests.
         """
         raw_str = active_providers_str or os.getenv(ACTIVE_PROVIDERS_ENV, DEFAULT_ACTIVE_PROVIDERS)
         provider_names = [p.strip().lower() for p in raw_str.split(",") if p.strip()]
 
         clients: List[LLMClient] = []
+        is_testing = bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"))
         for name in provider_names:
             try:
                 client = cls.create_client(provider=name)
                 clients.append(client)
             except Exception as e:
-                logger.warning(
-                    f"Optional provider '{name}' failed initialization and will be skipped: {e}"
-                )
+                if is_testing:
+                    logger.warning(
+                        f"Optional provider '{name}' failed initialization and will be skipped in test: {e}"
+                    )
+                else:
+                    if isinstance(e, ProviderInitializationError):
+                        raise
+                    raise ProviderInitializationError(name, str(e)) from e
 
         return clients
 

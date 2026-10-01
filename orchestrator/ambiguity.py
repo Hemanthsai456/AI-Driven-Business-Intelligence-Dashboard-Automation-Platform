@@ -48,29 +48,16 @@ def assess_ambiguity(
             is_blocking=True,
         )
 
-    # General Rule: Unresolvable Request / Missing Target Schema
-    # If requested_metrics AND requested_dimensions are both empty AND unresolved_terms is non-empty,
-    # the request cannot be answered from the dataset schema -> blocking ambiguity / UNANSWERABLE.
     from orchestrator.intent import interpret_user_request
     structured = intent if isinstance(intent, StructuredIntent) else interpret_user_request(raw_intent, semantic_profile)
 
-    if not structured.requested_metrics and not structured.requested_dimensions and structured.unresolved_terms:
-        return AmbiguityResult(
-            status=AmbiguityStatus.UNANSWERABLE,
-            ambiguities=[
-                AmbiguityDetail(
-                    type=AmbiguityType.MULTIPLE_MEASURES,
-                    field="intent_terms",
-                    alternatives=list(structured.unresolved_terms),
-                    is_blocking=True,
-                )
-            ],
-            message=f"Request contains unmapped terms {structured.unresolved_terms} with no identifiable metrics or dimensions in dataset schema.",
-            is_blocking=True,
-        )
-
     tokens = _tokenize(raw_intent)
     ambiguities: List[AmbiguityDetail] = []
+    is_unanswerable = (
+        not structured.requested_metrics
+        and not structured.requested_dimensions
+        and bool(structured.unresolved_terms)
+    )
 
     # Partition columns by role
     measures: List[str] = []
@@ -82,10 +69,10 @@ def assess_ambiguity(
             measures.append(col)
         elif ev.candidate_role == ColumnRole.DATETIME:
             dates.append(col)
-        elif ev.candidate_role == ColumnRole.DIMENSION:
+        elif ev.candidate_role in (ColumnRole.DIMENSION, ColumnRole.IDENTIFIER):
             dimensions.append(col)
 
-    # Check 1: Temporal trend requested with multiple date columns (Item-level ambiguity)
+    # Check 1: Temporal trend requested with multiple date columns (Granularity/Date ambiguity)
     temporal_keywords = {"trend", "monthly", "daily", "yearly", "over", "time", "timeline", "history", "recent"}
     if tokens & temporal_keywords and len(dates) > 1:
         named_dates = [d for d in dates if d.lower() in raw_intent.lower()]
@@ -96,31 +83,109 @@ def assess_ambiguity(
                     field="date_dimension",
                     alternatives=dates,
                     is_blocking=False,  # Item-level: can generate parallel interpretations
+                    category="granularity",
                 )
             )
 
-    # Check 2: Measure ambiguity when user gives generic request (Request-level blocking ambiguity)
+    # Check 2: Measure ambiguity when user gives generic request (Lexical ambiguity)
     generic_measure_keywords = {"metric", "performance", "kpi", "numbers", "stats", "data", "summary"}
     if (tokens & generic_measure_keywords) and len(measures) > 1:
         named_measures = [m for m in measures if m.lower() in raw_intent.lower()]
         if not named_measures:
             ambiguities.append(
                 AmbiguityDetail(
-                    type=AmbiguityType.MULTIPLE_MEASURES,
+                    type=AmbiguityType.LEXICAL,
                     field="metric_column",
                     alternatives=measures,
                     is_blocking=True,  # Request-level blocking: user must clarify what to measure
+                    category="lexical",
                 )
             )
 
+    # Check 3: Scope Ambiguity (vague ranking or filtering scope: top, best, recent, outliers)
+    scope_keywords = {"top", "best", "worst", "highest", "lowest", "outliers", "anomalies", "recent"}
+    if tokens & scope_keywords:
+        if "recent" in tokens and len(dates) == 0:
+            ambiguities.append(
+                AmbiguityDetail(
+                    type=AmbiguityType.SCOPE,
+                    field="temporal_scope",
+                    alternatives=[f"No datetime columns found in dataset; candidate dimensions: {dimensions}"],
+                    is_blocking=True,
+                    category="scope",
+                )
+            )
+        elif (tokens & {"top", "best", "worst", "highest", "lowest"}) and not any(re.search(r"\b\d+\b", raw_intent) for _ in [0]):
+            ambiguities.append(
+                AmbiguityDetail(
+                    type=AmbiguityType.SCOPE,
+                    field="ranking_scope",
+                    alternatives=measures if measures else dimensions,
+                    is_blocking=True,
+                    category="scope",
+                )
+            )
+
+    # Check 4: Granularity Ambiguity (trend or time-series requested without explicit frequency)
+    if (tokens & {"trend", "timeline", "history"}) or ("over" in tokens and "time" in tokens):
+        if structured.grouping_granularity is None and (dates or structured.temporal_scope):
+            ambiguities.append(
+                AmbiguityDetail(
+                    type=AmbiguityType.GRANULARITY,
+                    field="temporal_granularity",
+                    alternatives=["month", "quarter", "year", "day"],
+                    is_blocking=False,
+                    category="granularity",
+                )
+            )
+
+    # Check 5: Aggregation Ambiguity (metric specified without aggregation operator)
+    agg_keywords = {"total", "sum", "average", "avg", "mean", "count", "min", "max", "percentage", "rate"}
+    if structured.requested_metrics and not (tokens & agg_keywords):
+        ambiguities.append(
+            AmbiguityDetail(
+                type=AmbiguityType.AGGREGATION,
+                field=structured.requested_metrics[0],
+                alternatives=["sum", "avg", "count", "max", "min"],
+                is_blocking=False,
+                category="aggregation",
+            )
+        )
+
+    # Check 6: Lexical Ambiguity for unmapped concepts/terms
+    if structured.unresolved_terms and not (tokens & generic_measure_keywords):
+        candidate_cols = dimensions + measures
+        for term in structured.unresolved_terms:
+            ambiguities.append(
+                AmbiguityDetail(
+                    type=AmbiguityType.LEXICAL,
+                    field=term,
+                    alternatives=[c for c in candidate_cols if term in c.lower()] or candidate_cols[:3],
+                    is_blocking=True,
+                    category="lexical",
+                )
+            )
+
+    if is_unanswerable and not ambiguities:
+        candidate_cols = list(semantic_profile.column_evidences.keys())
+        ambiguities.append(
+            AmbiguityDetail(
+                type=AmbiguityType.LEXICAL,
+                field="intent_terms",
+                alternatives=candidate_cols,
+                is_blocking=True,
+                category="lexical",
+            )
+        )
+
     if ambiguities:
         messages = [
-            f"Ambiguity detected in {a.field} ({a.type.value}): choose from {a.alternatives}"
+            f"Ambiguity detected in {a.field} [{a.category or a.type.value}]: candidate columns/options {a.alternatives}"
             for a in ambiguities
         ]
-        has_blocking = any(a.is_blocking for a in ambiguities)
+        has_blocking = True if is_unanswerable else any(a.is_blocking for a in ambiguities)
         return AmbiguityResult(
-            status=AmbiguityStatus.AMBIGUOUS,
+            status=AmbiguityStatus.UNANSWERABLE if is_unanswerable else AmbiguityStatus.AMBIGUOUS,
             ambiguities=ambiguities,
             message="; ".join(messages),
             is_blocking=has_blocking,

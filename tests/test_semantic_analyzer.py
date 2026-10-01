@@ -524,3 +524,101 @@ def test_real_data_calendar_month_day_quarter_temporal_dimensions():
         assert ev is not None
         assert ev.candidate_role == ColumnRole.DIMENSION, f"{col} was {ev.candidate_role}, expected DIMENSION"
 
+
+def test_stage1_real_data_files_all_classified():
+    """Verify all columns across 5 real data files have sensible roles with zero unclassified."""
+    loader = CSVLoader()
+    analyzer = SemanticAnalyzer()
+    real_data_dir = Path(__file__).parent / "real_data"
+    expected_roles = {
+        "Calendar.csv": {
+            "Date": ColumnRole.DATETIME,
+            "Year": ColumnRole.DATETIME,
+            "Month": ColumnRole.DIMENSION,
+            "MonthName": ColumnRole.DIMENSION,
+            "Quarter": ColumnRole.DIMENSION,
+            "Day": ColumnRole.DIMENSION,
+            "Weekday": ColumnRole.DIMENSION,
+        },
+        "Customers.csv": {
+            "CustomerID": ColumnRole.IDENTIFIER,
+            "CustomerName": ColumnRole.DIMENSION,
+            "Region": ColumnRole.DIMENSION,
+            "Segment": ColumnRole.DIMENSION,
+        },
+        "Products.csv": {
+            "ProductID": ColumnRole.IDENTIFIER,
+            "ProductName": ColumnRole.DIMENSION,
+            "Category": ColumnRole.DIMENSION,
+            "UnitPrice": ColumnRole.MEASURE,
+        },
+        "Sales_2024.csv": {
+            "SaleID": ColumnRole.IDENTIFIER,
+            "Date": ColumnRole.DATETIME,
+            "CustomerID": ColumnRole.IDENTIFIER,
+            "ProductID": ColumnRole.IDENTIFIER,
+            "StoreID": ColumnRole.IDENTIFIER,
+            "Quantity": ColumnRole.MEASURE,
+            "UnitPrice": ColumnRole.MEASURE,
+            "TotalSales": ColumnRole.MEASURE,
+        },
+        "Stores.csv": {
+            "StoreID": ColumnRole.IDENTIFIER,
+            "StoreName": ColumnRole.DIMENSION,
+            "City": ColumnRole.DIMENSION,
+            "Region": ColumnRole.DIMENSION,
+        },
+    }
+    for filename, col_roles in expected_roles.items():
+        canonical = loader.load(str(real_data_dir / filename))
+        sem = analyzer.analyze(canonical)
+        for col, expected_role in col_roles.items():
+            ev = sem.get_evidence(col)
+            assert ev is not None, f"Missing evidence for {col} in {filename}"
+            assert ev.candidate_role == expected_role, (
+                f"File {filename}, column {col}: expected {expected_role}, got {ev.candidate_role}"
+            )
+            assert ev.candidate_role != ColumnRole.UNKNOWN
+
+
+def test_stage1_obfuscated_header_files_all_classified():
+    """Verify all columns across 3 obfuscated header files have sensible roles with zero unclassified."""
+    loader = CSVLoader()
+    analyzer = SemanticAnalyzer()
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    expected_roles = {
+        "obfuscated_financial_metrics.csv": {
+            "c1": ColumnRole.IDENTIFIER,
+            "c2": ColumnRole.MEASURE,
+            "c3": ColumnRole.MEASURE,
+            "c4": ColumnRole.DIMENSION,
+            "c5": ColumnRole.MEASURE,
+        },
+        "obfuscated_time_series_logs.csv": {
+            "x0": ColumnRole.IDENTIFIER,
+            "x1": ColumnRole.DATETIME,
+            "x2": ColumnRole.DATETIME,
+            "x3": ColumnRole.DIMENSION,
+            "x4": ColumnRole.MEASURE,
+        },
+        "obfuscated_customer_survey.csv": {
+            "f_a": ColumnRole.IDENTIFIER,
+            "f_b": ColumnRole.DIMENSION,
+            "f_c": ColumnRole.DATETIME,
+            "f_d": ColumnRole.DIMENSION,
+            "f_e": ColumnRole.MEASURE,
+            "f_f": ColumnRole.MEASURE,
+        },
+    }
+    for filename, col_roles in expected_roles.items():
+        canonical = loader.load(str(fixtures_dir / filename))
+        sem = analyzer.analyze(canonical)
+        for col, expected_role in col_roles.items():
+            ev = sem.get_evidence(col)
+            assert ev is not None, f"Missing evidence for {col} in {filename}"
+            assert ev.candidate_role == expected_role, (
+                f"File {filename}, column {col}: expected {expected_role}, got {ev.candidate_role}"
+            )
+            assert ev.candidate_role != ColumnRole.UNKNOWN
+
+

@@ -3,83 +3,53 @@
 @tailwind utilities;
 
 :root {
-  /* LIGHT THEME (Primary expression: Warm Beige #EBDBC5, Clean White #FFFFFF, Charcoal #212121, Burnt Orange #EA6928, Amber #F2B22E) */
-  --background: #EBDBC5;
-  --foreground: #212121;
-  
+  /* Stage 4b Item 10 Design Tokens */
+  --background: #F7F8FA;
   --surface: #FFFFFF;
   --surface-elevated: #FFFFFF;
-  --surface-muted: #E6D4B8;
-  
-  --border: #DAC7AD;
-  --border-strong: #BAA58A;
-  
-  --primary: #EA6928;
-  --primary-hover: #D3581B;
+  --surface-muted: #F0F2F5;
+
+  --border: #E3E7EC;
+  --border-strong: #CBD2D9;
+
+  --foreground: #1F2A37;
+  --text: #1F2A37;
+  --text-muted: #6B7785;
+  --muted-foreground: #6B7785;
+
+  /* Primary (Muted Teal) */
+  --primary: #2F7F7A;
+  --primary-hover: #276A66;
+  --primary-soft: #E6F1F0;
   --primary-foreground: #FFFFFF;
-  
-  --secondary: #FFFFFF;
-  --secondary-foreground: #212121;
-  
-  --muted: #E6D4B8;
-  --muted-foreground: #6B6055;
-  
-  --accent: #EA6928;
-  --accent-foreground: #FFFFFF;
-  
-  --warning: #F2B22E;
-  --warning-foreground: #212121;
-  --success: #2E7D32;
-  --success-foreground: #FFFFFF;
-  --danger: #C62828;
+
+  /* Attention (Amber) */
+  --attention: #C98A2B;
+  --attention-soft: #FBF3E4;
+  --attention-foreground: #1F2A37;
+  --warning: #C98A2B;
+  --warning-foreground: #1F2A37;
+
+  /* Error & Success (Muted) */
+  --error: #B4534B;
+  --error-soft: #FDF2F2;
+  --error-foreground: #FFFFFF;
+  --danger: #B4534B;
   --danger-foreground: #FFFFFF;
-  --info: #EA6928;
-  --info-foreground: #FFFFFF;
 
-  --sidebar-bg: #212121;
-  --sidebar-text: #FFFFFF;
-  --sidebar-muted: #A89D91;
-  --sidebar-border: #333333;
-}
-
-.dark {
-  /* DARK THEME (Grounded in deep charcoal #212121, dark neutral surfaces, warm white text, subdued #EA6928 / #F2B22E) */
-  --background: #181818;
-  --foreground: #F5EBE1;
-  
-  --surface: #212121;
-  --surface-elevated: #2A2A2A;
-  --surface-muted: #2E2B27;
-  
-  --border: #3A3530;
-  --border-strong: #4F4842;
-  
-  --primary: #EA6928;
-  --primary-hover: #F07A3D;
-  --primary-foreground: #FFFFFF;
-  
-  --secondary: #2A2A2A;
-  --secondary-foreground: #F5EBE1;
-  
-  --muted: #2A2A2A;
-  --muted-foreground: #A89D91;
-  
-  --accent: #EA6928;
-  --accent-foreground: #FFFFFF;
-  
-  --warning: #F2B22E;
-  --warning-foreground: #212121;
-  --success: #388E3C;
+  --success: #4C8B6B;
+  --success-soft: #F0FDF4;
   --success-foreground: #FFFFFF;
-  --danger: #E53935;
-  --danger-foreground: #FFFFFF;
-  --info: #EA6928;
-  --info-foreground: #FFFFFF;
 
-  --sidebar-bg: #151515;
-  --sidebar-text: #F5EBE1;
-  --sidebar-muted: #8E8377;
-  --sidebar-border: #282828;
+  /* Chart Palette Tokens */
+  --chart-1: #2F7F7A;
+  --chart-2: #5B7C99;
+  --chart-3: #C9A66B;
+  --chart-4: #B56576;
+  --chart-5: #9AA5B1;
+
+  /* Geometry & Layout */
+  --radius-card: 10px;
 }
 
 body {
@@ -105,11 +75,4 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
-}
-
-/* Subtle transitions */
-body, aside, header, main, div, button, input, select, textarea {
-  transition-property: background-color, border-color, color;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }

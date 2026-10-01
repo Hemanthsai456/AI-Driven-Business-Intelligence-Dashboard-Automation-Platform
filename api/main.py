@@ -147,24 +147,30 @@ async def upload_dataset(file: UploadFile = File(...)):
 
     try:
         # 1. Ingestion Loader (dispatched through load_dataset)
-        canonical_ds = load_dataset(tmp_path)
-        canonical_ds.metadata.name = filename  # Preserve original filename
+        raw_ds = load_dataset(tmp_path)
+        raw_ds.metadata.name = filename  # Preserve original filename
 
-        # 2. Data Profiler
-        profile = profile_dataset(canonical_ds)
+        # 2. Data Cleaning: Ingestion -> Clean -> Profile -> Semantic -> Readiness
+        from cleaning.cleaner import clean_dataset
+        cleaned_ds, cleaning_report = clean_dataset(raw_ds)
+        cleaned_ds.metadata.name = filename
 
-        # 3. Semantic Intelligence Analyzer
-        semantic_profile = analyze_semantics(canonical_ds, profile=profile)
+        # 3. Data Profiler on cleaned data
+        profile = profile_dataset(cleaned_ds)
 
-        # 4. Schema & Analysis Readiness Validator
-        readiness = assess_readiness(canonical_ds, profile=profile, semantic_profile=semantic_profile)
+        # 4. Semantic Intelligence Analyzer
+        semantic_profile = analyze_semantics(cleaned_ds, profile=profile)
 
-        # 5. Save in Session Store
+        # 5. Schema & Analysis Readiness Validator
+        readiness = assess_readiness(cleaned_ds, profile=profile, semantic_profile=semantic_profile)
+
+        # 6. Save in Session Store
         record = DatasetSessionRecord(
-            dataset=canonical_ds,
+            dataset=cleaned_ds,
             profile=profile,
             semantic_profile=semantic_profile,
             readiness=readiness,
+            cleaning_report=cleaning_report,
         )
         session_store.save(record)
 
@@ -580,6 +586,50 @@ def select_winner_endpoint(req: SelectWinnerRequest):
     )
 
 
+@app.get("/api/datasets/{dataset_id}/cleaning")
+def get_dataset_cleaning_report(dataset_id: str):
+    """Retrieve data cleaning report for a dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    if record.cleaning_report:
+        return record.cleaning_report.model_dump() if hasattr(record.cleaning_report, "model_dump") else record.cleaning_report
+    return {"dataset_id": dataset_id, "changes": []}
+
+
+@app.get("/api/providers/status")
+def get_providers_status():
+    """Retrieve live availability and diagnostic status for configured LLM providers."""
+    from providers.factory import LLMProviderFactory
+    from providers.base import ProviderInitializationError, LLMClientError
+
+    providers_to_check = ["gemini", "groq", "groq_secondary", "ollama", "rule_based_baseline"]
+    results = []
+    for p in providers_to_check:
+        is_baseline = p in ("rule_based_baseline", "zero_cost_local", "local")
+        try:
+            client = LLMProviderFactory.create_client(p)
+            results.append({
+                "provider": p,
+                "status": "live",
+                "model": getattr(client, "model_name", "rule-based"),
+                "reason": None,
+                "is_baseline": is_baseline,
+            })
+        except (ProviderInitializationError, LLMClientError, Exception) as e:
+            results.append({
+                "provider": p,
+                "status": "failed",
+                "model": None,
+                "reason": str(e),
+                "is_baseline": is_baseline,
+            })
+    return {"providers": results}
+
+
 @app.post(
     "/api/orchestrator/pipeline",
     response_model=OrchestratorPipelineResponse,
@@ -593,6 +643,9 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
             detail=f"Dataset '{req.dataset_id}' not found in current session.",
         )
 
+    # Check for pre-existing candidates if re-running from chosen interpretation
+    existing_cands = record.cached_candidates.get(req.intent) if req.chosen_plan_id else None
+
     pipeline_result = run_orchestration_pipeline(
         dataset=record.dataset,
         semantic_profile=record.semantic_profile,
@@ -601,7 +654,14 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
         data_profile=record.profile,
         mode=req.mode or "both",
         k=req.k or 3,
+        require_clarification=bool(req.require_clarification),
+        chosen_plan_id=req.chosen_plan_id,
+        existing_candidates=existing_cands,
     )
+
+    # Cache generated candidates in session store for subsequent clarification follow-ups
+    if pipeline_result.cached_candidates:
+        record.cached_candidates[req.intent] = pipeline_result.cached_candidates
 
     spec = pipeline_result.dashboard_spec
     ranked_list = []
@@ -654,9 +714,13 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
         cascade_depth=pipeline_result.cascade_depth,
         ambiguity_status=pipeline_result.ambiguity.status.value if pipeline_result.ambiguity else "CLEAR",
         ambiguity_message=pipeline_result.ambiguity.message if pipeline_result.ambiguity else None,
-        clarification_needed=pipeline_result.is_tie or (
-            pipeline_result.ambiguity is not None and pipeline_result.ambiguity.status.value != "CLEAR"
+        clarification_needed=(
+            pipeline_result.status == "NEEDS_CLARIFICATION"
+            or pipeline_result.is_tie
+            or (pipeline_result.ambiguity is not None and pipeline_result.ambiguity.status.value != "CLEAR")
         ),
+        clarification_options=pipeline_result.clarification_options,
+        cached_candidates=[c.model_dump() for c in pipeline_result.cached_candidates] if pipeline_result.cached_candidates else None,
         decision_log_entry=pipeline_result.decision_log_entry,
         explainability_log_entry=pipeline_result.explainability_log_entry,
     )

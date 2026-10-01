@@ -125,11 +125,31 @@ export async function selectWinner(
   return handleResponse<import('./types').SelectWinnerResponse>(res);
 }
 
+export async function getDatasetCleaningReport(datasetId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning`);
+  return handleResponse<any>(res);
+}
+
+export async function getProvidersStatus(): Promise<{
+  providers: {
+    provider: string;
+    status: 'live' | 'failed';
+    model: string | null;
+    reason: string | null;
+    is_baseline: boolean;
+  }[];
+}> {
+  const res = await fetch(`${API_BASE}/providers/status`);
+  return handleResponse<any>(res);
+}
+
 export async function runPipeline(
   datasetId: string,
   intent: string,
   mode?: string,
-  k: number = 3
+  k: number = 3,
+  requireClarification: boolean = true,
+  chosenPlanId?: string
 ): Promise<import('./types').OrchestratorPipelineResponse> {
   const res = await fetch(`${API_BASE}/orchestrator/pipeline`, {
     method: 'POST',
@@ -139,6 +159,8 @@ export async function runPipeline(
       intent,
       mode,
       k,
+      require_clarification: requireClarification,
+      chosen_plan_id: chosenPlanId,
     }),
   });
   return handleResponse<import('./types').OrchestratorPipelineResponse>(res);

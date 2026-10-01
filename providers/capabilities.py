@@ -1,6 +1,6 @@
 """Capabilities registry for LLM providers and models."""
 
-from typing import Dict, TypedDict
+from typing import Dict, Optional, TypedDict
 
 
 class ModelCapabilities(TypedDict):
@@ -26,10 +26,11 @@ PROVIDER_CAPABILITIES: Dict[str, Dict[str, ModelCapabilities]] = {
 }
 
 
-def get_capabilities(provider: str, model: str) -> ModelCapabilities:
+def get_capabilities(provider: str, model: Optional[str] = None) -> ModelCapabilities:
     """Get capabilities for a given provider and model."""
     provider_caps = PROVIDER_CAPABILITIES.get(provider.lower(), {})
+    model_key = (model or "default").lower()
     return provider_caps.get(
-        model.lower(),
+        model_key,
         provider_caps.get("default", {"strict_schema": False, "tool_calling": False}),
     )

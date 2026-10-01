@@ -5,7 +5,7 @@ DatasetSemanticProfiles, and AnalysisReadiness assessments.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import pandas as pd
 
 from ingestion.models import CanonicalDataset
@@ -21,11 +21,14 @@ class DatasetSessionRecord:
         profile: DataProfile,
         semantic_profile: DatasetSemanticProfile,
         readiness: AnalysisReadiness,
+        cleaning_report: Optional[Any] = None,
     ):
         self.dataset = dataset
         self.profile = profile
         self.semantic_profile = semantic_profile
         self.readiness = readiness
+        self.cleaning_report = cleaning_report
+        self.cached_candidates: Dict[str, List[Any]] = {}
         self.created_at = datetime.now(timezone.utc).isoformat()
 
     def to_metadata_dict(self) -> Dict:
@@ -39,6 +42,7 @@ class DatasetSessionRecord:
             "dtypes": {col.original_name: col.detected_datatype for col in self.dataset.metadata.schema},
             "ingestion_status": "SUCCESS",
             "ingestion_errors": [],
+            "cleaning_report": self.cleaning_report.model_dump() if hasattr(self.cleaning_report, "model_dump") else None,
         }
 
 

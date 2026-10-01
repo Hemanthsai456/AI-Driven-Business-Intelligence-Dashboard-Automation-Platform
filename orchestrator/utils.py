@@ -18,10 +18,7 @@ from typing import List, Optional, Sequence, Tuple
 
 from orchestrator.config import (
     LOW_COVERAGE_CONFIDENCE_CAP,
-<<<<<<< HEAD
     MIN_CONSENSUS_RESPONDENTS,
-=======
->>>>>>> main
     RANK_TIE_EPSILON,
     RANK_W1_EVIDENCE,
     RANK_W2_COVERAGE,

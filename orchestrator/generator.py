@@ -378,25 +378,36 @@ class MultiProviderGenerator(PlanGenerator):
 
         # Dedupe by plan_signature, aggregate supporting_count and provider lists
         unique_plans: Dict[str, CandidatePlan] = {}
-        providers_responded = sum(1 for log in all_logs if log.output_tokens > 0)
-        if providers_responded == 0:
-            providers_responded = 1
-            
+        baseline_providers = {"rule_based_baseline", "local", "zero_cost_local"}
+        
+        # Exclude rule_based_baseline from provider counts and consensus math
+        llm_providers_responded = sum(
+            1 for log in all_logs
+            if log.output_tokens > 0 and log.provider.lower() not in baseline_providers
+        )
+        if llm_providers_responded == 0:
+            llm_providers_responded = sum(1 for log in all_logs if log.output_tokens > 0) or 1
+
         for plan in valid_plans:
             sig = plan.plan_signature()
+            is_baseline = plan.provider.lower() in baseline_providers
+            init_supporting = [] if is_baseline else [plan.provider]
+            init_count = 0 if is_baseline else 1
+
             if sig not in unique_plans:
                 unique_plans[sig] = plan.model_copy(update={
-                    "supporting_count": 1,
-                    "providers_responded": providers_responded,
-                    "supporting_providers": [plan.provider]
+                    "supporting_count": init_count,
+                    "providers_responded": llm_providers_responded,
+                    "supporting_providers": init_supporting
                 })
             else:
                 curr = unique_plans[sig]
-                new_providers = curr.supporting_providers + [plan.provider]
-                unique_plans[sig] = curr.model_copy(update={
-                    "supporting_count": curr.supporting_count + 1,
-                    "supporting_providers": list(set(new_providers))
-                })
+                if not is_baseline and plan.provider not in curr.supporting_providers:
+                    new_providers = curr.supporting_providers + [plan.provider]
+                    unique_plans[sig] = curr.model_copy(update={
+                        "supporting_count": curr.supporting_count + 1,
+                        "supporting_providers": new_providers
+                    })
 
         return list(unique_plans.values())[:k], all_logs
 

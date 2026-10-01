@@ -9,6 +9,7 @@ Responsible for:
 from providers.base import (
     LLMClient,
     LLMClientError,
+    ProviderInitializationError,
     get_strict_json_schema,
     make_strict_schema,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "GroqClient",
     "LLMClient",
     "LLMClientError",
+    "ProviderInitializationError",
     "LLMProviderFactory",
     "MockLLMClient",
     "OllamaClient",

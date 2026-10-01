@@ -271,6 +271,16 @@ export interface RankedCandidateUI {
   is_winner: boolean;
 }
 
+export interface ClarificationOption {
+  plan_id: string;
+  label: string;
+  description: string;
+  score: number;
+  coverage: number;
+  evidence: number;
+  visualization: string;
+}
+
 export interface OrchestratorPipelineResponse {
   status: 'SUCCESS' | 'REFUSED' | 'UNANSWERABLE' | string;
   message: string;
@@ -304,6 +314,8 @@ export interface OrchestratorPipelineResponse {
   ambiguity_status: string;
   ambiguity_message?: string;
   clarification_needed: boolean;
+  clarification_options?: ClarificationOption[];
+  cached_candidates?: any[];
   decision_log_entry?: any;
   explainability_log_entry?: any;
 }

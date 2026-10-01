@@ -518,7 +518,6 @@ def test_compute_coverage_taxi_off_topic_not_inflated_by_intent():
     # 'sales' and 'category' do not appear in fields; coverage is <= 0.20 (only 'total' in 'total_amount')
     assert cov <= 0.20
     assert cov < LOW_COVERAGE_CONFIDENCE_CAP
-<<<<<<< HEAD
 
 
 def test_pass1a_rejects_malformed_gemini_filter_operator():
@@ -586,5 +585,4 @@ def test_agreement_incorporates_providers_responded_partial_response():
     assert sb_partial.agreement == pytest.approx(1.0 * (1 / 3), rel=1e-3)
     assert sb_full.agreement == pytest.approx(1.0, rel=1e-3)
     assert sb_partial.total < sb_full.total
-=======
->>>>>>> main
+

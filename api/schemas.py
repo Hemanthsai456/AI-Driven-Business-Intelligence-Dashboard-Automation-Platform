@@ -180,12 +180,14 @@ class OrchestratorPipelineRequest(BaseModel):
     intent: str
     mode: Optional[str] = "both"  # "llm_only" | "agent_only" | "both"
     k: Optional[int] = 3
+    chosen_plan_id: Optional[str] = None
+    require_clarification: Optional[bool] = False
 
 
 class OrchestratorPipelineResponse(BaseModel):
     """Response payload from the end-to-end Orchestrator pipeline."""
 
-    status: str  # "SUCCESS" | "REFUSED" | "UNANSWERABLE"
+    status: str  # "SUCCESS" | "REFUSED" | "UNANSWERABLE" | "NEEDS_CLARIFICATION"
     message: str
     spec_id: Optional[str] = None
     dashboard_spec: Optional[Dict[str, Any]] = None
@@ -196,5 +198,8 @@ class OrchestratorPipelineResponse(BaseModel):
     ambiguity_status: str = "CLEAR"
     ambiguity_message: Optional[str] = None
     clarification_needed: bool = False
+    clarification_options: Optional[List[Dict[str, Any]]] = None
+    cached_candidates: Optional[List[Dict[str, Any]]] = None
     decision_log_entry: Optional[Dict[str, Any]] = None
     explainability_log_entry: Optional[Dict[str, Any]] = None
+

@@ -4,6 +4,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'icon';
   size?: 'xs' | 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  fullWidth?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
 }
@@ -13,6 +14,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
   isLoading = false,
+  fullWidth = false,
   leftIcon,
   rightIcon,
   className = '',
@@ -20,21 +22,21 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium transition-all select-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-[#EA6928]/50 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
+    'inline-flex items-center justify-center font-medium transition-all select-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 disabled:pointer-events-none active:scale-[0.98]';
 
   const variantStyles = {
     primary:
-      'bg-[#EA6928] hover:bg-[#D3581B] text-white shadow-xs font-semibold',
+      'bg-primary hover:bg-primary-hover text-white shadow-xs font-semibold',
     secondary:
-      'bg-white dark:bg-[#2A2A2A] hover:bg-[#E6D4B8]/40 dark:hover:bg-[#333333] text-[#212121] dark:text-[#F5EBE1] border border-[#212121]/30 dark:border-[#4F4842]',
+      'bg-surface hover:bg-primary-soft text-foreground border border-border shadow-xs',
     ghost:
-      'bg-transparent hover:bg-[#E6D4B8]/40 dark:hover:bg-[#2A2A2A] text-[#212121] dark:text-[#F5EBE1]',
+      'bg-transparent hover:bg-primary-soft text-foreground',
     outline:
-      'bg-transparent hover:bg-white/60 dark:hover:bg-[#2A2A2A] border border-[#DAC7AD] dark:border-[#3A3530] text-[#212121] dark:text-[#F5EBE1]',
+      'bg-transparent hover:bg-surface border border-border text-foreground',
     destructive:
-      'bg-[#C62828] hover:bg-[#B71C1C] text-white shadow-xs',
+      'bg-error hover:bg-error/90 text-white shadow-xs',
     icon:
-      'bg-transparent hover:bg-[#E6D4B8]/40 dark:hover:bg-[#2A2A2A] text-[#6B6055] hover:text-[#212121] dark:hover:text-[#F5EBE1] p-1.5 rounded',
+      'bg-transparent hover:bg-primary-soft text-muted-foreground hover:text-foreground p-1.5 rounded',
   };
 
   const sizeStyles = {
@@ -46,7 +48,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={`${baseStyles} ${variantStyles[variant]} ${variant === 'icon' ? '' : sizeStyles[size]} ${className}`}
+      className={`${baseStyles} ${variantStyles[variant]} ${variant === 'icon' ? '' : sizeStyles[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
       disabled={disabled || isLoading}
       {...props}
     >

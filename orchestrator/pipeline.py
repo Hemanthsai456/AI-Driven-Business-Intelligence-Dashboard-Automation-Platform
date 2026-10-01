@@ -69,13 +69,13 @@ from orchestrator.schemas import (
 from orchestrator.utils import check_candidate_output_consistency, rank_candidates
 from orchestrator.validator import validate_pass1a, validate_pass1b, validate_pass2
 from orchestrator.winner import WinnerSelectionError, select_winner
-from providers import LLMClient, MockLLMClient, get_llm_client
+from providers import LLMClient, MockLLMClient, ProviderInitializationError, get_llm_client
 
 
 @dataclass
 class OrchestrationPipelineResult:
     """Complete result from an end-to-end orchestration pipeline run."""
-    status: str  # "SUCCESS", "REFUSED", "UNANSWERABLE", "AMBIGUOUS"
+    status: str  # "SUCCESS", "REFUSED", "UNANSWERABLE", "AMBIGUOUS", "NEEDS_CLARIFICATION"
     message: str
     dashboard_spec: Optional[DashboardSpec] = None
     ambiguity: Optional[AmbiguityResult] = None
@@ -86,14 +86,22 @@ class OrchestrationPipelineResult:
     cascade_depth: int = 0
     decision_log_entry: Optional[Dict[str, Any]] = None
     explainability_log_entry: Optional[Dict[str, Any]] = None
+    clarification_options: Optional[List[Dict[str, Any]]] = None
+    cached_candidates: Optional[List[CandidatePlan]] = None
 
 
 def get_default_llm_client() -> LLMClient:
-    """Return configured LLMClient via provider factory or MockLLMClient."""
+    """Return configured LLMClient via provider factory or raise ProviderInitializationError outside tests."""
+    provider = os.getenv("PROVIDER", "gemini")
+    is_testing = bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"))
     try:
-        return get_llm_client()
-    except Exception:
-        return MockLLMClient()
+        return get_llm_client(provider=provider)
+    except Exception as e:
+        if is_testing:
+            return MockLLMClient()
+        if isinstance(e, ProviderInitializationError):
+            raise
+        raise ProviderInitializationError(provider, str(e)) from e
 
 
 def run_orchestration_pipeline(
@@ -108,6 +116,9 @@ def run_orchestration_pipeline(
     generator: Optional[PlanGenerator] = None,
     engine: Optional[AnalyticsEngine] = None,
     max_cascade_depth: int = MAX_CASCADE_DEPTH,
+    require_clarification: bool = False,
+    chosen_plan_id: Optional[str] = None,
+    existing_candidates: Optional[List[CandidatePlan]] = None,
 ) -> OrchestrationPipelineResult:
     """Execute the full 6-step cognitive analytical orchestration pipeline.
 
@@ -122,6 +133,9 @@ def run_orchestration_pipeline(
         generator: Optional generator override (for testing).
         engine: Optional deterministic AnalyticsEngine override.
         max_cascade_depth: Cascade depth limit.
+        require_clarification: Return NEEDS_CLARIFICATION on tie or low coverage.
+        chosen_plan_id: Chosen plan id when resolving clarification.
+        existing_candidates: Pre-generated candidates to re-run from for clarification.
 
     Returns:
         OrchestrationPipelineResult with DashboardSpec or refusal reason.
@@ -214,8 +228,16 @@ def run_orchestration_pipeline(
     )
 
     # 5. Step 4: Planning x K (consuming interpretations)
-    if generator is not None:
+    if existing_candidates:
+        candidates = existing_candidates
+        generator_logs = []
+    elif generator is not None:
         active_generator = generator
+        candidates, generator_logs = active_generator.generate_plans(
+            context,
+            k=k_eff,
+            interpretations=interpretations,
+        )
     else:
         llm_client = get_default_llm_client()
         direct_gen = MultiProviderGenerator()
@@ -225,12 +247,11 @@ def run_orchestration_pipeline(
             agent_generator=agent_gen,
             mode=mode,
         )
-
-    candidates, generator_logs = active_generator.generate_plans(
-        context,
-        k=k_eff,
-        interpretations=interpretations,
-    )
+        candidates, generator_logs = active_generator.generate_plans(
+            context,
+            k=k_eff,
+            interpretations=interpretations,
+        )
 
     if not candidates:
         emit_decision_log(
@@ -264,15 +285,12 @@ def run_orchestration_pipeline(
     pass1b_counts = 0
 
     for cand in candidates:
-<<<<<<< HEAD
         cand_record: Dict[str, Any] = {
             "plan_id": cand.plan_id,
             "metric": f"{cand.metric.aggregation.value}({cand.metric.column})",
             "dimensions": [d.column for d in cand.dimensions],
             "visualization": cand.visualization.value,
         }
-=======
->>>>>>> main
         # Pass 1a: Pre-dispatch validation
         pass1a_res = validate_pass1a(
             plan=cand,
@@ -360,6 +378,44 @@ def run_orchestration_pipeline(
         intent_tokens=intent_tokens,
         weights=weights,
     )
+
+    # If chosen_plan_id was provided in a follow-up call, prioritize it as rank-1 winner
+    if chosen_plan_id:
+        chosen_match = next((t for t in ranked if t[0].plan_id == chosen_plan_id), None)
+        if chosen_match:
+            others = [t for t in ranked if t[0].plan_id != chosen_plan_id]
+            re_ranked = [(chosen_match[0], chosen_match[1], chosen_match[2], 1)]
+            for idx, item in enumerate(others, start=2):
+                re_ranked.append((item[0], item[1], item[2], idx))
+            ranked = re_ranked
+            is_tie = False
+    elif require_clarification:
+        top_coverage = ranked[0][2].coverage if ranked else 0.0
+        is_low_coverage = top_coverage < 0.35
+        if is_tie or is_low_coverage:
+            clarification_opts = [
+                {
+                    "plan_id": plan.plan_id,
+                    "label": f"{plan.metric.aggregation.value} of {plan.metric.column} by {', '.join(d.column for d in plan.dimensions)}",
+                    "description": plan.reasoning.interpretation if plan.reasoning else f"Aggregate {plan.metric.column}",
+                    "score": round(score.total, 4),
+                    "coverage": round(score.coverage, 4),
+                    "evidence": round(score.evidence, 4),
+                    "visualization": plan.visualization.value,
+                }
+                for plan, result, score, rank in ranked
+            ]
+            return OrchestrationPipelineResult(
+                status="NEEDS_CLARIFICATION",
+                message="Multiple candidate interpretations tied or have low coverage; user clarification required.",
+                clarification_options=clarification_opts,
+                cached_candidates=[p for p, _, _, _ in ranked],
+                ranked_candidates=ranked,
+                is_tie=is_tie,
+                ambiguity=ambiguity,
+                structured_intent=structured_intent,
+                interpretations=interpretations,
+            )
 
     # Update candidate artifacts and records with scores
     for plan, result, score, rank in ranked:

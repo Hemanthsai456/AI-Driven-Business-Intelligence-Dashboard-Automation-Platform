@@ -150,6 +150,14 @@ class DuckDBExecutor:
                 timeout_timer.cancel()
 
             elapsed = time.perf_counter() - start_time
+            if timed_out.is_set() or elapsed >= self.timeout_seconds:
+                return ExecutionResult(
+                    plan_id=plan_id,
+                    status=ExecutionStatus.TIMEOUT,
+                    error_message=f"Query execution timed out after {self.timeout_seconds} seconds.",
+                    runtime_seconds=round(elapsed, 4),
+                )
+
             total_rows = len(df)
             failed_cast_rate = total_failed_casts / max(total_rows, 1)
 

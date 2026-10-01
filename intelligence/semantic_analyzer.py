@@ -77,7 +77,7 @@ class SemanticAnalyzer:
         "amount", "revenue", "sales", "price", "cost", "qty", "quantity", "val", "value",
         "count", "score", "total", "subtotal", "tax", "fee", "rate", "pct", "percentage",
         "weight", "height", "depth", "distance", "length", "margin", "profit", "discount",
-        "balance", "age"
+        "balance", "age", "unit", "units", "volume"
     }
     DATE_TOKENS = {"date", "time", "timestamp", "dt", "datetime", "created_at", "updated_at", "dob"}
     TEMPORAL_PART_TOKENS = {"month", "day", "quarter", "qtr", "weekday", "dayofweek", "day_of_week"}
@@ -88,6 +88,66 @@ class SemanticAnalyzer:
     }
     BOOLEAN_PREFIXES = ("is_", "has_", "can_", "should_", "flag_")
     BOOLEAN_EXACT = {"active", "enabled", "deleted", "is_active", "has_insurance", "deceased"}
+
+    CURRENCY_REGEX = re.compile(
+        r"^\s*\(?[-+]?\s*[$€£¥₹]\s*[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?\s*$|"
+        r"^\s*\(?[-+]?\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[$€£¥₹]\)?\s*$|"
+        r"^\s*\(?[-+]?\s*[-+]?\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:USD|EUR|GBP|INR|JPY|CAD|AUD)\b\)?\s*$",
+        re.IGNORECASE,
+    )
+    PERCENT_REGEX = re.compile(r"^\s*[-+]?\s*\d+(?:\.\d+)?\s*%\s*$")
+    UUID_REGEX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+    CODE_ID_REGEX = re.compile(r"^[A-Za-z]{1,8}[-_#][0-9A-Za-z]{1,16}$")
+
+    def _inspect_sample_patterns(self, series: Optional[pd.Series], sample_size: int = 50) -> Dict[str, Any]:
+        """Inspect non-null sample string representations for currency, percentage, UUID, and code patterns."""
+        if series is None or len(series) == 0:
+            return {
+                "currency_ratio": 0.0,
+                "percentage_ratio": 0.0,
+                "id_code_ratio": 0.0,
+                "is_boolean_vals": False,
+                "sample_values": [],
+            }
+        non_null = series.dropna()
+        if len(non_null) == 0:
+            return {
+                "currency_ratio": 0.0,
+                "percentage_ratio": 0.0,
+                "id_code_ratio": 0.0,
+                "is_boolean_vals": False,
+                "sample_values": [],
+            }
+        sample_str = [
+            str(x).strip()
+            for x in non_null.head(sample_size)
+            if str(x).strip() and str(x).strip().lower() not in {"nan", "none", "null", ""}
+        ]
+        if not sample_str:
+            return {
+                "currency_ratio": 0.0,
+                "percentage_ratio": 0.0,
+                "id_code_ratio": 0.0,
+                "is_boolean_vals": False,
+                "sample_values": [],
+            }
+        n = len(sample_str)
+        cur_cnt = sum(1 for s in sample_str if self.CURRENCY_REGEX.match(s))
+        pct_cnt = sum(1 for s in sample_str if self.PERCENT_REGEX.match(s))
+        id_cnt = sum(1 for s in sample_str if self.UUID_REGEX.match(s) or self.CODE_ID_REGEX.match(s))
+
+        bool_set = {"true", "false", "t", "f", "yes", "no", "y", "n"}
+        is_bool = (
+            non_null.nunique(dropna=True) <= 2
+            and all(s.lower() in bool_set for s in sample_str)
+        )
+        return {
+            "currency_ratio": cur_cnt / n,
+            "percentage_ratio": pct_cnt / n,
+            "id_code_ratio": id_cnt / n,
+            "is_boolean_vals": is_bool,
+            "sample_values": sample_str,
+        }
 
     def analyze(
         self,
@@ -191,6 +251,14 @@ class SemanticAnalyzer:
         is_uniq = col_stats.get("is_unique", False)
         is_const = col_stats.get("is_constant", False)
         is_all_null = col_stats.get("is_all_null", False)
+        cardinality_ratio = (distinct_cnt / non_null_cnt) if non_null_cnt > 0 else 0.0
+        series = df[col_name] if col_name in df.columns else None
+
+        # Data-driven metric summaries
+        evidence_statements.append(f"cardinality ratio: {distinct_cnt}/{non_null_cnt} ({cardinality_ratio:.2%})")
+        evidence_statements.append(f"uniqueness: {'unique (100%)' if is_uniq else f'non-unique ({distinct_cnt} distinct)'}")
+        if null_pct > 0:
+            evidence_statements.append(f"null ratio: {null_pct:.1f}% ({null_cnt}/{row_cnt} missing values)")
 
         # Name Token Extraction & Disambiguation Check
         stripped_name = col_name.strip()
@@ -230,15 +298,41 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
-        # Signal 2: Constant Column
-        if is_const:
-            evidence_statements.append(f"constant column containing only 1 distinct non-null value ('{col_stats.get('min')}')")
-            evidence_statements.append("insufficient variation to qualify as a measure")
+        # Inspect data sample value patterns (currency, percentages, IDs, booleans)
+        patterns = self._inspect_sample_patterns(series)
+
+        # Signal 2: Boolean Datatype or Boolean Value Characteristics
+        is_bool_dtype = "bool" in dtype_str or (series is not None and pd.api.types.is_bool_dtype(series))
+        if is_bool_dtype:
+            evidence_statements.append(f"boolean datatype ({dtype_str})")
+            if has_boolean_token:
+                evidence_statements.append(f"boolean naming pattern ('{clean_name}')")
+            evidence_statements.append("binary true/false flags serve as categorical dimensions")
             return ColumnSemanticEvidence(
                 column_name=col_name,
-                candidate_role=ColumnRole.UNKNOWN,
-                confidence=0.30,
-                confidence_level="LOW",
+                candidate_role=ColumnRole.DIMENSION,
+                confidence=0.90,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        if patterns["is_boolean_vals"]:
+            evidence_statements.append("data-driven boolean values detected in sample (true/false/yes/no flags)")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.DIMENSION,
+                confidence=0.88,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        if distinct_cnt <= 2 and non_null_cnt > 0 and has_boolean_token:
+            evidence_statements.append(f"low distinct count ({distinct_cnt}) with boolean naming pattern ('{clean_name}')")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.DIMENSION,
+                confidence=0.85,
+                confidence_level="HIGH",
                 evidence=evidence_statements,
             )
 
@@ -255,41 +349,52 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
-        # Signal 4: Boolean Datatype or Boolean Characteristics
-        series = df[col_name] if col_name in df.columns else None
-        is_bool_dtype = "bool" in dtype_str or (series is not None and pd.api.types.is_bool_dtype(series))
+        # Signal 4: Content-based String/Object Datetime Detection
+        is_text_or_obj = "object" in dtype_str or "str" in dtype_str or "category" in dtype_str
+        parse_ratio = self._sample_datetime_parse_ratio(series) if (is_text_or_obj and non_null_cnt > 0) else 0.0
 
-        if is_bool_dtype:
-            evidence_statements.append(f"boolean datatype ({dtype_str})")
-            if has_boolean_token:
-                evidence_statements.append(f"boolean naming pattern ('{clean_name}')")
-            evidence_statements.append("binary true/false flags serve as categorical dimensions")
+        if parse_ratio >= 0.8:
+            evidence_statements.append(f"string/object datatype ({dtype_str}) with content-based datetime pattern")
+            evidence_statements.append(f"high sample datetime parse success ratio ({parse_ratio:.2f})")
+            if has_date_token:
+                evidence_statements.append(f"column name contains date token: '{clean_name}'")
+            evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
             return ColumnSemanticEvidence(
                 column_name=col_name,
-                candidate_role=ColumnRole.DIMENSION,
-                confidence=0.90,
+                candidate_role=ColumnRole.DATETIME,
+                confidence=0.92 if has_date_token else 0.88,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
             )
 
-        # Check for binary numeric/string values (0/1 or True/False represented as text)
-        if distinct_cnt <= 2 and non_null_cnt > 0 and has_boolean_token:
-            evidence_statements.append(f"low distinct count ({distinct_cnt}) with boolean naming pattern ('{clean_name}')")
-            return ColumnSemanticEvidence(
-                column_name=col_name,
-                candidate_role=ColumnRole.DIMENSION,
-                confidence=0.85,
-                confidence_level="HIGH",
-                evidence=evidence_statements,
-            )
+        # Signal 5: Numeric vs Integer-Like Profiling
+        is_numeric = "int" in dtype_str or "float" in dtype_str or (
+            series is not None and pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series)
+        )
+        is_integer_like = False
+        is_continuous_float = False
+        if is_numeric and non_null_cnt > 0 and series is not None:
+            try:
+                num_s = pd.to_numeric(series.dropna(), errors="coerce").dropna()
+                if len(num_s) > 0:
+                    if ((num_s % 1) == 0).all():
+                        is_integer_like = True
+                    else:
+                        is_continuous_float = True
+            except Exception:
+                pass
+        elif "int" in dtype_str:
+            is_integer_like = True
+        elif "float" in dtype_str:
+            is_continuous_float = True
 
-        is_numeric = "int" in dtype_str or "float" in dtype_str
-        is_integer = "int" in dtype_str
-        unique_ratio = (distinct_cnt / non_null_cnt) if non_null_cnt > 0 else 0.0
+        is_integer = is_integer_like or ("int" in dtype_str)
+        unique_ratio = cardinality_ratio
 
-        # Dedicated Year-Range Signal (e.g. 1900-2100)
-        # Evaluated before IDENTIFIER / MEASURE / low-cardinality numeric rules
-        if is_numeric and non_null_cnt > 0 and series is not None and not has_measure_token:
+        # Signal 6: Dedicated Year-Range Signal (e.g. 1900-2100)
+        # Evaluated before constant check so single-year calendar tables (e.g. Calendar.csv Year 2024)
+        # are properly classified as DATETIME rather than UNKNOWN.
+        if is_numeric and non_null_cnt > 0 and not has_measure_token and is_integer:
             min_val = col_stats.get("min")
             max_val = col_stats.get("max")
             if min_val is not None and max_val is not None:
@@ -297,32 +402,30 @@ class SemanticAnalyzer:
                     min_f = float(min_val)
                     max_f = float(max_val)
                     if 1900 <= min_f and max_f <= 2100:
-                        non_null_s = series.dropna()
-                        if len(non_null_s) > 0 and (non_null_s % 1 == 0).all():
-                            evidence_statements.append("numeric values fall entirely within calendar year range [1900, 2100]")
-                            evidence_statements.append(f"detected year values from {int(min_f)} to {int(max_f)}")
-                            if "year" in clean_name or has_date_token:
-                                evidence_statements.append(f"column name indicates temporal year: '{clean_name}'")
-                                return ColumnSemanticEvidence(
-                                    column_name=col_name,
-                                    candidate_role=ColumnRole.DATETIME,
-                                    confidence=0.92,
-                                    confidence_level="HIGH",
-                                    evidence=evidence_statements,
-                                )
-                            else:
-                                evidence_statements.append("numeric year distribution without date naming token")
-                                return ColumnSemanticEvidence(
-                                    column_name=col_name,
-                                    candidate_role=ColumnRole.DATETIME,
-                                    confidence=0.85,
-                                    confidence_level="HIGH",
-                                    evidence=evidence_statements,
-                                )
+                        evidence_statements.append("numeric values fall entirely within calendar year range [1900, 2100]")
+                        evidence_statements.append(f"detected year values from {int(min_f)} to {int(max_f)}")
+                        if "year" in clean_name or has_date_token:
+                            evidence_statements.append(f"column name indicates temporal year: '{clean_name}'")
+                            return ColumnSemanticEvidence(
+                                column_name=col_name,
+                                candidate_role=ColumnRole.DATETIME,
+                                confidence=0.92,
+                                confidence_level="HIGH",
+                                evidence=evidence_statements,
+                            )
+                        elif distinct_cnt > 1:
+                            evidence_statements.append("numeric year distribution without date naming token")
+                            return ColumnSemanticEvidence(
+                                column_name=col_name,
+                                candidate_role=ColumnRole.DATETIME,
+                                confidence=0.85,
+                                confidence_level="HIGH",
+                                evidence=evidence_statements,
+                            )
                 except Exception:
                     pass
 
-        # Dedicated Temporal Calendar Parts (Month 1-12, Day 1-31, Quarter 1-4)
+        # Signal 7: Dedicated Temporal Calendar Parts (Month 1-12, Day 1-31, Quarter 1-4)
         if is_numeric and has_temporal_part_token and not has_measure_token:
             min_val = col_stats.get("min")
             max_val = col_stats.get("max")
@@ -360,20 +463,66 @@ class SemanticAnalyzer:
                 except Exception:
                     pass
 
-        # Signal 5: Conflict Resolution — IDENTIFIER (two-part)
-        #
+        # Signal 8: Constant Column (insufficient variation to serve as measure or identifier)
+        if is_const:
+            evidence_statements.append(f"constant column containing only 1 distinct non-null value ('{col_stats.get('min')}')")
+            evidence_statements.append("insufficient variation to qualify as a measure")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.UNKNOWN,
+                confidence=0.30,
+                confidence_level="LOW",
+                evidence=evidence_statements,
+            )
+
+        # Signal 9: Formatted Currency or Percentage Patterns (even if stored as string/object)
+        if patterns["currency_ratio"] >= 0.8:
+            evidence_statements.append(f"value-pattern evidence: {patterns['currency_ratio']:.0%} of sample values match formatted currency pattern")
+            if has_measure_token:
+                evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.MEASURE,
+                confidence=0.92,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        if patterns["percentage_ratio"] >= 0.8:
+            evidence_statements.append(f"value-pattern evidence: {patterns['percentage_ratio']:.0%} of sample values match percentage pattern")
+            if has_measure_token:
+                evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.MEASURE,
+                confidence=0.90,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        # Signal 10: Value-pattern UUID or Code Identifier
+        if patterns["id_code_ratio"] >= 0.8 and (is_uniq or cardinality_ratio >= 0.85):
+            evidence_statements.append(f"value-pattern evidence: structured identifier/UUID pattern detected ({patterns['id_code_ratio']:.0%} match, cardinality ratio {cardinality_ratio:.2f})")
+            if has_id_token:
+                evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.IDENTIFIER,
+                confidence=0.92,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        # Signal 11: Conflict Resolution — IDENTIFIER
         # Part A — Uniqueness-based: high unique ratio is a strong identifier signal.
-        #   Requires: integer dtype (not float) OR explicit id naming token (id, _id, code, key, uuid).
-        #   If dtype is float64 with no identifier name token, do NOT assign IDENTIFIER by uniqueness
-        #   alone — let it fall through to MEASURE evaluation instead.
-        #
-        # Part B — Name-based (non-unique): explicit ID naming token without measure token.
-        #   Handles columns like `customer_code` that are not 100% unique but clearly IDs.
+        #   Requires: integer dtype (not continuous float) OR explicit id naming token.
+        #   If dtype is continuous float with no identifier name token, do NOT assign IDENTIFIER.
         has_id_signal = has_id_token or is_integer
 
         if (
-            (is_uniq or unique_ratio >= 0.98)
+            (is_uniq or unique_ratio >= 0.95)
             and has_id_signal
+            and not is_continuous_float
             and not has_date_token
             and not has_measure_token  # explicit measure naming overrides uniqueness signal
         ):
@@ -390,6 +539,7 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
+        # Part B — Name-based repeated IDs (Foreign keys)
         if has_id_token and distinct_cnt > 1 and not has_measure_token and not has_date_token:
             evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
             evidence_statements.append(f"distinct count: {distinct_cnt}")
@@ -403,34 +553,39 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
-        # Signal 6: MEASURE Candidate
+        # Signal 12: Continuous Float MEASURE
+        if is_numeric and is_continuous_float and distinct_cnt > 1 and not has_id_token:
+            evidence_statements.append(f"continuous floating-point numeric distribution (distinct: {distinct_cnt}, min: {col_stats.get('min')}, max: {col_stats.get('max')})")
+            if has_measure_token:
+                evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.MEASURE,
+                confidence=0.92 if has_measure_token else 0.85,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+            )
+
+        # Signal 13: Numeric MEASURE / Low-cardinality DIMENSION
         if is_numeric:
             evidence_statements.append(f"numeric datatype ({dtype_str})")
             evidence_statements.append(f"distinct count: {distinct_cnt}")
             if not is_uniq:
                 evidence_statements.append("non-unique numeric distribution")
 
-            # Low-cardinality numeric check (e.g. rating = 1..5, status = 1..4)
+            # Low-cardinality discrete numeric check (ratings 1..5, status 1..4)
             if distinct_cnt <= 5 and not has_measure_token:
                 evidence_statements.append(f"low distinct count ({distinct_cnt}) without explicit measure naming")
+                evidence_statements.append("low-cardinality numeric values represent discrete categories or scale ratings")
                 if has_dimension_token:
                     evidence_statements.append(f"dimension naming pattern ('{clean_name}')")
-                    return ColumnSemanticEvidence(
-                        column_name=col_name,
-                        candidate_role=ColumnRole.DIMENSION,
-                        confidence=0.70,
-                        confidence_level="MEDIUM",
-                        evidence=evidence_statements,
-                    )
-                else:
-                    evidence_statements.append("low-cardinality numeric values could represent discrete categories or scale ratings")
-                    return ColumnSemanticEvidence(
-                        column_name=col_name,
-                        candidate_role=ColumnRole.UNKNOWN,
-                        confidence=0.45,
-                        confidence_level="LOW",
-                        evidence=evidence_statements,
-                    )
+                return ColumnSemanticEvidence(
+                    column_name=col_name,
+                    candidate_role=ColumnRole.DIMENSION,
+                    confidence=0.70,
+                    confidence_level="MEDIUM",
+                    evidence=evidence_statements,
+                )
 
             if has_measure_token:
                 evidence_statements.append(f"measure naming indicator: '{clean_name}'")
@@ -451,43 +606,26 @@ class SemanticAnalyzer:
                     evidence=evidence_statements,
                 )
 
-        # Signal 7: DATETIME Candidate (String/Object with date content or date token)
-        if "object" in dtype_str or "str" in dtype_str:
-            parse_ratio = self._sample_datetime_parse_ratio(series)
-            if parse_ratio >= 0.9:
-                evidence_statements.append(f"string/object datatype ({dtype_str}) with content-based datetime pattern")
-                evidence_statements.append(f"high sample datetime parse success ratio ({parse_ratio:.2f})")
-                if has_date_token:
-                    evidence_statements.append(f"column name contains date token: '{clean_name}'")
-                evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
-                return ColumnSemanticEvidence(
-                    column_name=col_name,
-                    candidate_role=ColumnRole.DATETIME,
-                    confidence=0.92 if has_date_token else 0.85,
-                    confidence_level="HIGH",
-                    evidence=evidence_statements,
-                )
-            elif has_date_token:
-                evidence_statements.append(f"string/object datatype ({dtype_str}) with date naming token ('{clean_name}')")
-                evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
-                return ColumnSemanticEvidence(
-                    column_name=col_name,
-                    candidate_role=ColumnRole.DATETIME,
-                    confidence=0.65,
-                    confidence_level="MEDIUM",
-                    evidence=evidence_statements,
-                )
+        # Signal 14: String/Object with date token fallback
+        if is_text_or_obj and has_date_token:
+            evidence_statements.append(f"string/object datatype ({dtype_str}) with date naming token ('{clean_name}')")
+            evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.DATETIME,
+                confidence=0.65,
+                confidence_level="MEDIUM",
+                evidence=evidence_statements,
+            )
 
-        # Signal 8: DIMENSION Candidate (String/Object or Categorical)
-        if "object" in dtype_str or "str" in dtype_str or "category" in dtype_str:
+        # Signal 15: DIMENSION Candidate (String/Object or Categorical)
+        if is_text_or_obj:
             evidence_statements.append(f"text/categorical datatype ({dtype_str})")
             evidence_statements.append(f"distinct count: {distinct_cnt} out of {row_cnt} rows")
 
             if has_dimension_token:
                 evidence_statements.append(f"dimension naming pattern ('{clean_name}')")
 
-            # High cardinality description text check (threshold lowered to > 5 rows so small
-            # datasets like 20-row test fixtures are also captured as DIMENSION).
             if distinct_cnt > 0.9 * non_null_cnt and non_null_cnt > 5 and not has_dimension_token:
                 evidence_statements.append("very high cardinality text (could be free-form description or narrative)")
                 return ColumnSemanticEvidence(
@@ -506,7 +644,7 @@ class SemanticAnalyzer:
                 evidence=evidence_statements,
             )
 
-        # Signal 9: Ambiguous Column -> UNKNOWN
+        # Signal 16: Ambiguous Column -> UNKNOWN
         evidence_statements.append(f"ambiguous signals (datatype: {dtype_str}, distinct count: {distinct_cnt})")
         evidence_statements.append("insufficient evidence to reliably assign a specific semantic role")
         return ColumnSemanticEvidence(

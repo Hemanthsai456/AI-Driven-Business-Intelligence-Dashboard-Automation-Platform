@@ -24,6 +24,13 @@ def _tokenize(text: str) -> Set[str]:
     return set(re.findall(r"\b[a-z0-9_]+\b", text.lower()))
 
 
+def _normalize_name(name: str) -> str:
+    """Normalize camelCase/PascalCase/snake_case into space-delimited lowercase string."""
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
+    spaced = spaced.replace("_", " ").replace("-", " ")
+    return spaced.lower()
+
+
 def interpret_user_request(
     request_text: str,
     semantic_profile: DatasetSemanticProfile,
@@ -57,6 +64,7 @@ def interpret_user_request(
     measures: Dict[str, Any] = {}
     dimensions: Dict[str, Any] = {}
     datetimes: Dict[str, Any] = {}
+    identifiers: Dict[str, Any] = {}
 
     for col, ev in semantic_profile.column_evidences.items():
         if ev.candidate_role == ColumnRole.MEASURE:
@@ -65,28 +73,69 @@ def interpret_user_request(
             dimensions[col] = ev
         elif ev.candidate_role == ColumnRole.DATETIME:
             datetimes[col] = ev
+        elif ev.candidate_role == ColumnRole.IDENTIFIER:
+            identifiers[col] = ev
+
+    def _col_matches(col_name: str) -> bool:
+        col_norm = _normalize_name(col_name)
+        col_toks = set(re.findall(r"\b[a-z0-9]+\b", col_norm))
+        if col_name.lower() in req_lower or col_norm in req_lower:
+            return True
+        if col_toks and col_toks.issubset(tokens):
+            return True
+
+        agg_words = {"total", "sum", "avg", "average", "count", "min", "max"}
+        id_words = {"id", "code", "key", "number"}
+        substantive = {t for t in col_toks if t not in agg_words}
+        if not substantive:
+            return False
+
+        # If substantive consists only of id_words plus a stem (e.g., CustomerID -> customer, id)
+        # matching the core entity word is sufficient
+        matched_sub = 0
+        for stok in substantive:
+            stok_stem = stok.rstrip("s")
+            if any(qtok == stok or (len(qtok) > 3 and qtok.rstrip("s") == stok_stem) for qtok in tokens):
+                matched_sub += 1
+            elif stok in id_words:
+                # Optional modifier when entity is already named
+                pass
+            else:
+                return False
+
+        return matched_sub > 0
 
     # 1. Match requested metrics
     matched_metrics: List[str] = []
     for col in measures:
-        col_toks = _tokenize(col)
-        # Check direct substring or token overlap
-        if col.lower() in req_lower or (col_toks and col_toks.issubset(tokens)):
+        if _col_matches(col):
             matched_metrics.append(col)
 
-    # 2. Match requested dimensions
+    # 2. Match requested dimensions (include identifiers if mentioned in grouping context)
     matched_dims: List[str] = []
     for col in dimensions:
-        col_toks = _tokenize(col)
-        if col.lower() in req_lower or (col_toks and col_toks.issubset(tokens)):
+        if _col_matches(col):
+            matched_dims.append(col)
+
+    for col in identifiers:
+        # Check if identifier is referenced as a dimension (e.g. "by store id", "store id")
+        if _col_matches(col) and col not in matched_metrics:
             matched_dims.append(col)
 
     # 3. Match temporal scope
     matched_dates: List[str] = []
     for col in datetimes:
-        col_toks = _tokenize(col)
-        if col.lower() in req_lower or (col_toks and col_toks.issubset(tokens)):
+        if _col_matches(col):
             matched_dates.append(col)
+
+    # If count requested on an entity (e.g. "count customers"), match identifier or dimension to metric
+    if "count" in tokens and not matched_metrics:
+        for col in list(identifiers.keys()) + list(dimensions.keys()):
+            if _col_matches(col):
+                matched_metrics.append(col)
+                if col in matched_dims:
+                    matched_dims.remove(col)
+                break
 
     # 4. Detect temporal keywords and granularity
     granularity_keywords = {
@@ -119,10 +168,6 @@ def interpret_user_request(
     analytical_goal: Optional[str] = None
     if tokens & trend_kws:
         analytical_goal = "trend"
-        # If trend requested but no date matched yet, check available datetimes
-        if not matched_dates and datetimes:
-            # We note temporal scope is desired
-            pass
     elif tokens & comp_kws:
         analytical_goal = "comparison"
     elif tokens & dist_kws:
@@ -155,10 +200,16 @@ def interpret_user_request(
 
     # 8. Unresolved terms
     all_known_columns = set(c.lower() for c in semantic_profile.column_evidences.keys())
+    for c in semantic_profile.column_evidences.keys():
+        for sub in re.findall(r"\b[a-z0-9]+\b", _normalize_name(c)):
+            all_known_columns.add(sub)
+
     stopwords = {
         "show", "me", "the", "a", "an", "of", "for", "by", "in", "and", "or", "to",
         "give", "get", "what", "is", "are", "total", "average", "avg", "sum", "count",
-        "all", "top", "per", "data", "report", "with", "over", "time", "numbers", "stats"
+        "all", "top", "per", "data", "report", "with", "over", "time", "numbers", "stats",
+        "calculate", "calc", "find", "compute", "display", "plot", "list", "across", "between",
+        "analyze", "analysis"
     }
     unresolved: List[str] = []
     for tok in tokens:
@@ -167,7 +218,7 @@ def interpret_user_request(
             and tok not in granularity_keywords
             and tok not in vis_keywords
             and tok not in trend_kws
-            and not any(tok in col.lower() for col in all_known_columns)
+            and not any(tok == c or tok.rstrip("s") == c.rstrip("s") for c in all_known_columns)
         ):
             unresolved.append(tok)
 
