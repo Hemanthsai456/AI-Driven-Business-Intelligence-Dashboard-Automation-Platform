@@ -46,7 +46,11 @@ class GroqClient(LLMClient):
         if sys_inst:
             messages.append({"role": "system", "content": sys_inst})
 
+<<<<<<< HEAD
+        if schema:
+=======
         if self.capabilities["strict_schema"]:
+>>>>>>> main
             messages.append({
                 "role": "system",
                 "content": f"You must respond with a JSON object strictly matching this schema: {json.dumps(schema)}",

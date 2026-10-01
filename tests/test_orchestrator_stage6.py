@@ -518,3 +518,73 @@ def test_compute_coverage_taxi_off_topic_not_inflated_by_intent():
     # 'sales' and 'category' do not appear in fields; coverage is <= 0.20 (only 'total' in 'total_amount')
     assert cov <= 0.20
     assert cov < LOW_COVERAGE_CONFIDENCE_CAP
+<<<<<<< HEAD
+
+
+def test_pass1a_rejects_malformed_gemini_filter_operator():
+    """Verify that Pass 1a rejects malformed filter comparison operators like '====='.
+
+    Uses the exact malformed operator produced by Gemini in real eval prompt 5:
+    'WHERE StoreID ===== 101'.
+    """
+    from orchestrator.validator import validate_pass1a, is_plan_structurally_valid
+    from intelligence.semantic_analyzer import DatasetSemanticProfile, ColumnSemanticEvidence, ColumnRole
+
+    sem_profile = DatasetSemanticProfile(
+        dataset_id="Sales_2024.csv",
+        column_evidences={
+            "TotalSales": ColumnSemanticEvidence(column_name="TotalSales", candidate_role=ColumnRole.MEASURE, confidence=0.95, confidence_level="HIGH"),
+            "StoreID": ColumnSemanticEvidence(column_name="StoreID", candidate_role=ColumnRole.IDENTIFIER, confidence=0.90, confidence_level="HIGH"),
+        },
+    )
+
+    malformed_plan = _make_plan(
+        dataset_id="Sales_2024.csv",
+        metric_col="TotalSales",
+        dimensions=[],
+        visualization=VisualizationType.KPI,
+    ).model_copy(update={
+        "filters": [FilterSpec(column="StoreID", operator="=====", value=101)],
+    })
+
+    # Structural check rejects it before dedup / agreement
+    assert is_plan_structurally_valid(malformed_plan) is False
+
+    # Pass 1a pre-dispatch check flags operator whitelist failure
+    res = validate_pass1a(plan=malformed_plan, semantic_profile=sem_profile)
+    assert res.passed is False
+    assert any(i.check == "filter_operator_whitelist" for i in res.issues)
+
+
+def test_agreement_incorporates_providers_responded_partial_response():
+    """Verify that a solo 1-of-1 response scores lower agreement than full consensus.
+
+    Reflects the Prompt 9/10 partial-response case where Gemini failed due to rate limits
+    and only Groq responded. A solo response (1 of 1) must not achieve the same 1.0 agreement
+    as unanimous consensus (3 of 3).
+    """
+    from intelligence.semantic_analyzer import ColumnSemanticEvidence, ColumnRole
+
+    sem_ev = {
+        "TotalSales": ColumnSemanticEvidence(column_name="TotalSales", candidate_role=ColumnRole.MEASURE, confidence=0.95, confidence_level="HIGH"),
+        "StoreID": ColumnSemanticEvidence(column_name="StoreID", candidate_role=ColumnRole.IDENTIFIER, confidence=0.90, confidence_level="HIGH"),
+    }
+    exec_res = _make_exec_result("p1", columns=["sum_TotalSales"], row_count=1)
+
+    plan_base = _make_plan(metric_col="TotalSales", dimensions=[DimensionSpec(column="StoreID")])
+
+    # Unanimous consensus: 3 of 3 providers responded and agreed
+    full_consensus_plan = plan_base.model_copy(update={"supporting_count": 3, "providers_responded": 3})
+    sb_full = compute_score(full_consensus_plan, exec_res, sem_ev, intent_tokens=["totalsales", "storeid"], coverage_override=0.8)
+
+    # Partial response (Prompt 9/10): only 1 provider responded (Gemini down)
+    partial_plan = plan_base.model_copy(update={"supporting_count": 1, "providers_responded": 1})
+    sb_partial = compute_score(partial_plan, exec_res, sem_ev, intent_tokens=["totalsales", "storeid"], coverage_override=0.8)
+
+    # Solo response must have strictly lower agreement and lower total score than full consensus
+    assert sb_partial.agreement < sb_full.agreement
+    assert sb_partial.agreement == pytest.approx(1.0 * (1 / 3), rel=1e-3)
+    assert sb_full.agreement == pytest.approx(1.0, rel=1e-3)
+    assert sb_partial.total < sb_full.total
+=======
+>>>>>>> main

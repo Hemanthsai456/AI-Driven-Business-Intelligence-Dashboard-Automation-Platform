@@ -18,6 +18,10 @@ from typing import List, Optional, Sequence, Tuple
 
 from orchestrator.config import (
     LOW_COVERAGE_CONFIDENCE_CAP,
+<<<<<<< HEAD
+    MIN_CONSENSUS_RESPONDENTS,
+=======
+>>>>>>> main
     RANK_TIE_EPSILON,
     RANK_W1_EVIDENCE,
     RANK_W2_COVERAGE,
@@ -25,6 +29,7 @@ from orchestrator.config import (
     RANK_W4_ASSUMPTIONS,
     RANK_W5_AGREEMENT,
     RESULT_ROW_CAP,
+    TOTAL_ACTIVE_PROVIDERS,
 )
 from orchestrator.schemas import (
     AggregationType,
@@ -186,7 +191,22 @@ def compute_score(
     coverage = coverage_override if coverage_override is not None else _compute_coverage(plan, intent_tokens)
     stability = _compute_stability(execution_result)
     assumptions = _compute_assumptions(plan)
-    agreement = plan.supporting_count / plan.providers_responded if plan.providers_responded > 0 else 0.0
+    # Agreement calculation incorporating provider response completeness:
+    # A plan backed by 1 of 1 respondent must not score identically to one backed by 3 of 3.
+    # Scaled by (providers_responded / TOTAL_ACTIVE_PROVIDERS) to discount low-quorum responses.
+    total_expected = getattr(weights, "total_active_providers", TOTAL_ACTIVE_PROVIDERS)
+    if total_expected <= 0:
+        total_expected = 3
+
+    if plan.providers_responded > 0:
+        raw_consensus = plan.supporting_count / plan.providers_responded
+        participation_factor = min(1.0, plan.providers_responded / total_expected)
+        agreement = raw_consensus * participation_factor
+    else:
+        agreement = 0.0
+
+    w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
+    agreement_contribution = w5 * agreement * coverage
 
     w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
     agreement_contribution = w5 * agreement * coverage

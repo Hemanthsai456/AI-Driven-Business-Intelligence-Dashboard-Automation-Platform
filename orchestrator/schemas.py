@@ -496,12 +496,17 @@ class Pass2Result(BaseModel):
     Failure triggers runner-up cascade (capped by MAX_CASCADE_DEPTH).
     """
 
-    plan_id: str
+    plan_id: str = ""
     passed: bool
+    reasons: List[str] = Field(default_factory=list)
     issues: List[ValidationIssue] = Field(default_factory=list)
-    cascade_triggered: bool = Field(default=False)
+    cascade_triggered: bool = False
 
     model_config = {"frozen": True}
+
+
+# PassResult alias for Pass 2 output contract
+PassResult = Pass2Result
 
 
 class CandidateConsistencyCheck(BaseModel):
@@ -598,6 +603,7 @@ class OrchestratorTrace(BaseModel):
     context_hash: str
     generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     ambiguity_result: Optional[AmbiguityResult] = None
+    structured_intent: Optional[StructuredIntent] = None
     llm_call_count: int = Field(default=0)
     llm_token_usage: int = Field(default=0)
     llm_latency_seconds: float = Field(default=0.0)
@@ -611,6 +617,10 @@ class OrchestratorTrace(BaseModel):
     pass2_result: Optional[Pass2Result] = None
     consistency_check: Optional[CandidateConsistencyCheck] = None
     total_runtime_seconds: float = Field(default=0.0)
+    candidate_records: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Trace records for all candidates: plan, pass1a, pass1b, score breakdown.",
+    )
 
     model_config = {"frozen": True}
 

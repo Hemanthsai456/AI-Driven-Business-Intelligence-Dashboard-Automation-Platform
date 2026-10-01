@@ -95,7 +95,8 @@ class ResponseCache:
 
     def _get_key(self, provider: str, model: str, prompt: str, context_hash: str) -> str:
         prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()
-        return f"{provider}_{model}_{prompt_hash}_{context_hash}"
+        safe_model = model.replace("/", "_").replace("\\", "_")
+        return f"{provider}_{safe_model}_{prompt_hash}_{context_hash}"
 
     def get(self, provider: str, model: str, prompt: str, context_hash: str) -> Optional[Dict[str, Any]]:
         key = self._get_key(provider, model, prompt, context_hash)
@@ -111,6 +112,7 @@ class ResponseCache:
     def set(self, provider: str, model: str, prompt: str, context_hash: str, data: Dict[str, Any]):
         key = self._get_key(provider, model, prompt, context_hash)
         filepath = os.path.join(self.cache_dir, f"{key}.json")
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w') as f:
             json.dump(data, f)
 
@@ -356,6 +358,7 @@ class MultiProviderGenerator(PlanGenerator):
                         # Failures are logged, never fatal
                         err_log = GeneratorCallLog(
                             model=client.model_name,
+                            provider=client.provider,
                             generator="llm_direct",
                             steps=1,
                             input_tokens=0,
@@ -369,13 +372,17 @@ class MultiProviderGenerator(PlanGenerator):
             if all_plans:
                 break
                 
+        # Reject structurally invalid plans before dedup / agreement scoring
+        from orchestrator.validator import is_plan_structurally_valid
+        valid_plans = [p for p in all_plans if is_plan_structurally_valid(p)]
+
         # Dedupe by plan_signature, aggregate supporting_count and provider lists
         unique_plans: Dict[str, CandidatePlan] = {}
         providers_responded = sum(1 for log in all_logs if log.output_tokens > 0)
         if providers_responded == 0:
             providers_responded = 1
             
-        for plan in all_plans:
+        for plan in valid_plans:
             sig = plan.plan_signature()
             if sig not in unique_plans:
                 unique_plans[sig] = plan.model_copy(update={

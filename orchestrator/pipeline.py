@@ -258,18 +258,34 @@ def run_orchestration_pipeline(
 
     # 6. Step 5: Validation / Execution Coordination
     surviving_candidates: List[Tuple[CandidatePlan, ExecutionResult]] = []
+    candidate_validations: Dict[str, Tuple[Pass1aResult, Pass1bResult]] = {}
+    candidate_records: List[Dict[str, Any]] = []
     pass1a_counts = 0
     pass1b_counts = 0
 
     for cand in candidates:
+<<<<<<< HEAD
+        cand_record: Dict[str, Any] = {
+            "plan_id": cand.plan_id,
+            "metric": f"{cand.metric.aggregation.value}({cand.metric.column})",
+            "dimensions": [d.column for d in cand.dimensions],
+            "visualization": cand.visualization.value,
+        }
+=======
+>>>>>>> main
         # Pass 1a: Pre-dispatch validation
         pass1a_res = validate_pass1a(
             plan=cand,
             semantic_profile=semantic_profile,
             readiness=readiness,
         )
+        cand_record["pass1a"] = {
+            "passed": pass1a_res.passed,
+            "issues": [issue.message for issue in pass1a_res.issues],
+        }
         if not pass1a_res.passed:
             save_candidate_artifact(plan=cand, pass1a=pass1a_res)
+            candidate_records.append(cand_record)
             continue
         pass1a_counts += 1
 
@@ -285,12 +301,21 @@ def run_orchestration_pipeline(
             plan=cand,
             exec_result=exec_res,
         )
+        cand_record["pass1b"] = {
+            "passed": pass1b_res.passed,
+            "row_count": exec_res.row_count,
+            "failed_cast_rate": exec_res.failed_cast_rate,
+            "issues": [issue.message for issue in pass1b_res.issues],
+        }
         if not pass1b_res.passed:
             save_candidate_artifact(plan=cand, pass1a=pass1a_res, execution=exec_res, pass1b=pass1b_res)
+            candidate_records.append(cand_record)
             continue
         pass1b_counts += 1
 
         surviving_candidates.append((cand, exec_res))
+        candidate_validations[cand.plan_id] = (pass1a_res, pass1b_res)
+        candidate_records.append(cand_record)
         save_candidate_artifact(plan=cand, pass1a=pass1a_res, execution=exec_res, pass1b=pass1b_res)
 
     if not surviving_candidates:
@@ -336,13 +361,18 @@ def run_orchestration_pipeline(
         weights=weights,
     )
 
-    # Update candidate artifacts with scores
+    # Update candidate artifacts and records with scores
     for plan, result, score, rank in ranked:
         save_candidate_artifact(
             plan=plan,
             execution=result,
             score=score,
         )
+        for rec in candidate_records:
+            if rec["plan_id"] == plan.plan_id:
+                rec["rank"] = rank
+                rec["score_breakdown"] = score.model_dump()
+                break
 
     # Winner Selection with Pass 2 Cascade
     try:
@@ -355,6 +385,13 @@ def run_orchestration_pipeline(
             ranker_weights=weights,
             consistency_check=consistency,
             max_cascade_depth=max_cascade_depth,
+            structured_intent=structured_intent,
+            ambiguity_result=ambiguity,
+            candidate_records=candidate_records,
+            plans_generated=len(candidates),
+            plans_passed_pass1a=pass1a_counts,
+            plans_passed_pass1b=pass1b_counts,
+            candidate_validations=candidate_validations,
         )
     except WinnerSelectionError as e:
         emit_decision_log(

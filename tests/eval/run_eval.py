@@ -1,9 +1,19 @@
+<<<<<<< HEAD
+"""Synthetic regression harness for ranker and validation logic.
+
+This suite tests ranker/validation logic against scripted candidate sets.
+It does not measure real LLM provider behavior.
+
+For empirical multi-provider evaluation using live LLM provider calls,
+see tests/eval/run_real_eval.py and tests/eval/real_results.md.
+=======
 """Evaluation runner for LLM-driven query orchestration pipeline.
 
 Loads tests/eval/prompts.jsonl, executes each prompt through the full orchestrator
 pipeline with all 3 model providers (Gemini, Groq, Ollama), evaluates winning plan signatures
 against acceptable gold signatures, tracks multi-provider agreement scores, and produces
 a detailed markdown report in tests/eval/results.md.
+>>>>>>> main
 """
 
 from __future__ import annotations
@@ -78,11 +88,20 @@ def canonical_signature(plan: CandidatePlan) -> str:
     return base
 
 
+<<<<<<< HEAD
+class SyntheticRankerRegressionHarness(PlanGenerator):
+    """Synthetic multi-provider harness simulating candidate generation.
+
+    Emits deterministic candidate plans per provider to test ranker, validation,
+    consensus aggregation, and disambiguation logic against controlled scenarios.
+    Does NOT call real LLM APIs.
+=======
 class EvalMultiProviderGenerator(PlanGenerator):
     """Multi-provider generator simulating 3 models (Gemini, Groq, Ollama).
 
     Emits realistic, deterministic candidate plans per provider to rigorously test
     consensus, disambiguation, and the agreement-on-wrong-answer risk.
+>>>>>>> main
     """
 
     def __init__(self):
@@ -569,10 +588,17 @@ def main():
     with open(prompts_path, "r", encoding="utf-8") as f:
         prompts = [json.loads(line) for line in f if line.strip()]
 
+<<<<<<< HEAD
+    generator = SyntheticRankerRegressionHarness()
+    results = []
+
+    print(f"Starting regression run of {len(prompts)} prompts against synthetic candidate harness...")
+=======
     generator = EvalMultiProviderGenerator()
     results = []
 
     print(f"Starting evaluation of {len(prompts)} prompts across 3 providers...")
+>>>>>>> main
 
     for idx, item in enumerate(prompts, 1):
         prompt_text = item["prompt"]
@@ -624,7 +650,11 @@ def main():
     high_agreement_wrong_rate = (consensus_wrong / consensus_total) if consensus_total > 0 else 0.0
 
     print("\n" + "=" * 60)
+<<<<<<< HEAD
+    print(f"SYNTHETIC REGRESSION COMPLETE: {passed_count}/{total} passed ({accuracy:.1f}% accuracy)")
+=======
     print(f"EVALUATION COMPLETE: {passed_count}/{total} passed ({accuracy:.1f}% accuracy)")
+>>>>>>> main
     print(f"Consensus Count (Agreement = 1.0): {consensus_total}/{total}")
     print(f"  - Consensus on Correct Signature: {consensus_correct}")
     print(f"  - Consensus on WRONG Signature:   {consensus_wrong} (Agreement-on-Wrong-Answer Risk)")
@@ -633,7 +663,13 @@ def main():
 
     # Generate Markdown Report
     md = []
+<<<<<<< HEAD
+    md.append("# Synthetic Ranker & Validation Regression Report\n")
+    md.append("> [!NOTE]")
+    md.append("> **Harness Scope**: This suite tests ranker/validation logic against scripted candidate sets. It does not measure real LLM provider behavior. For live multi-model evaluation, see [real_results.md](real_results.md).\n")
+=======
     md.append("# Orchestrator Multi-Provider Benchmark Evaluation Report\n")
+>>>>>>> main
     md.append(f"**Total Prompts**: {total}  ")
     md.append(f"**Passed**: {passed_count} / {total}  ")
     md.append(f"**Overall Accuracy**: {accuracy:.1f}%  ")
