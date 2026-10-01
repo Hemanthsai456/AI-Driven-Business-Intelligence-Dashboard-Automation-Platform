@@ -51,6 +51,7 @@ RANK_W4_ASSUMPTIONS: float = 0.15 # count of defaults filled without request sup
 RANK_W5_AGREEMENT: float = 0.10   # multi-provider agreement weight
 
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
 # Ranker V1 — Multi-Provider Response Completeness & Quorum
 # ---------------------------------------------------------------------------
 # Expected total providers in the consensus pool.
@@ -63,6 +64,8 @@ TOTAL_ACTIVE_PROVIDERS: int = 3
 MIN_CONSENSUS_RESPONDENTS: int = 2
 
 # ---------------------------------------------------------------------------
+=======
+>>>>>>> main
 # Ranker V1 — Low Coverage Confidence Cap (PROVISIONAL)
 # ---------------------------------------------------------------------------
 # Minimum coverage required before a candidate can achieve an un-capped score.

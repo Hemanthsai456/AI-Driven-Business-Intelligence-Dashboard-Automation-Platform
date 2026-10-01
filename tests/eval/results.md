@@ -1,7 +1,11 @@
+<<<<<<< HEAD
 # Synthetic Ranker & Validation Regression Report
 
 > [!NOTE]
 > **Harness Scope**: This suite tests ranker/validation logic against scripted candidate sets. It does not measure real LLM provider behavior. For live multi-model evaluation, see [real_results.md](real_results.md).
+=======
+# Orchestrator Multi-Provider Benchmark Evaluation Report
+>>>>>>> main
 
 **Total Prompts**: 22  
 **Passed**: 20 / 22  

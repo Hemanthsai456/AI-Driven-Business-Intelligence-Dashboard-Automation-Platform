@@ -18,7 +18,10 @@ from typing import List, Optional, Sequence, Tuple
 
 from orchestrator.config import (
     LOW_COVERAGE_CONFIDENCE_CAP,
+<<<<<<< HEAD
     MIN_CONSENSUS_RESPONDENTS,
+=======
+>>>>>>> main
     RANK_TIE_EPSILON,
     RANK_W1_EVIDENCE,
     RANK_W2_COVERAGE,
@@ -201,6 +204,9 @@ def compute_score(
         agreement = raw_consensus * participation_factor
     else:
         agreement = 0.0
+
+    w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
+    agreement_contribution = w5 * agreement * coverage
 
     w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
     agreement_contribution = w5 * agreement * coverage

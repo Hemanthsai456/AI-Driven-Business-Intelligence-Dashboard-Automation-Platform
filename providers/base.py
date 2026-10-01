@@ -72,14 +72,20 @@ class LLMClient(ABC):
 
     def _execute_with_retries(self, func, *args, **kwargs):
         """Execute a function with exponential backoff for 429 rate limit errors."""
+<<<<<<< HEAD
         import re
         max_retries = 4
         base_delay = 2.0
+=======
+        max_retries = 3
+        base_delay = 1.0
+>>>>>>> main
         for attempt in range(max_retries):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 err_str = str(e).lower()
+<<<<<<< HEAD
                 if any(k in err_str for k in ("429", "too many requests", "resource_exhausted", "503", "unavailable")):
                     if attempt == max_retries - 1:
                         raise LLMClientError(f"{self.provider} transient error / rate limit exceeded: {e}")
@@ -92,6 +98,12 @@ class LLMClient(ABC):
                     else:
                         sleep_secs = base_delay * (2 ** attempt)
                     time.sleep(sleep_secs)
+=======
+                if "429" in err_str or "too many requests" in err_str:
+                    if attempt == max_retries - 1:
+                        raise LLMClientError(f"{self.provider} rate limit exceeded: {e}")
+                    time.sleep(base_delay * (2 ** attempt))
+>>>>>>> main
                 else:
                     raise e
         raise LLMClientError("Max retries exceeded")

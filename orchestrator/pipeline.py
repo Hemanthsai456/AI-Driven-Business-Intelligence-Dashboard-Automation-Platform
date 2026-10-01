@@ -264,12 +264,15 @@ def run_orchestration_pipeline(
     pass1b_counts = 0
 
     for cand in candidates:
+<<<<<<< HEAD
         cand_record: Dict[str, Any] = {
             "plan_id": cand.plan_id,
             "metric": f"{cand.metric.aggregation.value}({cand.metric.column})",
             "dimensions": [d.column for d in cand.dimensions],
             "visualization": cand.visualization.value,
         }
+=======
+>>>>>>> main
         # Pass 1a: Pre-dispatch validation
         pass1a_res = validate_pass1a(
             plan=cand,
