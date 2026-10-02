@@ -17,7 +17,7 @@ It operates without any LLM calls and uses only structured, deterministic scorin
 
 ```
 agreement_contribution = w5 * agreement * coverage
-score = w1 * evidence + w2 * coverage + w3 * stability + agreement_contribution - w4 * assumptions
+score = w1 * evidence + w2 * coverage + w3 * stability + agreement_contribution - w4 * assumptions - failed_cast_penalty
 ```
 
 All weights and caps are **project decisions (configurable hypotheses)** logged alongside
@@ -30,7 +30,7 @@ initial design choices subject to revision.
 | :--- | :--- | ---: | :--- |
 | `RANK_W1_EVIDENCE` | w1 | 0.35 | Mean role confidence of columns used |
 | `RANK_W2_COVERAGE` | w2 | 0.30 | Fraction of request terms mapped to plan fields |
-| `RANK_W3_STABILITY` | w3 | 0.20 | Result agreement under small perturbations (V1 proxy) |
+| `RANK_W3_STABILITY` | w3 | 0.20 | Robustness across interpretations (perturbation agreement) |
 | `RANK_W4_ASSUMPTIONS` | w4 | 0.15 | Penalty for defaults filled without request support |
 | `RANK_W5_AGREEMENT` | w5 | 0.10 | Multi-provider agreement weight (gated by coverage) |
 | `LOW_COVERAGE_CONFIDENCE_CAP` | - | 0.40 | **PROVISIONAL**: Score cap & tie threshold when coverage is low |
@@ -67,16 +67,29 @@ coverage = count(tokens in intent that appear in plan_text) / total_tokens
 - Coverage is capped at 1.0.
 - Empty intent tokens → coverage = 0.0.
 
-### 3.3 Stability Score (V1 Proxy)
+### 3.3 Robustness Across Interpretations (replaces V1 stability proxy)
 
-True perturbation stability (running adjacent granularity variants) is deferred to Stage 7.
+For a candidate plan, a perturbation set is built at runtime from the ambiguity result and column roles:
+- Alternate compatible `MEASURE` columns
+- Alternate aggregations (`SUM`/`AVG`/`MEDIAN` where valid)
+- Adjacent temporal granularities (`HOUR` <-> `DAY` <-> `WEEK` <-> `MONTH` <-> `QUARTER` <-> `YEAR`)
+- Alternate compatible dimensions (e.g. from `MULTIPLE_DATE_COLUMNS`)
 
-V1 proxy uses execution quality signals:
-- **Base:** 1.0 for SUCCESS status.
-- **Penalty 1:** Subtract `failed_cast_rate` (high cast failure → less stable).
-- **Penalty 2:** Subtract 0.2 if `row_count < 2` (near-empty results have low signal stability).
-- **Timeout/Error:** Stability = 0.0.
-- Clamped to [0.0, 1.0].
+Nothing is hardcoded by dataset. Each variant is executed through the existing compiler, executor, and Pass 1.
+
+The candidate's claim is its result ordering over the dimension (top-1 group and full ranking). Variants use different metrics with different scales, so ranks are compared, never raw values.
+
+```
+variant_score = max(0.0, 0.5 * top1_agreement + 0.5 * spearman_rank_correlation)
+robustness = mean over valid variants of variant_score
+coverage_of_test = valid_variants / attempted_variants
+```
+
+- Variants that fail execution or validation are excluded and counted in `variants_failed`.
+- If fewer than 2 valid variants exist: `robustness = None` with `status="UNTESTED"`. It never defaults to 1.0, because untested is not robust.
+- When `status="UNTESTED"`, the stability term contributes 0.0 to the weighted total score.
+- `failed_cast_rate` is maintained as a separate quality penalty (`failed_cast_penalty = execution_result.failed_cast_rate`) subtracted directly from the score.
+- Per-candidate trace records: variants attempted, valid, failed (with reasons), per-variant top-1 match and Spearman, and the final robustness.
 
 ### 3.4 Assumption Penalty
 

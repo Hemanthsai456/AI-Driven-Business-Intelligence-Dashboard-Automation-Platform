@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 :root {
-  /* Stage 4b Item 10 Design Tokens */
+  /* Light Mode Tokens */
+  --bg: #F7F8FA;
   --background: #F7F8FA;
   --surface: #FFFFFF;
   --surface-elevated: #FFFFFF;
@@ -12,53 +13,116 @@
   --border: #E3E7EC;
   --border-strong: #CBD2D9;
 
-  --foreground: #1F2A37;
   --text: #1F2A37;
-  --text-muted: #6B7785;
-  --muted-foreground: #6B7785;
+  --foreground: #1F2A37;
+  --muted: #5F6B7A;
+  --text-muted: #5F6B7A;
+  --muted-foreground: #5F6B7A;
 
-  /* Primary (Muted Teal) */
   --primary: #2F7F7A;
   --primary-hover: #276A66;
   --primary-soft: #E6F1F0;
   --primary-foreground: #FFFFFF;
 
-  /* Attention (Amber) */
-  --attention: #C98A2B;
+  --attention: #8A5A12;
   --attention-soft: #FBF3E4;
-  --attention-foreground: #1F2A37;
-  --warning: #C98A2B;
-  --warning-foreground: #1F2A37;
+  --attention-foreground: #8A5A12;
+  --warning: #8A5A12;
+  --warning-soft: #FBF3E4;
+  --warning-foreground: #8A5A12;
 
-  /* Error & Success (Muted) */
   --error: #B4534B;
   --error-soft: #FDF2F2;
   --error-foreground: #FFFFFF;
   --danger: #B4534B;
-  --danger-foreground: #FFFFFF;
+  --danger-soft: #FDF2F2;
 
   --success: #4C8B6B;
   --success-soft: #F0FDF4;
   --success-foreground: #FFFFFF;
 
-  /* Chart Palette Tokens */
+  /* Chart Series (Both Modes) */
   --chart-1: #2F7F7A;
   --chart-2: #5B7C99;
   --chart-3: #C9A66B;
   --chart-4: #B56576;
   --chart-5: #9AA5B1;
 
-  /* Geometry & Layout */
   --radius-card: 10px;
 }
 
+.dark {
+  /* Dark Mode Tokens */
+  --bg: #12171C;
+  --background: #12171C;
+  --surface: #1A2128;
+  --surface-elevated: #222B34;
+  --surface-muted: #242D36;
+
+  --border: #2A333C;
+  --border-strong: #3A4652;
+
+  --text: #E6EAEE;
+  --foreground: #E6EAEE;
+  --muted: #98A3AF;
+  --text-muted: #98A3AF;
+  --muted-foreground: #98A3AF;
+
+  --primary: #4FA39D;
+  --primary-hover: #5BB3AD;
+  --primary-soft: #1E3533;
+  --primary-foreground: #FFFFFF;
+
+  --attention: #D9A441;
+  --attention-soft: #33291A;
+  --attention-foreground: #D9A441;
+  --warning: #D9A441;
+  --warning-soft: #33291A;
+  --warning-foreground: #D9A441;
+
+  --error: #D96B62;
+  --error-soft: #2E1A18;
+  --error-foreground: #FFFFFF;
+  --danger: #D96B62;
+  --danger-soft: #2E1A18;
+
+  --success: #4EA37E;
+  --success-soft: #162B21;
+  --success-foreground: #FFFFFF;
+
+  /* Chart Series (Both Modes) */
+  --chart-1: #2F7F7A;
+  --chart-2: #5B7C99;
+  --chart-3: #C9A66B;
+  --chart-4: #B56576;
+  --chart-5: #9AA5B1;
+}
+
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Focus ring standard */
+*:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Scrollbar styling */
@@ -74,5 +138,5 @@ body {
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  background: var(--muted);
 }

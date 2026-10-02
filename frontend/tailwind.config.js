@@ -8,8 +8,9 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        background: 'var(--background)',
-        foreground: 'var(--foreground)',
+        bg: 'var(--bg)',
+        background: 'var(--bg)',
+        foreground: 'var(--text)',
         surface: {
           DEFAULT: 'var(--surface)',
           elevated: 'var(--surface-elevated)',
@@ -42,7 +43,7 @@ module.exports = {
         },
         muted: {
           DEFAULT: 'var(--surface-muted)',
-          foreground: 'var(--muted-foreground)',
+          foreground: 'var(--muted)',
         },
         chart: {
           1: 'var(--chart-1)',
@@ -61,10 +62,18 @@ module.exports = {
         xl: '12px',
       },
       fontSize: {
-        '2xs': '0.6875rem',
+        'xs': ['12px', { lineHeight: '16px' }],
+        'sm': ['14px', { lineHeight: '20px' }],
+        'base': ['16px', { lineHeight: '24px' }],
+        'xl': ['20px', { lineHeight: '28px' }],
+        '2xl': ['28px', { lineHeight: '36px' }],
+        'section': ['20px', { lineHeight: '28px' }],
+        'page-title': ['28px', { lineHeight: '36px' }],
+        '2xs': ['11px', { lineHeight: '14px' }],
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+        card: '0 1px 2px 0 rgba(0, 0, 0, 0.04)',
+        xs: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
         none: 'none',
       },
     },

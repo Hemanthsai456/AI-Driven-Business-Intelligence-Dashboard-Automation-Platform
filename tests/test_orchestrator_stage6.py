@@ -484,7 +484,8 @@ def test_ranker_low_coverage_confidence_cap_forces_tie():
     plan = plan.model_copy(update={"supporting_count": 3, "providers_responded": 3})
 
     # Coverage 0.2 < LOW_COVERAGE_CONFIDENCE_CAP (0.40)
-    sb = compute_score(plan, exec_res, sem_ev, intent_tokens=[], coverage_override=0.2)
+    # Stage A: Pass stability_override=0.8 so un-capped score > 0.40 to test the cap
+    sb = compute_score(plan, exec_res, sem_ev, intent_tokens=[], coverage_override=0.2, stability_override=0.8)
     assert sb.total <= LOW_COVERAGE_CONFIDENCE_CAP
     assert sb.total == LOW_COVERAGE_CONFIDENCE_CAP
 

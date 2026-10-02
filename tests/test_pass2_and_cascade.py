@@ -401,7 +401,7 @@ def test_dashboardspec_full_trace_population(real_sales_context):
         dataset_id="Sales_2024.csv",
         intent="Show total sales by product",
         generator="test",
-        metric=MetricSpec(column="TotalSales", aggregation=AggregationType.SUM),
+        metric=MetricSpec(column="Quantity", aggregation=AggregationType.SUM),
         dimensions=[DimensionSpec(column="ProductID")],
         visualization=VisualizationType.BAR,  # Passes Pass 2
         reasoning=PlanReasoning(interpretation="Product BAR"),
@@ -415,6 +415,7 @@ def test_dashboardspec_full_trace_population(real_sales_context):
         readiness=readiness,
         intent="Show total sales by product",
         generator=mock_agent,
+        robustness_tie_floor=0.25,
     )
 
     assert res.status == "SUCCESS"

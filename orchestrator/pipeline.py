@@ -26,17 +26,22 @@ from intelligence.profiler import DataProfile
 from intelligence.schema_validator import AnalysisReadiness, ReadinessStatus
 from intelligence.semantic_analyzer import DatasetSemanticProfile
 from orchestrator.ambiguity import AmbiguityResult, assess_ambiguity, is_blocking_ambiguity
+import time
 from orchestrator.config import (
     AI_MAX_RETRIES,
     GENERATOR_MODE,
+    LOW_COVERAGE_CONFIDENCE_CAP,
     MAX_CASCADE_DEPTH,
     MAX_K,
+    RANK_TIE_EPSILON,
     RANK_W1_EVIDENCE,
     RANK_W2_COVERAGE,
     RANK_W3_STABILITY,
     RANK_W4_ASSUMPTIONS,
     RANK_W5_AGREEMENT,
+    ROBUSTNESS_TIE_FLOOR,
 )
+from orchestrator.run_store import StoredRun, default_run_store
 from orchestrator.context_builder import build_llm_context
 from orchestrator.generator import (
     ExternalAgentGenerator,
@@ -88,6 +93,8 @@ class OrchestrationPipelineResult:
     explainability_log_entry: Optional[Dict[str, Any]] = None
     clarification_options: Optional[List[Dict[str, Any]]] = None
     cached_candidates: Optional[List[CandidatePlan]] = None
+    options: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
 
 
 def get_default_llm_client() -> LLMClient:
@@ -119,6 +126,8 @@ def run_orchestration_pipeline(
     require_clarification: bool = False,
     chosen_plan_id: Optional[str] = None,
     existing_candidates: Optional[List[CandidatePlan]] = None,
+    robustness_tie_floor: float = ROBUSTNESS_TIE_FLOOR,
+    rank_tie_epsilon: float = RANK_TIE_EPSILON,
 ) -> OrchestrationPipelineResult:
     """Execute the full 6-step cognitive analytical orchestration pipeline.
 
@@ -377,9 +386,38 @@ def run_orchestration_pipeline(
         semantic_evidences=semantic_evidences,
         intent_tokens=intent_tokens,
         weights=weights,
+        dataset=dataset,
+        semantic_profile=semantic_profile,
+        ambiguity_result=ambiguity,
     )
 
+    # Helper for formatting candidate options in clarification responses
+    def _format_clarification_option(p: CandidatePlan, r: ExecutionResult, s: ScoreBreakdown) -> Dict[str, Any]:
+        dims = [d.column for d in p.dimensions]
+        dim_str = dims[0] if len(dims) == 1 else (", ".join(dims) if dims else "None")
+        interpretation = (
+            p.reasoning.interpretation
+            if p.reasoning and p.reasoning.interpretation
+            else f"{p.metric.aggregation.value} of {p.metric.column}{' by ' + ', '.join(dims) if dims else ''}"
+        )
+        return {
+            "plan_id": p.plan_id,
+            "interpretation": interpretation,
+            "metric": p.metric.column,
+            "dimension": dim_str,
+            "dimensions": dims,
+            "aggregation": p.metric.aggregation.value,
+            "score": round(s.total, 4),
+            "robustness": round(s.stability, 4) if s.stability is not None else None,
+            "label": f"{p.metric.aggregation.value} of {p.metric.column}{' by ' + ', '.join(dims) if dims else ''}",
+            "description": interpretation,
+            "coverage": round(s.coverage, 4),
+            "evidence": round(s.evidence, 4),
+            "visualization": p.visualization.value,
+        }
+
     # If chosen_plan_id was provided in a follow-up call, prioritize it as rank-1 winner
+    is_user_resolved = False
     if chosen_plan_id:
         chosen_match = next((t for t in ranked if t[0].plan_id == chosen_plan_id), None)
         if chosen_match:
@@ -389,32 +427,106 @@ def run_orchestration_pipeline(
                 re_ranked.append((item[0], item[1], item[2], idx))
             ranked = re_ranked
             is_tie = False
-    elif require_clarification:
-        top_coverage = ranked[0][2].coverage if ranked else 0.0
-        is_low_coverage = top_coverage < 0.35
-        if is_tie or is_low_coverage:
-            clarification_opts = [
-                {
-                    "plan_id": plan.plan_id,
-                    "label": f"{plan.metric.aggregation.value} of {plan.metric.column} by {', '.join(d.column for d in plan.dimensions)}",
-                    "description": plan.reasoning.interpretation if plan.reasoning else f"Aggregate {plan.metric.column}",
-                    "score": round(score.total, 4),
-                    "coverage": round(score.coverage, 4),
-                    "evidence": round(score.evidence, 4),
-                    "visualization": plan.visualization.value,
-                }
-                for plan, result, score, rank in ranked
+            is_user_resolved = True
+
+    # Tie check:
+    # A tie is any of:
+    # 1. top-two score gap < RANK_TIE_EPSILON
+    # 2. winner robustness below configurable floor (ROBUSTNESS_TIE_FLOOR)
+    # 3. coverage below LOW_COVERAGE_CONFIDENCE_CAP
+    if not is_user_resolved and len(ranked) >= 2:
+        top_score = ranked[0][2].total
+        second_score = ranked[1][2].total
+        score_gap_tie = abs(top_score - second_score) < rank_tie_epsilon
+        winner_robustness = ranked[0][2].stability
+        robustness_tie = (
+            winner_robustness is not None
+            and winner_robustness < robustness_tie_floor
+        )
+        winner_coverage = ranked[0][2].coverage
+        coverage_tie = (
+            winner_coverage < LOW_COVERAGE_CONFIDENCE_CAP
+        )
+
+        is_tie = score_gap_tie or robustness_tie or coverage_tie
+
+        if is_tie:
+            # Determine tied candidates to present as clarification options
+            if score_gap_tie:
+                tied_tuples = [t for t in ranked if abs(top_score - t[2].total) < rank_tie_epsilon]
+            else:
+                tied_tuples = list(ranked)
+
+            if len(tied_tuples) < 2 and len(ranked) >= 2:
+                tied_tuples = list(ranked)
+
+            options = [
+                _format_clarification_option(plan, res, score)
+                for plan, res, score, _ in tied_tuples
             ]
+
+            # Save candidate artifacts and records before returning
+            for plan, result, score, rank in ranked:
+                save_candidate_artifact(
+                    plan=plan,
+                    execution=result,
+                    score=score,
+                )
+                for rec in candidate_records:
+                    if rec["plan_id"] == plan.plan_id:
+                        rec["rank"] = rank
+                        rec["score_breakdown"] = score.model_dump()
+                        rec["robustness"] = {
+                            "variants_attempted": score.variants_attempted,
+                            "variants_valid": score.variants_valid,
+                            "variants_failed": score.variants_failed,
+                            "variant_details": score.variant_details,
+                            "coverage_of_test": score.coverage_of_test,
+                            "robustness": score.stability,
+                            "status": score.stability_status,
+                        }
+                        break
+
+            run_id = str(uuid4())
+            stored_run = StoredRun(
+                run_id=run_id,
+                created_at=time.time(),
+                dataset=dataset,
+                semantic_profile=semantic_profile,
+                readiness=readiness,
+                intent=intent,
+                context_hash=context.context_hash,
+                ranked_candidates=ranked,
+                candidate_records=candidate_records,
+                generator_logs=generator_logs,
+                weights=weights,
+                consistency=consistency,
+                structured_intent=structured_intent,
+                ambiguity=ambiguity,
+                interpretations=interpretations,
+                plans_generated=len(candidates),
+                pass1a_counts=pass1a_counts,
+                pass1b_counts=pass1b_counts,
+                candidate_validations=candidate_validations,
+                max_cascade_depth=max_cascade_depth,
+                options=options,
+                status="NEEDS_CLARIFICATION",
+            )
+            default_run_store.save_run(stored_run)
+
             return OrchestrationPipelineResult(
                 status="NEEDS_CLARIFICATION",
-                message="Multiple candidate interpretations tied or have low coverage; user clarification required.",
-                clarification_options=clarification_opts,
+                message="Multiple candidate interpretations tied or confidence is low; user clarification required.",
+                dashboard_spec=None,
+                options=options,
+                clarification_options=options,
                 cached_candidates=[p for p, _, _, _ in ranked],
                 ranked_candidates=ranked,
-                is_tie=is_tie,
+                is_tie=True,
                 ambiguity=ambiguity,
                 structured_intent=structured_intent,
                 interpretations=interpretations,
+                run_id=run_id,
             )
 
     # Update candidate artifacts and records with scores
@@ -428,6 +540,15 @@ def run_orchestration_pipeline(
             if rec["plan_id"] == plan.plan_id:
                 rec["rank"] = rank
                 rec["score_breakdown"] = score.model_dump()
+                rec["robustness"] = {
+                    "variants_attempted": score.variants_attempted,
+                    "variants_valid": score.variants_valid,
+                    "variants_failed": score.variants_failed,
+                    "variant_details": score.variant_details,
+                    "coverage_of_test": score.coverage_of_test,
+                    "robustness": score.stability,
+                    "status": score.stability_status,
+                }
                 break
 
     # Winner Selection with Pass 2 Cascade
@@ -448,6 +569,8 @@ def run_orchestration_pipeline(
             plans_passed_pass1a=pass1a_counts,
             plans_passed_pass1b=pass1b_counts,
             candidate_validations=candidate_validations,
+            resolved_by="user" if is_user_resolved else None,
+            semantic_profile=semantic_profile,
         )
     except WinnerSelectionError as e:
         emit_decision_log(

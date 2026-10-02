@@ -16,7 +16,7 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from orchestrator.config import (
     RANK_W1_EVIDENCE,
@@ -120,7 +120,7 @@ def emit_explainability_log(
             "score_breakdown": {
                 "evidence": round(score.evidence, 4),
                 "coverage": round(score.coverage, 4),
-                "stability": round(score.stability, 4),
+                "stability": round(score.stability, 4) if score.stability is not None else None,
                 "assumptions": round(score.assumptions, 4),
             },
         })

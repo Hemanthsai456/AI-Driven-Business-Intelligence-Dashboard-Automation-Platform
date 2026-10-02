@@ -116,7 +116,7 @@ export default function PlanRunnerPage() {
       {/* Header */}
       <div className="pb-2 border-b border-border">
         <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-[#EA6928]" />
+          <Terminal className="w-5 h-5 text-primary" />
           Plan Runner
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -155,7 +155,7 @@ export default function PlanRunnerPage() {
                 <select
                   value={selectedDatasetId}
                   onChange={(e) => handleDatasetChange(e.target.value)}
-                  className="w-full text-xs bg-surface border border-border rounded px-2.5 py-1.5 text-foreground font-mono focus:outline-none focus:border-[#EA6928]"
+                  className="w-full text-xs bg-surface border border-border rounded px-2.5 py-1.5 text-foreground font-mono focus:outline-none focus:border-primary"
                 >
                   {datasets.map((d) => (
                     <option key={d.dataset_id} value={d.dataset_id}>
@@ -173,7 +173,7 @@ export default function PlanRunnerPage() {
                   value={planJson}
                   onChange={(e) => setPlanJson(e.target.value)}
                   rows={13}
-                  className="w-full text-xs font-mono bg-surface border border-border rounded p-2.5 text-foreground focus:outline-none focus:border-[#EA6928] leading-relaxed"
+                  className="w-full text-xs font-mono bg-surface border border-border rounded p-2.5 text-foreground focus:outline-none focus:border-primary leading-relaxed"
                   spellCheck={false}
                 />
               </div>
@@ -213,10 +213,10 @@ export default function PlanRunnerPage() {
                 <div
                   className={`w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs font-bold ${
                     pass1aPassed === true
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-success text-white'
                       : pass1aPassed === false
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-[#E6D4B8] text-muted-foreground'
+                      ? 'bg-error text-white'
+                      : 'bg-surface-muted text-muted-foreground'
                   }`}
                 >
                   {pass1aPassed === true ? '✓' : pass1aPassed === false ? '✕' : '1'}
@@ -244,10 +244,10 @@ export default function PlanRunnerPage() {
                 <div
                   className={`w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs font-bold ${
                     executionSuccess === true
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-success text-white'
                       : runResponse?.execution?.status && runResponse.execution.status !== 'SUCCESS'
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-[#E6D4B8] text-muted-foreground'
+                      ? 'bg-error text-white'
+                      : 'bg-surface-muted text-muted-foreground'
                   }`}
                 >
                   {executionSuccess === true ? '✓' : runResponse?.execution?.status ? '✕' : '2'}
@@ -272,7 +272,7 @@ export default function PlanRunnerPage() {
                     Executes with sandbox limits: 256MB RAM cap, 1 worker thread, 30s timeout.
                   </p>
                   {runResponse?.execution?.runtime_seconds !== undefined && (
-                    <div className="text-2xs text-[#EA6928] mt-1 font-semibold">
+                    <div className="text-2xs text-primary mt-1 font-semibold">
                       Runtime: {(runResponse.execution.runtime_seconds * 1000).toFixed(1)}ms
                     </div>
                   )}
@@ -286,10 +286,10 @@ export default function PlanRunnerPage() {
                 <div
                   className={`w-6 h-6 rounded flex items-center justify-center shrink-0 text-xs font-bold ${
                     pass1bPassed === true
-                      ? 'bg-emerald-600 text-white'
+                      ? 'bg-success text-white'
                       : pass1bPassed === false
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-[#E6D4B8] text-muted-foreground'
+                      ? 'bg-error text-white'
+                      : 'bg-surface-muted text-muted-foreground'
                   }`}
                 >
                   {pass1bPassed === true ? '✓' : pass1bPassed === false ? '✕' : '3'}
@@ -315,7 +315,7 @@ export default function PlanRunnerPage() {
           {/* Compiled SQL Query */}
           {runResponse?.execution?.compiled_sql && (
             <Card title="Compiled SQL" subtitle="Generated DuckDB query">
-              <pre className="p-3 bg-[#E6D4B8]/30 rounded text-2xs font-mono text-foreground overflow-x-auto border border-border">
+              <pre className="p-3 bg-surface-muted/50 rounded-card text-2xs font-mono text-foreground overflow-x-auto border border-border">
                 <code>{runResponse.execution.compiled_sql}</code>
               </pre>
             </Card>
@@ -331,7 +331,7 @@ export default function PlanRunnerPage() {
               <div className="overflow-x-auto max-h-60">
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
-                    <tr className="border-b border-border bg-[#E6D4B8]/40 text-2xs uppercase text-muted-foreground">
+                    <tr className="border-b border-border bg-surface-muted/60 text-2xs uppercase text-muted-foreground">
                       {runResponse.execution.columns.map((c) => (
                         <th key={c} className="py-2 px-3 font-semibold text-foreground">
                           {c}
@@ -341,10 +341,10 @@ export default function PlanRunnerPage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {runResponse.execution.rows.slice(0, 8).map((r, i) => (
-                      <tr key={i} className="hover:bg-[#E6D4B8]/20">
+                      <tr key={i} className="hover:bg-surface-muted/30">
                         {runResponse.execution!.columns.map((c) => (
                           <td key={c} className="py-1.5 px-3 text-muted-foreground whitespace-nowrap">
-                            {r[c] !== null && r[c] !== undefined ? String(r[c]) : <span className="text-rose-600 italic">null</span>}
+                            {r[c] !== null && r[c] !== undefined ? String(r[c]) : <span className="text-error italic">null</span>}
                           </td>
                         ))}
                       </tr>

@@ -81,11 +81,26 @@ from orchestrator.schemas import (
     ValidationIssue,
     ValidationStatus,
     VisualizationType,
+    PanelType,
+    DashboardPanel,
+)
+from orchestrator.panels import (
+    build_dashboard_panels,
+    generate_headline_insight,
+    select_main_chart_panel,
+    build_robustness_heatmap_panel,
+    build_alternates_panel,
+    build_table_panel,
 )
 from orchestrator.utils import (
     check_candidate_output_consistency,
     compute_score,
     rank_candidates,
+)
+from orchestrator.robustness import (
+    RobustnessEvaluation,
+    evaluate_robustness,
+    generate_perturbations,
 )
 from orchestrator.validator import (
     validate_pass1a,
@@ -104,6 +119,16 @@ from orchestrator.logger import (
 from orchestrator.pipeline import (
     OrchestrationPipelineResult,
     run_orchestration_pipeline,
+)
+from orchestrator.run_store import (
+    PlanNotFoundError,
+    RunExpiredError,
+    RunNotFoundError,
+    RunResolveError,
+    RunStore,
+    StoredRun,
+    default_run_store,
+    resolve_pipeline_run,
 )
 
 __all__ = [
@@ -171,6 +196,14 @@ __all__ = [
     "CandidateConsistencyCheck",
     "OrchestratorTrace",
     "DashboardSpec",
+    "PanelType",
+    "DashboardPanel",
+    "build_dashboard_panels",
+    "generate_headline_insight",
+    "select_main_chart_panel",
+    "build_robustness_heatmap_panel",
+    "build_alternates_panel",
+    "build_table_panel",
     "GeneratorCallLog",
     # Validation & Ranking
     "validate_pass1a",
@@ -179,6 +212,9 @@ __all__ = [
     "check_candidate_output_consistency",
     "rank_candidates",
     "compute_score",
+    "RobustnessEvaluation",
+    "evaluate_robustness",
+    "generate_perturbations",
     "select_winner",
     "WinnerSelectionError",
     # Logging & Pipeline
@@ -187,4 +223,12 @@ __all__ = [
     "emit_explainability_log",
     "run_orchestration_pipeline",
     "OrchestrationPipelineResult",
+    "resolve_pipeline_run",
+    "RunStore",
+    "StoredRun",
+    "RunResolveError",
+    "RunNotFoundError",
+    "RunExpiredError",
+    "PlanNotFoundError",
+    "default_run_store",
 ]

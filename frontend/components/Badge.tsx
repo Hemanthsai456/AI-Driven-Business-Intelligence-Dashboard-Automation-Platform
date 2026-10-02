@@ -16,23 +16,23 @@ export const Badge: React.FC<BadgeProps> = ({
   className = '',
 }) => {
   const variantStyles = {
-    teal: 'bg-[#E6F1F0] text-[#2F7F7A] border-[#2F7F7A]/25',
-    blue: 'bg-[#EBF1F5] text-[#5B7C99] border-[#5B7C99]/25',
-    purple: 'bg-[#F4EFF7] text-[#7B5B99] border-[#7B5B99]/25',
-    green: 'bg-[#F0FDF4] text-[#4C8B6B] border-[#4C8B6B]/25',
-    amber: 'bg-[#FBF3E4] text-[#C98A2B] border-[#C98A2B]/30',
-    slate: 'bg-[#F0F2F5] text-[#6B7785] border-[#E3E7EC]',
-    red: 'bg-[#FDF2F2] text-[#B4534B] border-[#B4534B]/25',
+    teal: 'bg-primary-soft text-primary border-primary/30',
+    blue: 'bg-surface-muted text-foreground border-border',
+    purple: 'bg-primary-soft text-primary border-primary/30',
+    green: 'bg-success-soft text-success border-success/30',
+    amber: 'bg-attention-soft text-attention border-attention/30',
+    slate: 'bg-surface-muted text-muted-foreground border-border',
+    red: 'bg-error-soft text-error border-error/30',
   };
 
   const dotColors = {
-    teal: 'bg-[#2F7F7A]',
-    blue: 'bg-[#5B7C99]',
-    purple: 'bg-[#7B5B99]',
-    green: 'bg-[#4C8B6B]',
-    amber: 'bg-[#C98A2B]',
-    slate: 'bg-[#6B7785]',
-    red: 'bg-[#B4534B]',
+    teal: 'bg-primary',
+    blue: 'bg-muted-foreground',
+    purple: 'bg-primary',
+    green: 'bg-success',
+    amber: 'bg-attention',
+    slate: 'bg-muted-foreground',
+    red: 'bg-error',
   };
 
   const sizeStyles = {

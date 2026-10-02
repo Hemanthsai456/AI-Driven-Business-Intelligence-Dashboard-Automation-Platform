@@ -18,7 +18,7 @@ export const Breadcrumbs: React.FC<{ extra?: string }> = ({ extra }) => {
   const current = ROUTE_MAP[pathname] || pathname.replace('/', '');
 
   return (
-    <nav className="flex items-center text-xs text-muted-foreground font-medium select-none font-mono">
+    <nav className="flex items-center text-xs text-muted-foreground font-medium select-none font-sans">
       <span>AI BI Studio</span>
       <ChevronRight className="w-3.5 h-3.5 mx-1 text-muted-foreground/60 shrink-0" />
       <span className={extra ? 'text-muted-foreground' : 'text-foreground font-semibold'}>

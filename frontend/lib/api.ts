@@ -7,7 +7,7 @@ import {
   SemanticProfile,
 } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -165,3 +165,19 @@ export async function runPipeline(
   });
   return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
 }
+
+export async function resolvePipeline(
+  runId: string,
+  selectedPlanId: string
+): Promise<import('./types').OrchestratorPipelineResponse> {
+  const res = await fetch(`${API_BASE}/orchestrator/pipeline/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      run_id: runId,
+      selected_plan_id: selectedPlanId,
+    }),
+  });
+  return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
+}
+

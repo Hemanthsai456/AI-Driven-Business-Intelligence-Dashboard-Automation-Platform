@@ -11,9 +11,7 @@ import {
   BarChart2,
   Brush,
   Brain,
-  HelpCircle,
 } from 'lucide-react';
-import { THEME_TOKENS } from '../lib/theme';
 
 export type PipelineStep = 'idle' | 'clean' | 'understand' | 'propose' | 'rank' | 'build' | 'done' | 'error';
 

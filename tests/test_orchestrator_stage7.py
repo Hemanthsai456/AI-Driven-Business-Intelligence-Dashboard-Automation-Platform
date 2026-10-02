@@ -157,8 +157,8 @@ def test_pipeline_refusal_when_readiness_not_ready(mock_stage7_dataset, mock_sta
 
 def test_pipeline_success_end_to_end(mock_stage7_dataset, mock_stage7_semantic_profile, mock_stage7_readiness):
     """End-to-end pipeline generates plans, validates Pass 1, ranks, runs Pass 2, and produces DashboardSpec."""
-    c1 = _make_candidate("plan_1", vis=VisualizationType.BAR)
-    c2 = _make_candidate("plan_2", vis=VisualizationType.TABLE)
+    c1 = _make_candidate("plan_1", vis=VisualizationType.BAR, metric_col="sales")
+    c2 = _make_candidate("plan_2", vis=VisualizationType.TABLE, metric_col="quantity")
     mock_agent = MockAgent(canned_plans=[c1, c2])
 
     res = run_orchestration_pipeline(
@@ -183,9 +183,9 @@ def test_pipeline_success_end_to_end(mock_stage7_dataset, mock_stage7_semantic_p
 def test_pipeline_cascade_promotes_rank2(mock_stage7_dataset, mock_stage7_semantic_profile, mock_stage7_readiness):
     """Rank-1 candidate fails Pass 2 (KPI with multiple rows) and triggers cascade promoting rank-2."""
     # c1 is KPI but returns 3 categories (multi-row) -> will fail Pass 2
-    c1 = _make_candidate("plan_kpi_fail", vis=VisualizationType.KPI, dim_col="category")
+    c1 = _make_candidate("plan_kpi_fail", vis=VisualizationType.KPI, dim_col="category", metric_col="sales")
     # c2 is BAR chart -> will pass Pass 2
-    c2 = _make_candidate("plan_bar_pass", vis=VisualizationType.BAR, dim_col="category")
+    c2 = _make_candidate("plan_bar_pass", vis=VisualizationType.BAR, dim_col="category", metric_col="quantity")
     mock_agent = MockAgent(canned_plans=[c1, c2])
 
     res = run_orchestration_pipeline(
@@ -213,8 +213,8 @@ def test_pipeline_cascade_promotes_rank2(mock_stage7_dataset, mock_stage7_semant
 def test_pipeline_exhausted_cascade_returns_unanswerable(mock_stage7_dataset, mock_stage7_semantic_profile, mock_stage7_readiness):
     """When all candidates fail Pass 2 and cascade depth is exhausted, pipeline returns UNANSWERABLE."""
     # Both candidates fail Pass 2
-    c1 = _make_candidate("plan_fail_1", vis=VisualizationType.KPI, dim_col="category")
-    c2 = _make_candidate("plan_fail_2", vis=VisualizationType.KPI, dim_col="category")
+    c1 = _make_candidate("plan_fail_1", vis=VisualizationType.KPI, dim_col="category", metric_col="sales")
+    c2 = _make_candidate("plan_fail_2", vis=VisualizationType.KPI, dim_col="category", metric_col="quantity")
     mock_agent = MockAgent(canned_plans=[c1, c2])
 
     res = run_orchestration_pipeline(
@@ -232,7 +232,7 @@ def test_pipeline_exhausted_cascade_returns_unanswerable(mock_stage7_dataset, mo
 
 
 def test_pipeline_tie_detection(mock_stage7_dataset, mock_stage7_semantic_profile, mock_stage7_readiness):
-    """When top two candidates score within epsilon=0.05, is_tie flag is set to True."""
+    """When top two candidates score within epsilon=0.05, pipeline returns NEEDS_CLARIFICATION with no winner."""
     # Create two almost identical plans differing only in plan_id
     c1 = _make_candidate("plan_tie_1", vis=VisualizationType.BAR)
     c2 = _make_candidate("plan_tie_2", vis=VisualizationType.BAR)
@@ -246,9 +246,11 @@ def test_pipeline_tie_detection(mock_stage7_dataset, mock_stage7_semantic_profil
         generator=mock_agent,
     )
 
-    assert res.status == "SUCCESS"
+    assert res.status == "NEEDS_CLARIFICATION"
+    assert res.dashboard_spec is None
     assert res.is_tie is True
-    assert res.dashboard_spec.is_tie is True
+    assert res.clarification_options is not None
+    assert len(res.clarification_options) >= 2
 
 
 def test_isolated_candidate_artifact_saved(tmp_path):
@@ -316,9 +318,13 @@ def test_api_pipeline_endpoint_happy_path(mock_stage7_dataset, mock_stage7_seman
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] in ("SUCCESS", "UNANSWERABLE")
+    assert data["status"] in ("SUCCESS", "UNANSWERABLE", "NEEDS_CLARIFICATION")
     if data["status"] == "SUCCESS":
         assert data["spec_id"] is not None
         assert data["winner"] is not None
         assert "score_breakdown" in data["winner"]
         assert len(data["ranked_candidates"]) > 0
+    elif data["status"] == "NEEDS_CLARIFICATION":
+        assert len(data["ranked_candidates"]) > 0
+        assert data["options"] is not None or data["clarification_options"] is not None
+        assert data["run_id"] is not None

@@ -43,6 +43,7 @@ from orchestrator.schemas import (
 )
 from orchestrator.utils import rank_candidates, check_candidate_output_consistency
 from orchestrator.validator import validate_pass2
+from orchestrator.panels import build_dashboard_panels
 
 
 class WinnerSelectionError(Exception):
@@ -71,6 +72,9 @@ def select_winner(
     plans_passed_pass1a: Optional[int] = None,
     plans_passed_pass1b: Optional[int] = None,
     candidate_validations: Optional[Dict[str, Tuple[Pass1aResult, Pass1bResult]]] = None,
+    resolved_by: Optional[str] = None,
+    run_id: Optional[str] = None,
+    semantic_profile: Optional[Any] = None,
 ) -> DashboardSpec:
     """Select the winning candidate, apply Pass 2, and cascade if needed.
 
@@ -90,6 +94,8 @@ def select_winner(
         plans_passed_pass1a: Count of plans that passed Pass 1a.
         plans_passed_pass1b: Count of plans that passed Pass 1b.
         candidate_validations: Map of plan_id to real (pass1a, pass1b) results.
+        resolved_by: Identifier of resolver ('user' when resolved via user action).
+        run_id: Associated pipeline run ID for auditability.
 
     Returns:
         DashboardSpec with the winning RankedCandidate, alternate interpretations, and trace.
@@ -110,16 +116,17 @@ def select_winner(
 
     # Determine tie at the top or low-coverage clarification
     is_tie = False
-    if len(remaining) >= 2:
-        top_score = remaining[0][2].total
-        second_score = remaining[1][2].total
-        if (
-            abs(top_score - second_score) < RANK_TIE_EPSILON
-            or remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP
-        ):
+    if resolved_by != "user":
+        if len(remaining) >= 2:
+            top_score = remaining[0][2].total
+            second_score = remaining[1][2].total
+            if (
+                abs(top_score - second_score) < RANK_TIE_EPSILON
+                or remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP
+            ):
+                is_tie = True
+        elif len(remaining) == 1 and remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP:
             is_tie = True
-    elif len(remaining) == 1 and remaining[0][2].coverage < LOW_COVERAGE_CONFIDENCE_CAP:
-        is_tie = True
 
     winning_ranked: Optional[Tuple[CandidatePlan, ExecutionResult, ScoreBreakdown, int]] = None
     winning_pass2: Optional[Pass2Result] = None
@@ -219,13 +226,26 @@ def select_winner(
         pass2_result=winning_pass2,
         consistency_check=consistency_check,
         candidate_records=candidate_records or [],
+        resolved_by=resolved_by,
+        run_id=run_id,
+    )
+
+    # Build generic dashboard panels and headline insight
+    headline, panels = build_dashboard_panels(
+        winner_plan=winner_ranked_candidate.plan,
+        winner_result=winner_ranked_candidate.execution_result,
+        winner_score=winner_ranked_candidate.score_breakdown,
+        alternates=alternate_interpretations,
+        semantic_profile=semantic_profile,
     )
 
     return DashboardSpec(
         spec_id=str(uuid4()),
         dataset_id=dataset_id,
         intent=intent,
+        headline=headline,
         winner=winner_ranked_candidate,
+        panels=panels,
         alternate_interpretations=alternate_interpretations,
         trace=trace,
         created_at=datetime.now(timezone.utc).isoformat(),

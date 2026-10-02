@@ -564,10 +564,17 @@ class ScoreBreakdown(BaseModel):
 
     evidence: float = Field(description="Mean role confidence of columns used (0.0-1.0).")
     coverage: float = Field(description="Fraction of request terms mapped to plan fields (0.0-1.0).")
-    stability: float = Field(description="Result agreement under small perturbations (0.0-1.0).")
+    stability: Optional[float] = Field(default=None, description="Robustness across interpretations (or None if UNTESTED).")
     assumptions: float = Field(description="Normalised count of defaults filled without request support (0.0-1.0).")
     agreement: float = Field(default=0.0, description="Agreement score from multiple providers (0.0-1.0).")
-    total: float = Field(description="Weighted total score: w1*evidence + w2*coverage + w3*stability - w4*assumptions + w5*agreement.")
+    failed_cast_penalty: float = Field(default=0.0, description="Separate quality penalty for failed datetime TRY_CAST operations.")
+    total: float = Field(description="Weighted total score: w1*evidence + w2*coverage + w3*stability - w4*assumptions + w5*agreement - failed_cast_penalty.")
+    stability_status: str = Field(default="UNTESTED", description="'TESTED', 'UNTESTED', or 'FAILED'.")
+    variants_attempted: int = Field(default=0, description="Count of attempted perturbation variants.")
+    variants_valid: int = Field(default=0, description="Count of successfully executed and validated perturbation variants.")
+    variants_failed: List[Dict[str, Any]] = Field(default_factory=list, description="List of failed variants with reasons.")
+    variant_details: List[Dict[str, Any]] = Field(default_factory=list, description="Per-variant top-1 match and Spearman metrics.")
+    coverage_of_test: float = Field(default=0.0, description="Coverage ratio: valid_variants / attempted_variants.")
 
     model_config = {"frozen": True}
 
@@ -631,22 +638,64 @@ class OrchestratorTrace(BaseModel):
         default_factory=list,
         description="Trace records for all candidates: plan, pass1a, pass1b, score breakdown.",
     )
+    resolved_by: Optional[str] = Field(
+        default=None,
+        description="Resolution source: 'user' when resolved via user interaction or None for automatic.",
+    )
+    run_id: Optional[str] = Field(
+        default=None,
+        description="Stored pipeline run ID associated with this trace.",
+    )
 
     model_config = {"frozen": True}
 
+
+class PanelType(str, Enum):
+    """Supported visual dashboard panel types."""
+
+    KPI = "KPI"
+    BAR = "BAR"
+    LINE = "LINE"
+    TABLE = "TABLE"
+    HEATMAP = "HEATMAP"
+    INSIGHT = "INSIGHT"
+    ALTERNATES = "ALTERNATES"
+
+
+class DashboardPanel(BaseModel):
+    """A renderable dashboard panel derived generically from plan semantics and execution results."""
+
+    panel_id: str = Field(default_factory=lambda: str(uuid4()))
+    panel_type: PanelType = Field(description="Visual component type: KPI, BAR, LINE, TABLE, HEATMAP, INSIGHT, ALTERNATES.")
+    title: str = Field(description="Generic descriptive panel title derived at runtime.")
+    description: Optional[str] = Field(default=None, description="Subtitle or explanatory commentary.")
+    data: List[Dict[str, Any]] = Field(default_factory=list, description="Row/matrix data structured for visual rendering.")
+    x_key: Optional[str] = Field(default=None, description="Dimension or category column key.")
+    y_keys: List[str] = Field(default_factory=list, description="Metric column keys.")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Metadata such as cardinality, aggregation, and robustness details.")
+
+    model_config = {"frozen": True}
 
 
 class DashboardSpec(BaseModel):
     """Final orchestrator output: canonical dashboard specification.
 
     Contains the winning candidate specification, alternate interpretations,
-    and the full execution trace for auditing and explainability.
+    generic dashboard panels, and the full execution trace for auditing and explainability.
     """
 
     spec_id: str = Field(default_factory=lambda: str(uuid4()))
     dataset_id: str
     intent: str
+    headline: Optional[str] = Field(
+        default=None,
+        description="Headline insight sentence generated from spec (metric, dimension, top group, robustness).",
+    )
     winner: RankedCandidate
+    panels: List[DashboardPanel] = Field(
+        default_factory=list,
+        description="Generic renderable dashboard panels built from execution results.",
+    )
     alternate_interpretations: List[AlternateInterpretation] = Field(
         default_factory=list,
         description="Runner-up candidates preserved for transparency.",

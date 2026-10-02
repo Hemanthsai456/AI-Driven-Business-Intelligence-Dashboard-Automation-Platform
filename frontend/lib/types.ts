@@ -273,18 +273,37 @@ export interface RankedCandidateUI {
 
 export interface ClarificationOption {
   plan_id: string;
-  label: string;
-  description: string;
+  label?: string;
+  description?: string;
+  interpretation?: string;
+  metric?: string;
+  dimension?: string;
+  dimensions?: string[];
+  aggregation?: string;
   score: number;
-  coverage: number;
-  evidence: number;
-  visualization: string;
+  robustness?: number | null;
+  coverage?: number;
+  evidence?: number;
+  visualization?: string;
+}
+
+export interface DashboardPanelUI {
+  panel_id: string;
+  panel_type: 'KPI' | 'BAR' | 'LINE' | 'TABLE' | 'HEATMAP' | 'INSIGHT' | 'ALTERNATES';
+  title: string;
+  description?: string;
+  data: Record<string, any>[];
+  x_key?: string;
+  y_keys?: string[];
+  metadata?: Record<string, any>;
 }
 
 export interface OrchestratorPipelineResponse {
-  status: 'SUCCESS' | 'REFUSED' | 'UNANSWERABLE' | string;
+  status: 'SUCCESS' | 'REFUSED' | 'UNANSWERABLE' | 'NEEDS_CLARIFICATION' | string;
   message: string;
   spec_id?: string;
+  headline?: string;
+  panels?: DashboardPanelUI[];
   dashboard_spec?: any;
   ranked_candidates: RankedCandidateUI[];
   winner?: {
@@ -295,7 +314,7 @@ export interface OrchestratorPipelineResponse {
     score_breakdown: {
       evidence: number;
       coverage: number;
-      stability: number;
+      stability?: number;
       assumptions: number;
       total: number;
     };
@@ -315,7 +334,10 @@ export interface OrchestratorPipelineResponse {
   ambiguity_message?: string;
   clarification_needed: boolean;
   clarification_options?: ClarificationOption[];
+  options?: ClarificationOption[];
   cached_candidates?: any[];
+  run_id?: string;
+  resolved_by?: string;
   decision_log_entry?: any;
   explainability_log_entry?: any;
 }

@@ -363,7 +363,9 @@ class TestRankerV1:
         assert 0.0 <= sb.total <= 1.0
         assert 0.0 <= sb.evidence <= 1.0
         assert 0.0 <= sb.coverage <= 1.0
-        assert 0.0 <= sb.stability <= 1.0
+        # Under Stage A, stability defaults to None (UNTESTED) when dataset variants are not executed
+        assert sb.stability is None
+        assert sb.stability_status == "UNTESTED"
         assert 0.0 <= sb.assumptions <= 1.0
 
     def test_high_confidence_columns_increase_evidence(self):
@@ -384,7 +386,9 @@ class TestRankerV1:
         dirty = make_execution_result(plan.plan_id, failed_cast_rate=0.8)
         sb_clean = compute_score(plan, clean, MOCK_SEMANTIC_EVIDENCES, ["total", "sales"])
         sb_dirty = compute_score(plan, dirty, MOCK_SEMANTIC_EVIDENCES, ["total", "sales"])
-        assert sb_clean.stability > sb_dirty.stability
+        # Stage A: failed_cast_rate is maintained as a separate quality penalty
+        assert sb_clean.failed_cast_penalty < sb_dirty.failed_cast_penalty
+        assert sb_clean.total > sb_dirty.total
 
     def test_timeout_gives_zero_stability(self):
         plan = make_plan()

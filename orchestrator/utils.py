@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 from orchestrator.config import (
     LOW_COVERAGE_CONFIDENCE_CAP,
@@ -99,27 +99,29 @@ def _compute_coverage(plan: CandidatePlan, intent_tokens: Sequence[str]) -> floa
     return min(1.0, matched / len(intent_tokens))
 
 
+from orchestrator.robustness import (
+    RobustnessEvaluation,
+    compute_spearman_rank_correlation,
+    evaluate_robustness,
+    generate_perturbations,
+)
+
+
 def _compute_stability(
     execution_result: ExecutionResult,
-) -> float:
-    """Stability proxy: penalise high failed-cast rates and near-empty results.
+    robustness_result: Optional[RobustnessEvaluation] = None,
+) -> Optional[float]:
+    """Robustness across interpretations (replaces V1 stability proxy).
 
-    True perturbation stability (running adjacent granularity variants) is
-    deferred to Stage 7.  This is a V1 proxy based on execution quality.
-
-    Returns:
-        Stability score in [0.0, 1.0].
+    If robustness_result is provided, returns its robustness score.
+    If execution_result failed, returns 0.0.
+    Otherwise returns None (UNTESTED).
     """
     if execution_result.status != ExecutionStatus.SUCCESS:
         return 0.0
-
-    # Penalise failed-cast rate proportionally
-    cast_penalty = execution_result.failed_cast_rate
-
-    # Penalise near-empty results (< 2 rows has low stability signal)
-    empty_penalty = 0.2 if execution_result.row_count < 2 else 0.0
-
-    return max(0.0, 1.0 - cast_penalty - empty_penalty)
+    if robustness_result is not None:
+        return robustness_result.robustness
+    return None
 
 
 def _compute_assumptions(plan: CandidatePlan) -> float:
@@ -162,8 +164,13 @@ def compute_score(
     intent_tokens: Sequence[str],
     weights: Optional[RankerWeights] = None,
     coverage_override: Optional[float] = None,
+    robustness_result: Optional[RobustnessEvaluation] = None,
+    dataset: Optional[Any] = None,
+    semantic_profile: Optional[Any] = None,
+    ambiguity_result: Optional[Any] = None,
+    stability_override: Optional[float] = None,
 ) -> ScoreBreakdown:
-    """Compute Ranker V1 score for a candidate plan.
+    """Compute Ranker V1 score for a candidate plan with robustness across interpretations.
 
     Args:
         plan: The candidate plan.
@@ -171,6 +178,12 @@ def compute_score(
         semantic_evidences: Dict[str, ColumnSemanticEvidence].
         intent_tokens: Lower-cased word tokens from the request.
         weights: Ranker weights (defaults to config values if None).
+        coverage_override: Optional coverage override.
+        robustness_result: Pre-computed RobustnessEvaluation if available.
+        dataset: CanonicalDataset for runtime variant execution.
+        semantic_profile: DatasetSemanticProfile for role-based perturbations.
+        ambiguity_result: AmbiguityResult for ambiguity-based perturbations.
+        stability_override: Direct override for robustness/stability (for testing).
 
     Returns:
         ScoreBreakdown with individual components and weighted total.
@@ -186,11 +199,39 @@ def compute_score(
 
     evidence = _compute_evidence(plan, semantic_evidences)
     coverage = coverage_override if coverage_override is not None else _compute_coverage(plan, intent_tokens)
-    stability = _compute_stability(execution_result)
+
+    # 1. Robustness across interpretations
+    rob_eval: Optional[RobustnessEvaluation] = robustness_result
+    if rob_eval is None and dataset is not None and semantic_profile is not None:
+        rob_eval = evaluate_robustness(
+            plan=plan,
+            candidate_result=execution_result,
+            dataset=dataset,
+            semantic_profile=semantic_profile,
+            ambiguity_result=ambiguity_result,
+        )
+
+    if stability_override is not None:
+        stability = stability_override
+        stability_status = "TESTED"
+    elif execution_result.status != ExecutionStatus.SUCCESS:
+        stability = 0.0
+        stability_status = "FAILED"
+    elif rob_eval is not None:
+        stability = rob_eval.robustness
+        stability_status = rob_eval.status
+    else:
+        # If fewer than 2 valid variants exist, robustness = None with status="UNTESTED"
+        # It must never default to 1.0, because untested is not robust.
+        stability = None
+        stability_status = "UNTESTED"
+
+    # In total score calculation, untested/None stability contributes 0.0
+    stability_term = stability if stability is not None else 0.0
+
     assumptions = _compute_assumptions(plan)
+
     # Agreement calculation incorporating provider response completeness:
-    # A plan backed by 1 of 1 respondent must not score identically to one backed by 3 of 3.
-    # Scaled by (providers_responded / TOTAL_ACTIVE_PROVIDERS) to discount low-quorum responses.
     total_expected = getattr(weights, "total_active_providers", TOTAL_ACTIVE_PROVIDERS)
     if total_expected <= 0:
         total_expected = 3
@@ -205,15 +246,16 @@ def compute_score(
     w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
     agreement_contribution = w5 * agreement * coverage
 
-    w5 = getattr(weights, "w5_agreement", RANK_W5_AGREEMENT)
-    agreement_contribution = w5 * agreement * coverage
+    # Keep failed_cast_rate as a separate quality penalty
+    cast_penalty = execution_result.failed_cast_rate
 
     total = (
         weights.w1_evidence * evidence
         + weights.w2_coverage * coverage
-        + weights.w3_stability * stability
+        + weights.w3_stability * stability_term
         + agreement_contribution
         - weights.w4_assumptions * assumptions
+        - cast_penalty
     )
     total = max(0.0, min(1.0, total))  # clamp to [0, 1]
 
@@ -228,7 +270,14 @@ def compute_score(
         stability=stability,
         assumptions=assumptions,
         agreement=agreement,
+        failed_cast_penalty=cast_penalty,
         total=total,
+        stability_status=stability_status,
+        variants_attempted=rob_eval.variants_attempted if rob_eval else 0,
+        variants_valid=rob_eval.variants_valid if rob_eval else 0,
+        variants_failed=rob_eval.variants_failed if rob_eval else [],
+        variant_details=rob_eval.variant_details if rob_eval else [],
+        coverage_of_test=rob_eval.coverage_of_test if rob_eval else 0.0,
     )
 
 
@@ -238,6 +287,9 @@ def rank_candidates(
     intent_tokens: Sequence[str],
     weights: Optional[RankerWeights] = None,
     start_rank: int = 1,
+    dataset: Optional[Any] = None,
+    semantic_profile: Optional[Any] = None,
+    ambiguity_result: Optional[Any] = None,
 ) -> Tuple[List[Tuple[CandidatePlan, ExecutionResult, ScoreBreakdown, int]], bool]:
     """Rank surviving candidates by Ranker V1 score.
 
@@ -247,6 +299,9 @@ def rank_candidates(
         intent_tokens: Lower-cased word tokens from the original request.
         weights: Optional custom weights.
         start_rank: Starting rank number (1-based).
+        dataset: CanonicalDataset for runtime variant execution.
+        semantic_profile: DatasetSemanticProfile for role-based perturbations.
+        ambiguity_result: AmbiguityResult for ambiguity-based perturbations.
 
     Returns:
         Tuple of:
@@ -258,7 +313,16 @@ def rank_candidates(
 
     scored = []
     for plan, result in candidates:
-        sb = compute_score(plan, result, semantic_evidences, intent_tokens, weights)
+        sb = compute_score(
+            plan=plan,
+            execution_result=result,
+            semantic_evidences=semantic_evidences,
+            intent_tokens=intent_tokens,
+            weights=weights,
+            dataset=dataset,
+            semantic_profile=semantic_profile,
+            ambiguity_result=ambiguity_result,
+        )
         scored.append((plan, result, sb))
 
     scored.sort(key=lambda x: x[2].total, reverse=True)

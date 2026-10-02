@@ -9,7 +9,7 @@ load_dotenv()
 print(f"[STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
 
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -41,9 +41,18 @@ from api.schemas import (
     SelectWinnerResponse,
     OrchestratorPipelineRequest,
     OrchestratorPipelineResponse,
+    ResolvePipelineRequest,
+    ResolveErrorResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
+from orchestrator.run_store import (
+    PlanNotFoundError,
+    RunExpiredError,
+    RunNotFoundError,
+    RunResolveError,
+    resolve_pipeline_run,
+)
 from orchestrator.ambiguity import assess_ambiguity
 from orchestrator.context_builder import build_llm_context
 from orchestrator.executor import execute_plan
@@ -520,6 +529,8 @@ def select_winner_endpoint(req: SelectWinnerRequest):
         candidate_pairs,
         semantic_evidences=semantic_evidences,
         intent_tokens=intent_tokens,
+        dataset=record.dataset,
+        semantic_profile=record.semantic_profile,
     )
 
     # 6. Deserialize generator logs (optional)
@@ -539,6 +550,7 @@ def select_winner_endpoint(req: SelectWinnerRequest):
             context_hash=req.context_hash or "",
             generator_logs=gen_logs,
             consistency_check=consistency,
+            semantic_profile=record.semantic_profile,
         )
     except WinnerSelectionError as e:
         raise HTTPException(
@@ -631,6 +643,10 @@ def get_providers_status():
 
 
 @app.post(
+    "/pipeline",
+    response_model=OrchestratorPipelineResponse,
+)
+@app.post(
     "/api/orchestrator/pipeline",
     response_model=OrchestratorPipelineResponse,
 )
@@ -646,6 +662,15 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
     # Check for pre-existing candidates if re-running from chosen interpretation
     existing_cands = record.cached_candidates.get(req.intent) if req.chosen_plan_id else None
 
+    pipe_kwargs: Dict[str, Any] = {}
+    generator = getattr(app.state, "mock_generator", None)
+    if generator is not None:
+        pipe_kwargs["generator"] = generator
+    if req.rank_tie_epsilon is not None:
+        pipe_kwargs["rank_tie_epsilon"] = req.rank_tie_epsilon
+    if req.robustness_tie_floor is not None:
+        pipe_kwargs["robustness_tie_floor"] = req.robustness_tie_floor
+
     pipeline_result = run_orchestration_pipeline(
         dataset=record.dataset,
         semantic_profile=record.semantic_profile,
@@ -657,6 +682,7 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
         require_clarification=bool(req.require_clarification),
         chosen_plan_id=req.chosen_plan_id,
         existing_candidates=existing_cands,
+        **pipe_kwargs,
     )
 
     # Cache generated candidates in session store for subsequent clarification follow-ups
@@ -707,6 +733,8 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
         status=pipeline_result.status,
         message=pipeline_result.message,
         spec_id=spec.spec_id if spec else None,
+        headline=spec.headline if spec else None,
+        panels=[p.model_dump() for p in spec.panels] if spec else None,
         dashboard_spec=spec.model_dump() if spec else None,
         ranked_candidates=ranked_list,
         winner=winner_dict,
@@ -720,7 +748,109 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
             or (pipeline_result.ambiguity is not None and pipeline_result.ambiguity.status.value != "CLEAR")
         ),
         clarification_options=pipeline_result.clarification_options,
+        options=pipeline_result.options,
+        run_id=pipeline_result.run_id,
         cached_candidates=[c.model_dump() for c in pipeline_result.cached_candidates] if pipeline_result.cached_candidates else None,
+        decision_log_entry=pipeline_result.decision_log_entry,
+        explainability_log_entry=pipeline_result.explainability_log_entry,
+    )
+
+
+@app.post(
+    "/pipeline/resolve",
+    response_model=OrchestratorPipelineResponse,
+    responses={
+        404: {"model": ResolveErrorResponse},
+        410: {"model": ResolveErrorResponse},
+        422: {"model": ResolveErrorResponse},
+    },
+)
+@app.post(
+    "/api/orchestrator/pipeline/resolve",
+    response_model=OrchestratorPipelineResponse,
+    responses={
+        404: {"model": ResolveErrorResponse},
+        410: {"model": ResolveErrorResponse},
+        422: {"model": ResolveErrorResponse},
+    },
+)
+def resolve_pipeline_endpoint(req: ResolvePipelineRequest):
+    """Resolve a tied pipeline run with a user-selected candidate plan."""
+    try:
+        pipeline_result = resolve_pipeline_run(
+            run_id=req.run_id,
+            selected_plan_id=req.selected_plan_id,
+        )
+    except RunResolveError as e:
+        return JSONResponse(
+            status_code=e.status_code,
+            content={
+                "error": e.__class__.__name__,
+                "message": e.message,
+                "error_type": e.error_type,
+                "status_code": e.status_code,
+            },
+        )
+
+    spec = pipeline_result.dashboard_spec
+    ranked_list = []
+    if pipeline_result.ranked_candidates:
+        for plan, res, score, rank in pipeline_result.ranked_candidates:
+            ranked_list.append({
+                "rank": rank,
+                "plan_id": plan.plan_id,
+                "generator": plan.generator,
+                "visualization": plan.visualization.value,
+                "metric": f"{plan.metric.aggregation.value}({plan.metric.column})",
+                "dimensions": [
+                    f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+                    for d in plan.dimensions
+                ],
+                "score": round(score.total, 4),
+                "score_breakdown": score.model_dump(),
+                "is_winner": (spec is not None and spec.winner.plan.plan_id == plan.plan_id),
+            })
+
+    winner_dict = None
+    if spec:
+        winner_dict = {
+            "plan_id": spec.winner.plan.plan_id,
+            "generator": spec.winner.plan.generator,
+            "visualization": spec.winner.plan.visualization.value,
+            "score": round(spec.winner.score_breakdown.total, 4),
+            "score_breakdown": spec.winner.score_breakdown.model_dump(),
+            "metric": f"{spec.winner.plan.metric.aggregation.value}({spec.winner.plan.metric.column})",
+            "dimensions": [
+                f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+                for d in spec.winner.plan.dimensions
+            ],
+            "reasoning": spec.winner.plan.reasoning.model_dump(),
+            "pass2_passed": spec.trace.pass2_result.passed if spec.trace.pass2_result else True,
+            "pass2_issues": [
+                i.model_dump() for i in (spec.trace.pass2_result.issues if spec.trace.pass2_result else [])
+            ],
+            "execution": spec.winner.execution_result.model_dump(),
+        }
+
+    return OrchestratorPipelineResponse(
+        status=pipeline_result.status,
+        message=pipeline_result.message,
+        spec_id=spec.spec_id if spec else None,
+        headline=spec.headline if spec else None,
+        panels=[p.model_dump() for p in spec.panels] if spec else None,
+        dashboard_spec=spec.model_dump() if spec else None,
+        ranked_candidates=ranked_list,
+        winner=winner_dict,
+        is_tie=pipeline_result.is_tie,
+        cascade_depth=pipeline_result.cascade_depth,
+        ambiguity_status=pipeline_result.ambiguity.status.value if pipeline_result.ambiguity else "CLEAR",
+        ambiguity_message=pipeline_result.ambiguity.message if pipeline_result.ambiguity else None,
+        clarification_needed=False,
+        clarification_options=None,
+        options=None,
+        cached_candidates=None,
+        run_id=req.run_id,
+        resolved_by="user",
         decision_log_entry=pipeline_result.decision_log_entry,
         explainability_log_entry=pipeline_result.explainability_log_entry,
     )

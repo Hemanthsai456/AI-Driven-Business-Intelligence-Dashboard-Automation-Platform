@@ -182,6 +182,8 @@ class OrchestratorPipelineRequest(BaseModel):
     k: Optional[int] = 3
     chosen_plan_id: Optional[str] = None
     require_clarification: Optional[bool] = False
+    rank_tie_epsilon: Optional[float] = None
+    robustness_tie_floor: Optional[float] = None
 
 
 class OrchestratorPipelineResponse(BaseModel):
@@ -190,6 +192,8 @@ class OrchestratorPipelineResponse(BaseModel):
     status: str  # "SUCCESS" | "REFUSED" | "UNANSWERABLE" | "NEEDS_CLARIFICATION"
     message: str
     spec_id: Optional[str] = None
+    headline: Optional[str] = None
+    panels: Optional[List[Dict[str, Any]]] = None
     dashboard_spec: Optional[Dict[str, Any]] = None
     ranked_candidates: List[Dict[str, Any]] = []
     winner: Optional[Dict[str, Any]] = None
@@ -199,7 +203,26 @@ class OrchestratorPipelineResponse(BaseModel):
     ambiguity_message: Optional[str] = None
     clarification_needed: bool = False
     clarification_options: Optional[List[Dict[str, Any]]] = None
+    options: Optional[List[Dict[str, Any]]] = None
     cached_candidates: Optional[List[Dict[str, Any]]] = None
+    run_id: Optional[str] = None
+    resolved_by: Optional[str] = None
     decision_log_entry: Optional[Dict[str, Any]] = None
     explainability_log_entry: Optional[Dict[str, Any]] = None
+
+
+class ResolvePipelineRequest(BaseModel):
+    """Request payload for resolving a tied pipeline run with a user-selected plan."""
+
+    run_id: str
+    selected_plan_id: str
+
+
+class ResolveErrorResponse(BaseModel):
+    """Typed error response when resolving a pipeline run fails."""
+
+    error: str
+    message: str
+    error_type: str
+    status_code: int
 

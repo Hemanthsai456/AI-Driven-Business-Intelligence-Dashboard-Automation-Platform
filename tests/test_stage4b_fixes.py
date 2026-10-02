@@ -200,15 +200,18 @@ def test_winner_regression_sales_by_store():
         candidates=candidates,
         semantic_evidences=semantic_profile.column_evidences,
         intent_tokens=intent_tokens,
+        dataset=cleaned_ds,
+        semantic_profile=semantic_profile,
     )
 
     print("\n=== Ranker Output ===")
     for plan, exec_res, score, rank in ranked:
+        stab_str = f"{score.stability:.4f}" if score.stability is not None else "UNTESTED"
         print(
             f"  Rank {rank}: {plan.metric.aggregation.value}({plan.metric.column})"
             f" by {plan.dimensions[0].column} | provider={plan.provider}"
             f" | evidence={score.evidence:.4f} coverage={score.coverage:.4f}"
-            f" stability={score.stability:.4f} agreement={score.agreement:.4f}"
+            f" stability={stab_str} agreement={score.agreement:.4f}"
             f" total={score.total:.4f}"
         )
 

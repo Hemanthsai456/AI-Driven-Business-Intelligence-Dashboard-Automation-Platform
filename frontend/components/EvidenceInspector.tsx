@@ -42,11 +42,11 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
   };
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-4 shadow-sm space-y-4 sticky top-16">
+    <div className="bg-surface border border-border rounded-card p-4 shadow-xs space-y-4 sticky top-16">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="w-4 h-4 text-[#EA6928] shrink-0" />
+          <Sparkles className="w-4 h-4 text-primary shrink-0" />
           <h3 className="font-bold text-foreground text-sm truncate">{column.column_name}</h3>
         </div>
         <button
@@ -58,7 +58,7 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
       </div>
 
       {/* Role & Confidence Card */}
-      <div className="p-3 bg-surface-muted rounded border border-border space-y-2">
+      <div className="p-3 bg-surface-muted rounded-card border border-border space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-2xs font-mono text-muted-foreground uppercase">Classified Role</span>
           <Badge variant={getRoleVariant(column.candidate_role)} size="xs">
@@ -80,7 +80,7 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
         </h4>
 
         {column.evidence.length === 0 ? (
-          <div className="p-3 bg-surface-muted/60 rounded text-2xs text-muted-foreground italic">
+          <div className="p-3 bg-surface-muted/60 rounded-card text-2xs text-muted-foreground italic">
             No specific heuristics matched. Defaulting to general data type rules.
           </div>
         ) : (
@@ -88,9 +88,9 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
             {column.evidence.map((ev, idx) => (
               <div
                 key={idx}
-                className="flex items-start gap-2 p-2 bg-surface-muted rounded border border-border text-2xs font-mono text-foreground"
+                className="flex items-start gap-2 p-2 bg-surface-muted rounded-card border border-border text-2xs font-mono text-foreground"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />
                 <span className="leading-snug">{ev}</span>
               </div>
             ))}
@@ -99,8 +99,8 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ column, on
       </div>
 
       {/* Downstream Usage */}
-      <div className="p-3 bg-[#E6D4B8]/40 rounded border border-[#DAC7AD] text-2xs space-y-1 font-mono">
-        <div className="font-semibold text-[#EA6928]">Orchestrator Role Usage:</div>
+      <div className="p-3 bg-primary-soft/40 rounded-card border border-primary/20 text-2xs space-y-1 font-mono">
+        <div className="font-semibold text-primary">Orchestrator Role Usage:</div>
         <p className="text-muted-foreground leading-relaxed">
           {column.candidate_role === 'MEASURE' && 'Eligible for aggregations (SUM, AVG, COUNT, MIN, MAX) in candidate query generation.'}
           {column.candidate_role === 'DIMENSION' && 'Eligible for GROUP BY dimensional grouping and categorical breakdowns.'}

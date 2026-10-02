@@ -157,7 +157,7 @@ export default function AskPage() {
       {/* Page Header */}
       <div className="pb-2 border-b border-border">
         <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-[#EA6928]" />
+          <Sparkles className="w-5 h-5 text-primary" />
           Ask (Natural Language Query)
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
@@ -177,12 +177,12 @@ export default function AskPage() {
                 Active Dataset
               </label>
               {datasets.length === 0 ? (
-                <div className="p-2 bg-[#E6D4B8]/40 border border-border rounded text-xs text-muted-foreground">
+                <div className="p-2 bg-surface-muted/60 border border-border rounded text-xs text-muted-foreground">
                   No datasets available. Please upload one first.
                 </div>
               ) : (
                 <select
-                  className="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-[#EA6928] font-mono"
+                  className="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
                   value={selectedDatasetId}
                   onChange={(e) => setSelectedDatasetId(e.target.value)}
                 >
@@ -200,7 +200,7 @@ export default function AskPage() {
                 Generator Mode
               </label>
               <select
-                className="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-[#EA6928] font-mono"
+                className="w-full bg-surface border border-border rounded px-3 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-mono"
                 value={mode}
                 onChange={(e) => setMode(e.target.value)}
               >
@@ -214,7 +214,7 @@ export default function AskPage() {
               <label className="block text-2xs font-semibold text-muted-foreground uppercase font-mono mb-1">
                 Candidate Pool
               </label>
-              <div className="p-1.5 bg-[#E6D4B8]/30 border border-border rounded text-xs text-muted-foreground font-mono">
+              <div className="p-1.5 bg-surface-muted/50 border border-border rounded text-xs text-muted-foreground font-mono">
                 K = 3 parallel plans
               </div>
             </div>
@@ -231,7 +231,7 @@ export default function AskPage() {
                 placeholder="Ask a question about your data..."
                 value={intent}
                 onChange={(e) => setIntent(e.target.value)}
-                className="w-full pl-3.5 pr-28 py-2 text-xs bg-surface border border-border rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#EA6928] focus:ring-1 focus:ring-[#EA6928]"
+                className="w-full pl-3.5 pr-28 py-2 text-xs bg-surface border border-border rounded text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               />
               <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                 <Button
@@ -297,7 +297,7 @@ export default function AskPage() {
                 onClick={() => setActiveTab('winner')}
                 className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all ${
                   activeTab === 'winner'
-                    ? 'border-[#EA6928] text-[#EA6928] font-bold'
+                    ? 'border-primary text-primary font-bold'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -308,7 +308,7 @@ export default function AskPage() {
                 onClick={() => setActiveTab('ranking')}
                 className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all ${
                   activeTab === 'ranking'
-                    ? 'border-[#EA6928] text-[#EA6928] font-bold'
+                    ? 'border-primary text-primary font-bold'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -319,7 +319,7 @@ export default function AskPage() {
                 onClick={() => setActiveTab('sql')}
                 className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all ${
                   activeTab === 'sql'
-                    ? 'border-[#EA6928] text-[#EA6928] font-bold'
+                    ? 'border-primary text-primary font-bold'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -330,7 +330,7 @@ export default function AskPage() {
                 onClick={() => setActiveTab('spec')}
                 className={`flex items-center gap-1.5 px-3 py-2 border-b-2 transition-all ${
                   activeTab === 'spec'
-                    ? 'border-[#EA6928] text-[#EA6928] font-bold'
+                    ? 'border-primary text-primary font-bold'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -399,7 +399,7 @@ export default function AskPage() {
                       <div className="overflow-x-auto max-h-72">
                         <table className="w-full text-left border-collapse text-xs font-mono">
                           <thead>
-                            <tr className="border-b border-border bg-[#E6D4B8]/40 text-2xs uppercase text-muted-foreground">
+                            <tr className="border-b border-border bg-surface-muted/60 text-2xs uppercase text-muted-foreground">
                               {activeWinner.execution.columns.map((c: string) => (
                                 <th key={c} className="py-2 px-3 font-semibold text-foreground">
                                   {c}
@@ -409,10 +409,10 @@ export default function AskPage() {
                           </thead>
                           <tbody className="divide-y divide-border">
                             {activeWinner.execution.rows.map((row: any, i: number) => (
-                              <tr key={i} className="hover:bg-[#E6D4B8]/20">
+                              <tr key={i} className="hover:bg-surface-muted/30">
                                 {activeWinner.execution.columns.map((c: string) => (
                                   <td key={c} className="py-1.5 px-3 text-muted-foreground whitespace-nowrap">
-                                    {row[c] !== null && row[c] !== undefined ? String(row[c]) : <span className="text-rose-600 italic">null</span>}
+                                    {row[c] !== null && row[c] !== undefined ? String(row[c]) : <span className="text-error italic">null</span>}
                                   </td>
                                 ))}
                               </tr>
@@ -441,7 +441,7 @@ export default function AskPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
-                    <tr className="border-b border-border bg-[#E6D4B8]/40 text-2xs uppercase text-muted-foreground">
+                    <tr className="border-b border-border bg-surface-muted/60 text-2xs uppercase text-muted-foreground">
                       <th className="py-2 px-3 font-semibold">Rank</th>
                       <th className="py-2 px-3 font-semibold">Generator</th>
                       <th className="py-2 px-3 font-semibold">Metric & Dims</th>
@@ -468,8 +468,8 @@ export default function AskPage() {
                     })) || []).map((cand) => (
                       <tr
                         key={cand.plan_id}
-                        className={`hover:bg-[#E6D4B8]/20 ${
-                          cand.is_winner ? 'bg-[#EA6928]/5 font-semibold' : ''
+                        className={`hover:bg-surface-muted/30 ${
+                          cand.is_winner ? 'bg-primary-soft/40 font-semibold' : ''
                         }`}
                       >
                         <td className="py-2 px-3 font-bold">#{cand.rank}</td>
@@ -491,10 +491,10 @@ export default function AskPage() {
                         <td className="py-2 px-3 text-muted-foreground">
                           {((cand.score_breakdown?.stability || 0) * 100).toFixed(0)}%
                         </td>
-                        <td className="py-2 px-3 text-rose-600">
+                        <td className="py-2 px-3 text-error">
                           -{cand.score_breakdown?.assumptions || 0}
                         </td>
-                        <td className="py-2 px-3 font-bold text-[#EA6928]">
+                        <td className="py-2 px-3 font-bold text-primary">
                           {(cand.score * 100).toFixed(1)}
                         </td>
                         <td className="py-2 px-3 text-right">
@@ -527,7 +527,7 @@ export default function AskPage() {
                       setCopiedSpec(true);
                       setTimeout(() => setCopiedSpec(false), 2000);
                     }}
-                    leftIcon={copiedSpec ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    leftIcon={copiedSpec ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                   >
                     {copiedSpec ? 'Copied' : 'Copy SQL'}
                   </Button>
@@ -535,7 +535,7 @@ export default function AskPage() {
               }
             >
               {activeWinner?.execution?.compiled_sql ? (
-                <pre className="p-3 bg-[#E6D4B8]/30 rounded border border-border font-mono text-xs text-foreground overflow-x-auto">
+                <pre className="p-3 bg-surface-muted/50 rounded-card border border-border font-mono text-xs text-foreground overflow-x-auto">
                   <code>{activeWinner.execution.compiled_sql}</code>
                 </pre>
               ) : (
@@ -557,13 +557,13 @@ export default function AskPage() {
                     size="xs"
                     variant="outline"
                     onClick={handleCopySpec}
-                    leftIcon={copiedSpec ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                    leftIcon={copiedSpec ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
                   >
                     {copiedSpec ? 'Copied' : 'Copy Spec JSON'}
                   </Button>
                 }
               >
-                <pre className="p-3 bg-[#E6D4B8]/30 rounded border border-border font-mono text-2xs text-foreground overflow-x-auto max-h-80">
+                <pre className="p-3 bg-surface-muted/50 rounded-card border border-border font-mono text-2xs text-foreground overflow-x-auto max-h-80">
                   <code>
                     {JSON.stringify(
                       pipelineResponse?.dashboard_spec || winnerResponse?.winner_plan || { message: 'Run pipeline to emit DashboardSpec' },

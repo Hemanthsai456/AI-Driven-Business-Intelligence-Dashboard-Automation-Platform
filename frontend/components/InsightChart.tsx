@@ -13,7 +13,6 @@ import {
   ResponsiveContainer,
   Cell,
 } from 'recharts';
-import { THEME_TOKENS } from '../lib/theme';
 import { BarChart3, LineChart as LineIcon, Table as TableIcon, Hash } from 'lucide-react';
 
 interface InsightChartProps {
@@ -23,6 +22,14 @@ interface InsightChartProps {
   executionData?: any;
   className?: string;
 }
+
+const CHART_SERIES_VARS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+];
 
 export const InsightChart: React.FC<InsightChartProps> = ({
   visualization,
@@ -61,29 +68,29 @@ export const InsightChart: React.FC<InsightChartProps> = ({
 
   const vizType = (visualization || 'bar').toLowerCase();
 
-  // 1. KPI Single-Value Card
-  if (vizType === 'kpi' || rawRows.length === 1) {
-    const primaryVal = rawRows[0][metricKey] ?? rawRows[0][columns[0]] ?? '—';
-    const formattedVal = typeof primaryVal === 'number' ? primaryVal.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(primaryVal);
-    const label = dimKey && rawRows[0][dimKey] ? `${rawRows[0][dimKey]} • ${metric}` : metric;
+  // 1. KPI Visualization
+  if (vizType === 'kpi') {
+    const primaryValue = rawRows[0]?.[metricKey] ?? rawRows[0]?.[columns[0]] ?? '—';
+    const formatted = typeof primaryValue === 'number'
+      ? primaryValue.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      : String(primaryValue);
 
     return (
-      <div className={`p-6 bg-surface border border-border rounded-card flex flex-col justify-center min-h-[220px] ${className}`}>
-        <div className="flex items-center gap-2 text-2xs font-semibold text-muted-foreground uppercase font-mono tracking-wider mb-2">
-          <Hash className="w-3.5 h-3.5 text-primary" />
-          <span>Key Performance Metric</span>
+      <div className={`p-6 bg-surface border border-border rounded-card flex flex-col items-center justify-center text-center shadow-xs min-h-[220px] ${className}`}>
+        <div className="p-2 rounded-full bg-primary-soft text-primary mb-3">
+          <Hash className="w-5 h-5" />
         </div>
-        <div className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-mono">
-          {formattedVal}
+        <div className="text-3xl sm:text-4xl font-extrabold font-mono text-foreground tracking-tight">
+          {formatted}
         </div>
-        <div className="text-xs text-muted-foreground mt-2 font-medium">
-          {label}
+        <div className="text-xs text-muted-foreground mt-2 font-mono">
+          {metric} {dimKey ? `(${dimKey})` : ''}
         </div>
       </div>
     );
   }
 
-  // 2. Line Chart
+  // 2. Line Chart Visualization
   if (vizType === 'line') {
     return (
       <div className={`p-4 bg-surface border border-border rounded-card min-h-[300px] flex flex-col ${className}`}>
@@ -97,36 +104,37 @@ export const InsightChart: React.FC<InsightChartProps> = ({
         <div className="flex-1 w-full h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={rawRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={THEME_TOKENS.border} vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis
                 dataKey={dimKey}
-                tick={{ fontSize: 11, fill: THEME_TOKENS.mutedText }}
-                stroke={THEME_TOKENS.border}
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
+                stroke="var(--border)"
                 tickLine={false}
                 angle={-20}
                 textAnchor="end"
               />
               <YAxis
-                tick={{ fontSize: 11, fill: THEME_TOKENS.mutedText }}
-                stroke={THEME_TOKENS.border}
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
+                stroke="var(--border)"
                 tickLine={false}
                 tickFormatter={(v) => typeof v === 'number' ? v.toLocaleString() : v}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: THEME_TOKENS.surface,
-                  borderColor: THEME_TOKENS.border,
-                  borderRadius: '8px',
+                  backgroundColor: 'var(--surface)',
+                  borderColor: 'var(--border)',
+                  borderRadius: '10px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                   fontSize: '12px',
+                  color: 'var(--text)',
                 }}
               />
               <Line
                 type="monotone"
                 dataKey={metricKey}
-                stroke={THEME_TOKENS.chartSeries[0]}
+                stroke="var(--chart-1)"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: THEME_TOKENS.chartSeries[0] }}
+                dot={{ r: 3, fill: 'var(--chart-1)' }}
                 activeDot={{ r: 6 }}
               />
             </LineChart>
@@ -190,35 +198,36 @@ export const InsightChart: React.FC<InsightChartProps> = ({
       <div className="flex-1 w-full h-[260px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rawRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={THEME_TOKENS.border} vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey={dimKey}
-              tick={{ fontSize: 11, fill: THEME_TOKENS.mutedText }}
-              stroke={THEME_TOKENS.border}
+              tick={{ fontSize: 11, fill: 'var(--muted)' }}
+              stroke="var(--border)"
               tickLine={false}
               angle={-20}
               textAnchor="end"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: THEME_TOKENS.mutedText }}
-              stroke={THEME_TOKENS.border}
+              tick={{ fontSize: 11, fill: 'var(--muted)' }}
+              stroke="var(--border)"
               tickLine={false}
               tickFormatter={(v) => typeof v === 'number' ? v.toLocaleString() : v}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: THEME_TOKENS.surface,
-                borderColor: THEME_TOKENS.border,
-                borderRadius: '8px',
+                backgroundColor: 'var(--surface)',
+                borderColor: 'var(--border)',
+                borderRadius: '10px',
                 boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                 fontSize: '12px',
+                color: 'var(--text)',
               }}
             />
             <Bar dataKey={metricKey} radius={[4, 4, 0, 0]}>
               {rawRows.map((_, index) => (
                 <Cell
                   key={`cell-${index}`}
-                  fill={THEME_TOKENS.chartSeries[index % THEME_TOKENS.chartSeries.length]}
+                  fill={CHART_SERIES_VARS[index % CHART_SERIES_VARS.length]}
                 />
               ))}
             </Bar>

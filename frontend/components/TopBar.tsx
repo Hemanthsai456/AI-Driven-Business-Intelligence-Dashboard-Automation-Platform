@@ -3,36 +3,40 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from './ThemeProvider';
 import { Breadcrumbs } from './Breadcrumbs';
-import { healthCheck } from '../lib/api';
+import { healthCheck, getProvidersStatus } from '../lib/api';
 import {
   Sun,
   Moon,
   Laptop,
   CheckCircle2,
+  AlertTriangle,
   PanelLeftClose,
   PanelLeft,
-  HelpCircle,
+  Cpu,
 } from 'lucide-react';
 
 interface TopBarProps {
   datasetName?: string;
-  sourceType?: string;
   rowCount?: number;
-  columnCount?: number;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({
-  datasetName,
-  sourceType,
-  rowCount,
-  columnCount,
-}) => {
+interface ProviderInfo {
+  provider: string;
+  status: 'live' | 'failed';
+  model: string | null;
+  reason: string | null;
+  is_baseline: boolean;
+}
+
+export const TopBar: React.FC<TopBarProps> = ({ datasetName, rowCount }) => {
   const { theme, setTheme, resolvedTheme, sidebarCollapsed, toggleSidebar } = useTheme();
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
-  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
   useEffect(() => {
     let mounted = true;
+
+    // Check backend health
     healthCheck()
       .then(() => {
         if (mounted) setBackendStatus('connected');
@@ -40,10 +44,26 @@ export const TopBar: React.FC<TopBarProps> = ({
       .catch(() => {
         if (mounted) setBackendStatus('disconnected');
       });
+
+    // Check multi-provider health
+    getProvidersStatus()
+      .then((res) => {
+        if (mounted && res && res.providers) {
+          setProviders(res.providers);
+        }
+      })
+      .catch(() => {
+        // Fallback if provider endpoint temporarily unavailable
+      });
+
     return () => {
       mounted = false;
     };
   }, []);
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
 
   return (
     <header className="h-14 px-4 sm:px-6 bg-surface border-b border-border flex items-center justify-between sticky top-0 z-30 select-none shadow-xs">
@@ -52,7 +72,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <button
           onClick={toggleSidebar}
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
         >
           {sidebarCollapsed ? (
             <PanelLeft className="w-4 h-4" />
@@ -63,36 +83,69 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <div className="h-4 w-px bg-border hidden sm:block" />
 
-        <div className="hidden sm:block truncate">
+        <div className="hidden sm:block truncate font-sans">
           <Breadcrumbs extra={datasetName ? `${datasetName} (${rowCount?.toLocaleString()} rows)` : undefined} />
         </div>
       </div>
 
-      {/* Right: Backend Status & Theme Toggle */}
-      <div className="flex items-center gap-3 shrink-0">
-        {/* Compact Backend Connection Indicator */}
+      {/* Right: Provider Chips, Backend Status & Theme Toggle */}
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Compact Provider Chips */}
+        <div className="hidden md:flex items-center gap-1.5">
+          {providers.map((p) => {
+            const isLive = p.status === 'live';
+            const label = p.is_baseline ? 'baseline' : p.provider.replace('_', ' ');
+
+            return (
+              <div
+                key={p.provider}
+                title={
+                  !isLive
+                    ? `${p.provider} failed: ${p.reason || 'Service unreachable'}`
+                    : p.is_baseline
+                    ? 'Rule-based baseline provider'
+                    : `Active model: ${p.model || 'live'}`
+                }
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono font-medium border transition-colors ${
+                  isLive
+                    ? 'bg-success-soft text-success border-success/30'
+                    : 'bg-attention-soft text-attention border-attention/30'
+                }`}
+              >
+                {!isLive ? (
+                  <AlertTriangle className="w-3 h-3 text-attention shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
+                )}
+                <span className="capitalize">{label}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Backend Status Indicator */}
         <div
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-2xs font-mono font-medium border ${
             backendStatus === 'connected'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800'
+              ? 'bg-success-soft text-success border-success/30'
               : backendStatus === 'disconnected'
-              ? 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800'
+              ? 'bg-error-soft text-error border-error/30'
               : 'bg-surface-muted text-muted-foreground border-border'
           }`}
-          title="Backend API (http://localhost:8000/api)"
+          title="Backend API Engine"
         >
           <span
             className={`w-1.5 h-1.5 rounded-full ${
               backendStatus === 'connected'
-                ? 'bg-emerald-600'
+                ? 'bg-success'
                 : backendStatus === 'disconnected'
-                ? 'bg-rose-600'
+                ? 'bg-error'
                 : 'bg-muted-foreground'
             }`}
           />
-          <span>
+          <span className="hidden sm:inline">
             {backendStatus === 'connected'
-              ? 'Backend Connected'
+              ? 'Backend Live'
               : backendStatus === 'disconnected'
               ? 'Backend Offline'
               : 'Connecting...'}
@@ -101,64 +154,19 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <div className="h-4 w-px bg-border" />
 
-        {/* Theme Selector */}
-        <div className="relative">
-          <button
-            onClick={() => setShowThemeMenu((p) => !p)}
-            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors flex items-center"
-            title={`Current theme: ${theme}`}
-          >
-            {resolvedTheme === 'dark' ? (
-              <Moon className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Sun className="w-4 h-4 text-amber-600" />
-            )}
-          </button>
-
-          {showThemeMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowThemeMenu(false)} />
-              <div className="absolute right-0 mt-2 w-32 bg-surface border border-border rounded shadow-md py-1 z-50 text-xs font-medium">
-                <button
-                  onClick={() => {
-                    setTheme('light');
-                    setShowThemeMenu(false);
-                  }}
-                  className={`w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-surface-muted ${
-                    theme === 'light' ? 'text-primary font-semibold' : 'text-foreground'
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Light</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setTheme('dark');
-                    setShowThemeMenu(false);
-                  }}
-                  className={`w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-surface-muted ${
-                    theme === 'dark' ? 'text-primary font-semibold' : 'text-foreground'
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Dark</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setTheme('system');
-                    setShowThemeMenu(false);
-                  }}
-                  className={`w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-surface-muted ${
-                    theme === 'system' ? 'text-primary font-semibold' : 'text-foreground'
-                  }`}
-                >
-                  <Laptop className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>System</span>
-                </button>
-              </div>
-            </>
+        {/* Simple Working Sun / Moon Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors flex items-center"
+          title={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
+          aria-label="Toggle theme"
+        >
+          {resolvedTheme === 'dark' ? (
+            <Sun className="w-4 h-4 text-attention" />
+          ) : (
+            <Moon className="w-4 h-4 text-muted-foreground" />
           )}
-        </div>
+        </button>
       </div>
     </header>
   );

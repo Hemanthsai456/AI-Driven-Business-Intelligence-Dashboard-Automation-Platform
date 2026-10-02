@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   UploadCloud,
   CheckCircle2,
@@ -8,53 +8,47 @@ import {
   Play,
   RotateCcw,
   Sparkles,
-  Trophy,
   Database,
-  BarChart3,
-  FileSpreadsheet,
-  Code,
-  Brush,
   ShieldCheck,
-  Search,
-  ExternalLink,
-  ChevronRight,
-  HelpCircle,
+  ChevronDown,
+  ChevronUp,
   Loader2,
-  Layers,
-  Cpu,
+  X,
+  FileSpreadsheet,
+  Key,
+  Calendar,
+  Tag,
+  TrendingUp,
+  Table,
+  Check,
 } from 'lucide-react';
 import {
   getDatasetCleaningReport,
   getDatasetMetadata,
   getDatasetPreview,
-  getDatasetProfile,
   getDatasetReadiness,
   getDatasetSemanticAnalysis,
   getProvidersStatus,
   listDatasets,
+  resolvePipeline,
   runPipeline,
-  runPlan,
   uploadDataset,
 } from '../lib/api';
 import {
   AnalysisReadiness,
   DataPreviewResponse,
-  DataProfile,
   DatasetListItem,
   DatasetMetadata,
   OrchestratorPipelineResponse,
-  RankedCandidateUI,
   SemanticProfile,
 } from '../lib/types';
 import { Button } from '../components/Button';
-import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
-import { InsightChart } from '../components/InsightChart';
 import { PipelineStepper, PipelineStep, ProviderStatusItem } from '../components/PipelineStepper';
 import { ClarificationCard } from '../components/ClarificationCard';
-import { InterpretationsPanel } from '../components/InterpretationsPanel';
+import { DashboardPanelsView } from '../components/DashboardPanelsView';
 
-export default function SingleFlowPage() {
+export default function HomePage() {
   // 1. Dataset & Ingestion State
   const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
@@ -63,61 +57,83 @@ export default function SingleFlowPage() {
   const [readiness, setReadiness] = useState<AnalysisReadiness | null>(null);
   const [previewData, setPreviewData] = useState<DataPreviewResponse | null>(null);
   const [cleaningReport, setCleaningReport] = useState<any>(null);
+  const [cleaningExpanded, setCleaningExpanded] = useState<boolean>(false);
 
   // Uploading state
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 2. Natural Language Brief & Execution State
-  const [intent, setIntent] = useState<string>('Show total sales by store');
+  // Rule: Do not hardcode dataset names, column names or example briefs anywhere.
+  const [intent, setIntent] = useState<string>('');
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>('idle');
   const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [pipelineResult, setPipelineResult] = useState<OrchestratorPipelineResponse | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+
+  // Cancellation controller
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Providers Health
   const [providers, setProviders] = useState<ProviderStatusItem[]>([]);
 
-  // Active Viewing Plan (Default = Winner)
-  const [activePlan, setActivePlan] = useState<any | null>(null);
-  const [activeExecution, setActiveExecution] = useState<any | null>(null);
-
-  // Active Lower Tabs
-  const [activeTab, setActiveTab] = useState<'chart' | 'data' | 'cleaning' | 'trace'>('chart');
-
-  // Initial Load: Fetch existing datasets and provider health
+  // Initial Load: Fetch existing datasets and provider health concurrently
   useEffect(() => {
-    async function init() {
-      try {
-        const provRes = await getProvidersStatus();
-        if (provRes && provRes.providers) {
-          setProviders(provRes.providers);
-        }
-      } catch (e) {
-        console.error('Failed to load provider health:', e);
-      }
-
-      try {
-        const list = await listDatasets();
+    listDatasets()
+      .then((list) => {
         setDatasets(list);
         if (list.length > 0) {
           selectDataset(list[0].dataset_id);
         }
-      } catch (e) {
-        console.error('Failed to load datasets:', e);
-      }
-    }
-    init();
+      })
+      .catch((e) => console.error('Failed to load datasets:', e));
+
+    getProvidersStatus()
+      .then((provRes) => {
+        if (provRes && provRes.providers) {
+          setProviders(provRes.providers);
+        }
+      })
+      .catch((e) => console.error('Failed to load provider health:', e));
   }, []);
 
-  // Handler to load metadata, semantic analysis, readiness, cleaning, and preview for a dataset
+  // Elapsed seconds timer during pipeline execution
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    const isRunning = ['clean', 'understand', 'propose', 'rank', 'build'].includes(pipelineStep);
+
+    if (isRunning) {
+      const startTime = Date.now();
+      timer = setInterval(() => {
+        setElapsedSeconds(Number(((Date.now() - startTime) / 1000).toFixed(1)));
+      }, 100);
+    } else if (pipelineStep === 'idle') {
+      setElapsedSeconds(0);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [pipelineStep]);
+
+  // Handler to load dataset details
   const selectDataset = async (datasetId: string) => {
     setSelectedDatasetId(datasetId);
     setUploadError(null);
     setPipelineResult(null);
-    setActivePlan(null);
-    setActiveExecution(null);
     setPipelineStep('idle');
+    setCleaningExpanded(false);
+
+    if (!datasetId) {
+      setMetadata(null);
+      setSemanticProfile(null);
+      setReadiness(null);
+      setPreviewData(null);
+      setCleaningReport(null);
+      return;
+    }
 
     try {
       const [meta, sem, rdy, prev, cln] = await Promise.all([
@@ -144,7 +160,6 @@ export default function SingleFlowPage() {
     setUploadError(null);
     try {
       const meta = await uploadDataset(file);
-      // Refresh dataset list
       const updatedList = await listDatasets();
       setDatasets(updatedList);
       await selectDataset(meta.dataset_id);
@@ -152,20 +167,75 @@ export default function SingleFlowPage() {
       setUploadError(err.message || 'File upload failed');
     } finally {
       setIsUploading(false);
+      setIsDraggingFile(false);
     }
   };
+
+  // Suggestion chips generated dynamically at runtime from detected roles
+  const suggestionChips = useMemo(() => {
+    if (!semanticProfile?.column_evidences) return [];
+    const evidences = Object.values(semanticProfile.column_evidences);
+    const measures = evidences.filter((c) => c.candidate_role === 'MEASURE').map((c) => c.column_name);
+    const dimensions = evidences.filter((c) => c.candidate_role === 'DIMENSION').map((c) => c.column_name);
+    const datetimes = evidences.filter((c) => c.candidate_role === 'DATETIME').map((c) => c.column_name);
+
+    const chips: string[] = [];
+    if (measures.length > 0 && dimensions.length > 0) {
+      chips.push(`${measures[0]} by ${dimensions[0]}`);
+    }
+    if (measures.length > 0 && datetimes.length > 0) {
+      chips.push(`${measures[0]} trend over ${datetimes[0]}`);
+    }
+    if (measures.length > 1 && dimensions.length > 0) {
+      chips.push(`Average ${measures[1]} across ${dimensions[0]}`);
+    } else if (dimensions.length > 1 && measures.length > 0) {
+      chips.push(`Distribution of ${measures[0]} by ${dimensions[1]}`);
+    } else if (measures.length > 0) {
+      chips.push(`Total ${measures[0]}`);
+    }
+    return chips.slice(0, 3);
+  }, [semanticProfile]);
+
+  // Detected role counts
+  const roleSummary = useMemo(() => {
+    if (!semanticProfile?.column_evidences) return { identifiers: 0, datetimes: 0, dimensions: 0, measures: 0 };
+    const evidences = Object.values(semanticProfile.column_evidences);
+    return {
+      identifiers: evidences.filter((c) => c.candidate_role === 'IDENTIFIER').length,
+      datetimes: evidences.filter((c) => c.candidate_role === 'DATETIME').length,
+      dimensions: evidences.filter((c) => c.candidate_role === 'DIMENSION').length,
+      measures: evidences.filter((c) => c.candidate_role === 'MEASURE').length,
+    };
+  }, [semanticProfile]);
+
+  // Cleaning changes count
+  const cleaningChangesCount = useMemo(() => {
+    if (!cleaningReport) return 0;
+    if (typeof cleaningReport.total_changes === 'number') return cleaningReport.total_changes;
+    if (Array.isArray(cleaningReport.transformations)) {
+      return cleaningReport.transformations.reduce((sum: number, t: any) => sum + (t.affected_count || 1), 0);
+    }
+    return cleaningReport.cleaned_rows_count || 0;
+  }, [cleaningReport]);
 
   // Trigger End-to-End Pipeline Execution
   const handleRunPipeline = async (chosenPlanId?: string) => {
     if (!selectedDatasetId || !intent.trim()) return;
 
+    abortControllerRef.current = new AbortController();
     setPipelineError(null);
     setPipelineStep('clean');
 
+    let t1: NodeJS.Timeout | null = null;
+    let t2: NodeJS.Timeout | null = null;
+
     try {
-      // Step: Clean completed by ingest, transitioning to Understand & Propose
-      setTimeout(() => setPipelineStep('understand'), 300);
-      setTimeout(() => setPipelineStep('propose'), 700);
+      t1 = setTimeout(() => {
+        setPipelineStep((prev) => (prev === 'clean' ? 'understand' : prev));
+      }, 350);
+      t2 = setTimeout(() => {
+        setPipelineStep((prev) => (prev === 'understand' ? 'propose' : prev));
+      }, 750);
 
       const res = await runPipeline(
         selectedDatasetId,
@@ -176,15 +246,15 @@ export default function SingleFlowPage() {
         chosenPlanId
       );
 
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
+
       setPipelineResult(res);
 
       if (res.status === 'NEEDS_CLARIFICATION') {
-        setPipelineStep('rank'); // Paused at rank for clarification
+        setPipelineStep('rank');
       } else if (res.status === 'SUCCESS' && res.winner) {
         setPipelineStep('done');
-        setActivePlan(res.winner);
-        setActiveExecution(res.winner.execution);
-        setActiveTab('chart');
       } else if (res.status === 'UNANSWERABLE' || res.status === 'REFUSED') {
         setPipelineStep('error');
         setPipelineError(res.message || 'Pipeline could not answer intent.');
@@ -192,93 +262,112 @@ export default function SingleFlowPage() {
         setPipelineStep('done');
       }
     } catch (err: any) {
-      setPipelineStep('error');
-      setPipelineError(err.message || 'Pipeline execution failed.');
+      if (t1) clearTimeout(t1);
+      if (t2) clearTimeout(t2);
+      if (err.name === 'AbortError') {
+        setPipelineStep('idle');
+      } else {
+        setPipelineStep('error');
+        setPipelineError(err.message || 'Pipeline execution failed.');
+      }
+    } finally {
+      abortControllerRef.current = null;
     }
+  };
+
+  // Cancel action
+  const handleCancelRun = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setPipelineStep('idle');
+    setElapsedSeconds(0);
   };
 
   // Clarification Selection Handler
   const handleSelectClarificationOption = async (chosenPlanId: string) => {
-    await handleRunPipeline(chosenPlanId);
-  };
-
-  // Switch to viewing an alternate candidate
-  const handleViewCandidateInstead = async (cand: RankedCandidateUI) => {
-    if (!cand) return;
-    try {
-      // Run execution for this plan if not already present
-      const runRes = await runPlan({
-        plan_id: cand.plan_id,
-        metric: { column: cand.metric.replace(/.*\((.*)\)/, '$1'), aggregation: cand.metric.split('(')[0].toLowerCase() },
-        dimensions: cand.dimensions.map((d) => ({ column: d })),
-        visualization: cand.visualization.toLowerCase(),
-      });
-      setActivePlan({
-        plan_id: cand.plan_id,
-        generator: cand.generator,
-        visualization: cand.visualization,
-        score: cand.score,
-        score_breakdown: cand.score_breakdown,
-        metric: cand.metric,
-        dimensions: cand.dimensions,
-        reasoning: { interpretation: `Candidate #${cand.rank} analytical query` },
-      });
-      setActiveExecution(runRes.execution);
-      setActiveTab('chart');
-    } catch (e) {
-      console.error('Failed to run plan:', e);
+    if (pipelineResult?.run_id) {
+      setPipelineStep('propose');
+      setPipelineError(null);
+      try {
+        const resolved = await resolvePipeline(pipelineResult.run_id, chosenPlanId);
+        setPipelineResult(resolved);
+        if (resolved.status === 'SUCCESS' && resolved.winner) {
+          setPipelineStep('done');
+        } else if (resolved.status === 'NEEDS_CLARIFICATION') {
+          setPipelineStep('rank');
+        } else {
+          setPipelineStep('done');
+        }
+      } catch (err: any) {
+        setPipelineStep('error');
+        setPipelineError(err.message || 'Pipeline resolution failed.');
+      }
+    } else {
+      await handleRunPipeline(chosenPlanId);
     }
   };
 
-  // Role badges summary
-  const roleCounts = React.useMemo(() => {
-    if (!semanticProfile?.column_evidences) return {};
-    const counts: Record<string, number> = {};
-    Object.values(semanticProfile.column_evidences).forEach((col) => {
-      counts[col.candidate_role] = (counts[col.candidate_role] || 0) + 1;
-    });
-    return counts;
-  }, [semanticProfile]);
-
-  // Robustness calculation: how many candidate interpretations agree with the winning signature
-  const robustnessCount = React.useMemo(() => {
-    if (!pipelineResult?.ranked_candidates || pipelineResult.ranked_candidates.length === 0) return 1;
-    if (!activePlan) return 1;
-    const matching = pipelineResult.ranked_candidates.filter((c) => {
-      const sameMetric = c.metric === activePlan.metric;
-      const sharesDim = c.dimensions?.some((d) => activePlan.dimensions?.includes(d));
-      return sameMetric || sharesDim;
-    });
-    return Math.max(1, matching.length);
-  }, [pipelineResult, activePlan]);
-  const totalCandidates = pipelineResult?.ranked_candidates?.length || 1;
+  const isPipelineRunning = ['clean', 'understand', 'propose', 'rank', 'build'].includes(pipelineStep);
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-16">
+    <div className="space-y-6 max-w-5xl mx-auto pb-16 font-sans">
+      {/* Page Title */}
+      <div className="pb-1">
+        <h1 className="text-page-title font-bold text-foreground tracking-tight">
+          AI Business Intelligence Studio
+        </h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Autonomous analytical intelligence, multi-provider consensus, and verified dashboard generation.
+        </p>
+      </div>
+
       {/* --------------------------------------------------------------------- */}
-      {/* 1. INPUT PANEL (Dropzone, Dataset Summary, Brief Box, Generate Button) */}
+      {/* CARD 1: DATASET */}
       {/* --------------------------------------------------------------------- */}
-      <section className="bg-surface border border-border rounded-card p-5 sm:p-6 shadow-xs space-y-5">
+      <section
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDraggingFile(true);
+        }}
+        onDragLeave={() => setIsDraggingFile(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDraggingFile(false);
+          if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
+        }}
+        className={`bg-surface border rounded-card p-6 shadow-xs transition-all space-y-4 ${
+          isDraggingFile ? 'border-primary ring-2 ring-primary/20 bg-primary-soft/20' : 'border-border'
+        }`}
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
-          <div>
-            <h1 className="text-base font-bold text-foreground tracking-tight flex items-center gap-2">
-              <Database className="w-4 h-4 text-primary" />
-              <span>AI Analytical Intelligence & Dashboard Automation</span>
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Upload any raw tabular dataset and type a free-text analytical brief.
-            </p>
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs shrink-0">
+              1
+            </span>
+            <div>
+              <h2 className="text-section font-semibold text-foreground">
+                Dataset
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Ingested and normalized data structure
+              </p>
+            </div>
           </div>
 
-          {/* Dataset Selector if multiple exist */}
-          {datasets.length > 1 && (
+          {/* Dataset Switcher Dropdown (Merged into Card) */}
+          {datasets.length > 0 && (
             <div className="flex items-center gap-2">
-              <label className="text-2xs font-mono uppercase text-muted-foreground">Active:</label>
+              <label htmlFor="dataset-select" className="text-2xs font-mono uppercase text-muted-foreground">
+                Switch Dataset:
+              </label>
               <select
+                id="dataset-select"
                 aria-label="Active Dataset Selection"
                 value={selectedDatasetId}
                 onChange={(e) => selectDataset(e.target.value)}
-                className="text-xs font-mono bg-surface border border-border rounded px-2.5 py-1 text-foreground focus:outline-none focus:border-primary"
+                className="text-xs font-mono bg-surface border border-border rounded-md px-2.5 py-1 text-foreground focus-visible:ring-2 focus-visible:ring-primary focus:outline-none"
               >
                 {datasets.map((d) => (
                   <option key={d.dataset_id} value={d.dataset_id}>
@@ -290,526 +379,390 @@ export default function SingleFlowPage() {
           )}
         </div>
 
-        {/* File Dropzone */}
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
-          }}
-          className={`border-2 border-dashed rounded-card p-6 text-center cursor-pointer transition-all ${
-            isUploading
-              ? 'border-primary bg-primary-soft/30'
-              : 'border-border hover:border-primary/60 bg-surface-muted/20 hover:bg-surface-muted/40'
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.tsv,.xlsx,.parquet"
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
-            }}
-          />
-          <div className="flex flex-col items-center justify-center gap-2">
-            <div className="p-3 bg-primary-soft text-primary rounded-full">
-              <UploadCloud className="w-6 h-6 stroke-[2]" />
+        {/* State A: No Dataset Loaded -> Full Dropzone */}
+        {!metadata ? (
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-card p-10 text-center cursor-pointer transition-all ${
+              isUploading
+                ? 'border-primary bg-primary-soft/30'
+                : 'border-border hover:border-primary/60 bg-surface-muted/20 hover:bg-surface-muted/40'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.tsv,.xlsx,.parquet"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+              }}
+            />
+            <div className="flex flex-col items-center justify-center gap-2">
+              <div className="p-3 bg-primary-soft text-primary rounded-full">
+                <UploadCloud className="w-6 h-6 stroke-[2]" />
+              </div>
+              <div className="text-xs font-semibold text-foreground">
+                {isUploading ? 'Ingesting, cleaning, and profiling...' : 'Drag and drop your dataset here, or click to browse'}
+              </div>
+              <p className="text-2xs text-muted-foreground font-mono">
+                Supports CSV, TSV, Parquet, and Excel (.xlsx) up to 100MB
+              </p>
             </div>
-            <div className="text-xs font-semibold text-foreground">
-              {isUploading ? 'Ingesting, cleaning, and profiling...' : 'Click or drag a dataset here (CSV, TSV, Parquet, Excel)'}
-            </div>
-            <p className="text-2xs text-muted-foreground">
-              Automatic UTF/delimiter detection, data cleaning, semantic role inference, and readiness validation.
-            </p>
           </div>
-        </div>
+        ) : (
+          /* State B: Dataset Loaded -> Compact View with Roles & Cleaning Row */
+          <div className="space-y-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.tsv,.xlsx,.parquet"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+              }}
+            />
 
-        {uploadError && (
-          <div className="p-3 bg-error-soft border border-error/30 rounded text-error text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Upload Failed: {uploadError}</span>
-          </div>
-        )}
-
-        {/* Dataset Summary Card (Rows, Columns, Detected Roles chips, Readiness) */}
-        {metadata && (
-          <div className="bg-surface-muted/30 border border-border rounded-card p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-foreground font-mono truncate">
-                  {metadata.filename || metadata.dataset_id}
-                </span>
-                <span className="text-2xs font-mono px-2 py-0.5 rounded bg-surface border border-border text-muted-foreground">
-                  {metadata.row_count?.toLocaleString()} rows • {metadata.column_count} columns
-                </span>
-                {readiness && (
-                  <Badge
-                    variant={readiness.status === 'READY' ? 'teal' : readiness.status === 'READY_WITH_WARNINGS' ? 'amber' : 'red'}
-                    size="xs"
-                    dot
-                  >
-                    {readiness.status.replace(/_/g, ' ')}
-                  </Badge>
-                )}
+            {/* Header info row with Replace Button */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-surface-muted/30 rounded-card border border-border">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 bg-primary-soft text-primary rounded-md shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-foreground truncate">
+                      {metadata.filename}
+                    </span>
+                    <Badge variant="blue" size="xs">
+                      {metadata.source_type?.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="text-xs font-mono text-muted-foreground mt-0.5">
+                    {metadata.row_count.toLocaleString()} rows • {metadata.column_count} columns
+                  </div>
+                </div>
               </div>
 
-              {/* Detected Roles Chips */}
-              <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                <span className="text-2xs font-mono text-muted-foreground mr-1">Inferred Roles:</span>
-                {Object.entries(roleCounts).map(([role, count]) => (
-                  <span
-                    key={role}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-mono bg-surface border border-border text-foreground"
-                  >
-                    <span className="font-semibold text-primary">{count}</span>
-                    <span className="text-muted-foreground">{role.toLowerCase()}</span>
+              <div className="flex items-center gap-2.5 shrink-0">
+                {/* Readiness Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${
+                    readiness?.status === 'READY' || readiness?.status === 'READY_WITH_WARNINGS'
+                      ? 'bg-success-soft text-success border-success/30'
+                      : 'bg-attention-soft text-attention border-attention/30'
+                  }`}
+                >
+                  {readiness?.status === 'READY' || readiness?.status === 'READY_WITH_WARNINGS' ? (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {readiness?.status === 'READY'
+                      ? 'Ready for Analysis'
+                      : readiness?.status === 'READY_WITH_WARNINGS'
+                      ? 'Ready (With Warnings)'
+                      : 'Readiness Caution'}
                   </span>
-                ))}
+                </div>
+
+                {/* Compact Replace dataset button */}
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => fileInputRef.current?.click()}
+                  leftIcon={<UploadCloud className="w-3.5 h-3.5" />}
+                >
+                  Replace dataset
+                </Button>
               </div>
             </div>
 
-            <div className="shrink-0 flex items-center gap-2 text-2xs font-mono text-muted-foreground">
-              {cleaningReport && (
-                <span className="px-2.5 py-1 rounded bg-surface border border-border">
-                  Cleaning: {cleaningReport.changes?.length ?? 0} automated fix(es)
+            {/* Inferred Roles Chips */}
+            <div className="space-y-1.5">
+              <span className="text-2xs font-mono uppercase text-muted-foreground tracking-wider font-semibold">
+                Detected Column Roles:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-border bg-surface-muted text-foreground font-mono">
+                  <TrendingUp className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{roleSummary.measures} measure{roleSummary.measures === 1 ? '' : 's'}</span>
                 </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-border bg-surface-muted text-foreground font-mono">
+                  <Tag className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{roleSummary.dimensions} dimension{roleSummary.dimensions === 1 ? '' : 's'}</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-border bg-surface-muted text-foreground font-mono">
+                  <Calendar className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{roleSummary.datetimes} datetime</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs border border-border bg-surface-muted text-foreground font-mono">
+                  <Key className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>{roleSummary.identifiers} identifier{roleSummary.identifiers === 1 ? '' : 's'}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Expandable Cleaning Row */}
+            <div className="border border-border rounded-card overflow-hidden">
+              <button
+                onClick={() => setCleaningExpanded((p) => !p)}
+                className="w-full flex items-center justify-between p-3 bg-surface-muted/20 hover:bg-surface-muted/50 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-foreground">
+                    Data Cleaning:
+                  </span>
+                  <span className="text-xs font-mono text-muted-foreground">
+                    {cleaningChangesCount} change{cleaningChangesCount === 1 ? '' : 's'} applied
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 text-2xs text-muted-foreground">
+                  <span>{cleaningExpanded ? 'Hide Report' : 'Show Report'}</span>
+                  {cleaningExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </div>
+              </button>
+
+              {cleaningExpanded && (
+                <div className="p-3 border-t border-border bg-surface space-y-2">
+                  <div className="overflow-x-auto max-h-48">
+                    <table className="w-full text-left text-xs font-mono border-collapse">
+                      <thead>
+                        <tr className="border-b border-border text-2xs uppercase text-muted-foreground bg-surface-muted/40">
+                          <th className="py-1.5 px-2.5 font-semibold">Rule</th>
+                          <th className="py-1.5 px-2.5 font-semibold">Target Column</th>
+                          <th className="py-1.5 px-2.5 font-semibold text-right">Count / Details</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border text-foreground">
+                        {cleaningReport?.transformations && cleaningReport.transformations.length > 0 ? (
+                          cleaningReport.transformations.map((t: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-surface-muted/20">
+                              <td className="py-1.5 px-2.5">{t.rule_name || t.type || 'Normalization'}</td>
+                              <td className="py-1.5 px-2.5 font-semibold">{t.column_name || t.column || 'All'}</td>
+                              <td className="py-1.5 px-2.5 text-right text-muted-foreground font-mono">
+                                {t.affected_count || t.count || 1}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="py-3 px-2.5 text-center text-muted-foreground italic">
+                              No type coercion or null-fill anomalies detected in this dataset.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-2xs text-muted-foreground italic font-mono pt-1">
+                    Original data is preserved unchanged in the ingestion stage.
+                  </p>
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Analytical Brief Input Box & Generate Button */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              aria-label="Analytical Question Brief"
+        {uploadError && (
+          <div className="p-3 bg-error-soft border border-error/30 rounded-card text-error text-xs flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Upload Failed: {uploadError}</span>
+          </div>
+        )}
+      </section>
+
+      {/* --------------------------------------------------------------------- */}
+      {/* CARD 2: BRIEF */}
+      {/* --------------------------------------------------------------------- */}
+      <section className="bg-surface border border-border rounded-card p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs shrink-0">
+              2
+            </span>
+            <div>
+              <h2 className="text-section font-semibold text-foreground">
+                Analytical Brief
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Describe what you want to understand, analyze, or compare
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Input box */}
+        <div className="space-y-2">
+          <div className="relative">
+            <textarea
+              rows={2}
               value={intent}
               onChange={(e) => setIntent(e.target.value)}
-              placeholder="e.g. Total sales by store, or Monthly revenue trend..."
-              disabled={!selectedDatasetId || pipelineStep === 'understand' || pipelineStep === 'propose'}
-              className="w-full text-xs font-medium bg-surface border border-border rounded-card px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-all pr-8"
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  if (!isPipelineRunning && selectedDatasetId && intent.trim()) {
+                    handleRunPipeline();
+                  }
+                }
+              }}
+              placeholder="e.g. Compare total revenue by product category, or inspect discount percentage trend over date"
+              className="w-full p-3 text-xs bg-surface border border-border rounded-card text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary focus:outline-none resize-none leading-relaxed"
             />
-            <Sparkles className="w-4 h-4 text-primary absolute right-3 top-3 pointer-events-none" />
           </div>
+          <div className="flex items-center justify-between text-2xs text-muted-foreground font-mono">
+            <span>Press Cmd+Enter or Ctrl+Enter to generate</span>
+            <span>{intent.length} characters</span>
+          </div>
+        </div>
+
+        {/* Runtime Suggestion Chips (Only example text; derived purely from detected roles) */}
+        {suggestionChips.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <span className="text-2xs font-mono uppercase text-muted-foreground tracking-wider font-semibold">
+              Suggested Briefs for this Dataset:
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {suggestionChips.map((chip, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setIntent(chip)}
+                  className="px-2.5 py-1 text-xs rounded-md border border-border bg-surface-muted/40 hover:bg-primary-soft hover:text-primary hover:border-primary/40 transition-colors text-foreground font-medium"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action Toolbar */}
+        <div className="flex items-center justify-end gap-3 pt-2">
+          {isPipelineRunning && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelRun}
+              leftIcon={<X className="w-3.5 h-3.5" />}
+            >
+              Cancel
+            </Button>
+          )}
 
           <Button
             variant="primary"
-            size="md"
-            disabled={!selectedDatasetId || !intent.trim() || pipelineStep === 'understand' || pipelineStep === 'propose'}
+            size="sm"
             onClick={() => handleRunPipeline()}
-            leftIcon={<Play className="w-3.5 h-3.5 fill-current" />}
-            className="shrink-0"
+            disabled={!selectedDatasetId || !intent.trim() || isPipelineRunning}
+            isLoading={isPipelineRunning}
+            leftIcon={!isPipelineRunning ? <Play className="w-3.5 h-3.5" /> : undefined}
           >
-            {pipelineStep === 'understand' || pipelineStep === 'propose' ? 'Generating...' : 'Generate Insights'}
+            {isPipelineRunning ? `Generating… (${elapsedSeconds.toFixed(1)}s)` : 'Generate Dashboard'}
           </Button>
         </div>
       </section>
 
       {/* --------------------------------------------------------------------- */}
-      {/* 2. PIPELINE STEPPER WITH REAL BACKEND STATUS & PROVIDER HEALTH CHIPS */}
+      {/* CARD 3: RESULT */}
       {/* --------------------------------------------------------------------- */}
-      <PipelineStepper
-        currentStep={pipelineStep}
-        errorMessage={pipelineError}
-        providers={providers}
-      />
-
-      {/* --------------------------------------------------------------------- */}
-      {/* CLARIFICATION CARD (When status is NEEDS_CLARIFICATION)              */}
-      {/* --------------------------------------------------------------------- */}
-      {pipelineResult && pipelineResult.status === 'NEEDS_CLARIFICATION' && pipelineResult.clarification_options && (
-        <ClarificationCard
-          message={pipelineResult.message}
-          options={pipelineResult.clarification_options}
-          onSelectOption={handleSelectClarificationOption}
-          isLoading={pipelineStep === 'understand' || pipelineStep === 'propose'}
-        />
-      )}
-
-      {/* --------------------------------------------------------------------- */}
-      {/* 3. RESULT VIEW (Insight-First Layout)                                 */}
-      {/* --------------------------------------------------------------------- */}
-      {activePlan && (
-        <section className="space-y-4">
-          {/* Headline Card */}
-          <div className="bg-surface border border-border rounded-card p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1.5 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-2xs font-bold font-mono bg-primary text-white">
-                  <Trophy className="w-3 h-3" />
-                  <span>WINNING INSIGHT</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono bg-primary-soft text-primary border border-primary/20">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Holds in {robustnessCount} of {totalCandidates} interpretations</span>
-                </span>
-
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono bg-surface-muted text-foreground border border-border">
-                  <span>Score: {Number(activePlan.score || 0).toFixed(3)}</span>
-                </span>
-
-                {activePlan.generator?.includes('baseline') && (
-                  <span className="text-2xs font-mono px-2 py-0.5 rounded bg-attention-soft text-attention border border-attention/30">
-                    Rule-based Baseline
-                  </span>
-                )}
-              </div>
-
-              <h2 className="text-base font-bold text-foreground leading-snug tracking-tight">
-                {activePlan.reasoning?.interpretation || `${activePlan.metric} aggregated across ${activePlan.dimensions?.join(', ') || 'dataset'}`}
+      <section className="bg-surface border border-border rounded-card p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <span className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-xs shrink-0">
+              3
+            </span>
+            <div>
+              <h2 className="text-section font-semibold text-foreground">
+                Dashboard & Analytical Result
               </h2>
-
-              <p className="text-xs text-muted-foreground font-mono">
-                Metric: <span className="text-foreground">{activePlan.metric}</span> • Dimensions: <span className="text-foreground">{activePlan.dimensions?.join(', ') || 'overall'}</span> • Viz: <span className="text-foreground uppercase">{activePlan.visualization}</span>
+              <p className="text-xs text-muted-foreground">
+                Multi-agent consensus winner and robustness matrix
               </p>
             </div>
+          </div>
 
-            <div className="shrink-0 flex items-center gap-2">
+          {pipelineStep === 'done' && (
+            <span className="text-xs font-mono text-success flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              <span>Complete</span>
+            </span>
+          )}
+        </div>
+
+        {/* Sub-state 1: Running Stepper */}
+        {isPipelineRunning && (
+          <div className="space-y-3 py-2">
+            <div className="flex items-center justify-between text-xs font-mono text-muted-foreground">
+              <span>Pipeline execution in progress</span>
+              <span>Elapsed: {elapsedSeconds.toFixed(1)}s</span>
+            </div>
+            <PipelineStepper
+              currentStep={pipelineStep}
+              errorMessage={pipelineError}
+              providers={providers}
+            />
+          </div>
+        )}
+
+        {/* Sub-state 2: Error State with Typed Backend Message and Retry */}
+        {pipelineStep === 'error' && (
+          <div className="p-4 bg-error-soft border border-error/30 rounded-card text-xs text-error space-y-3">
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>Pipeline Execution Failed</span>
+            </div>
+            <p className="font-mono text-2xs leading-relaxed opacity-95">
+              {pipelineError || 'The orchestrator could not answer the brief with statistical confidence.'}
+            </p>
+            <div>
               <Button
-                variant="secondary"
-                size="sm"
+                variant="outline"
+                size="xs"
                 onClick={() => handleRunPipeline()}
                 leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
               >
-                Re-run
+                Retry Execution
               </Button>
             </div>
           </div>
+        )}
 
-          {/* Interactive Chart Grid rendered from DashboardSpec */}
-          <InsightChart
-            visualization={activePlan.visualization}
-            metric={activePlan.metric}
-            dimensions={activePlan.dimensions || []}
-            executionData={activeExecution}
+        {/* Sub-state 3: Clarification Needed State */}
+        {pipelineStep === 'rank' && pipelineResult?.status === 'NEEDS_CLARIFICATION' && (
+          <ClarificationCard
+            message={pipelineResult.message || 'Multiple candidate interpretations produced comparable confidence scores.'}
+            options={pipelineResult.clarification_options || []}
+            onSelectOption={handleSelectClarificationOption}
           />
+        )}
 
-          {/* Interpretations Panel: Alternates ranked by score */}
-          {pipelineResult?.ranked_candidates && pipelineResult.ranked_candidates.length > 0 && (
-            <InterpretationsPanel
-              candidates={pipelineResult.ranked_candidates}
-              activePlanId={activePlan.plan_id}
-              onViewInstead={handleViewCandidateInstead}
-            />
-          )}
+        {/* Sub-state 4: Success Result State with Full DashboardPanelsView */}
+        {pipelineStep === 'done' && pipelineResult?.dashboard_spec && (
+          <DashboardPanelsView
+            spec={pipelineResult.dashboard_spec}
+            previewData={previewData}
+            cleaningReport={cleaningReport}
+            onSelectCandidate={(planId) => handleRunPipeline(planId)}
+          />
+        )}
 
-          {/* ----------------------------------------------------------------- */}
-          {/* Lower Tabs: Data, Cleaning Report, Trace                         */}
-          {/* ----------------------------------------------------------------- */}
-          <div className="bg-surface border border-border rounded-card overflow-hidden shadow-xs">
-            {/* Tab Headers */}
-            <div className="flex items-center gap-1 p-2 border-b border-border bg-surface-muted/20 text-xs font-semibold">
-              <button
-                onClick={() => setActiveTab('chart')}
-                className={`px-3 py-1.5 rounded transition-all font-mono text-2xs ${
-                  activeTab === 'chart'
-                    ? 'bg-surface text-primary border border-border shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Overview
-              </button>
-              <button
-                onClick={() => setActiveTab('data')}
-                className={`px-3 py-1.5 rounded transition-all font-mono text-2xs ${
-                  activeTab === 'data'
-                    ? 'bg-surface text-primary border border-border shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Data (Raw Preview)
-              </button>
-              <button
-                onClick={() => setActiveTab('cleaning')}
-                className={`px-3 py-1.5 rounded transition-all font-mono text-2xs ${
-                  activeTab === 'cleaning'
-                    ? 'bg-surface text-primary border border-border shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Cleaning Report
-              </button>
-              <button
-                onClick={() => setActiveTab('trace')}
-                className={`px-3 py-1.5 rounded transition-all font-mono text-2xs ${
-                  activeTab === 'trace'
-                    ? 'bg-surface text-primary border border-border shadow-xs'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Trace & SQL
-              </button>
+        {/* Sub-state 5: Empty State */}
+        {pipelineStep === 'idle' && !pipelineResult && (
+          <div className="py-12 px-4 text-center space-y-3 bg-surface-muted/20 rounded-card border border-dashed border-border">
+            <div className="w-10 h-10 rounded-full bg-surface-muted text-muted-foreground flex items-center justify-center mx-auto">
+              <Sparkles className="w-5 h-5" />
             </div>
-
-            {/* Tab Content */}
-            <div className="p-4 sm:p-5">
-              {/* Tab 1: Raw Data Preview (Demoted) */}
-              {activeTab === 'data' && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-2xs font-mono text-muted-foreground">
-                    <span>First 20 rows of active cleaned dataset</span>
-                    <span>{metadata?.row_count} total rows</span>
-                  </div>
-                  {previewData?.rows && previewData.rows.length > 0 ? (
-                    <div className="overflow-x-auto max-h-[300px] border border-border rounded">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-border bg-surface-muted/50 text-muted-foreground font-mono uppercase text-2xs">
-                            {previewData.columns.map((c) => (
-                              <th key={c} className="py-2 px-3 font-semibold">{c}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {previewData.rows.map((r, i) => (
-                            <tr key={i} className="hover:bg-primary-soft/20">
-                              {previewData.columns.map((c) => (
-                                <td key={c} className="py-2 px-3 font-mono text-2xs">{String(r[c] ?? '')}</td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-4 text-center text-xs text-muted-foreground">No preview rows available.</div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 2: Data Cleaning Report */}
-              {activeTab === 'cleaning' && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-                      Data Cleaning & Preprocessing Ledger
-                    </h4>
-                    <span className="text-2xs font-mono text-muted-foreground">
-                      {cleaningReport?.changes?.length ?? 0} total mutations
-                    </span>
-                  </div>
-
-                  {cleaningReport?.changes && cleaningReport.changes.length > 0 ? (
-                    <div className="space-y-2">
-                      {cleaningReport.changes.map((ch: any, idx: number) => (
-                        <div key={idx} className="p-2.5 bg-surface-muted/30 border border-border rounded text-xs flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-surface border border-border font-semibold uppercase text-primary">
-                              {ch.action || 'clean'}
-                            </span>
-                            <span className="text-foreground">{ch.details || ch.description || 'Data normalization applied'}</span>
-                          </div>
-                          {ch.column && (
-                            <span className="font-mono text-2xs text-muted-foreground">
-                              col: {ch.column}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-surface-muted/20 border border-dashed border-border rounded text-center text-xs text-muted-foreground">
-                      No cleaning anomalies found in dataset. Cleaned data passed schema readiness checks cleanly.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Tab 3: Trace & SQL */}
-              {activeTab === 'trace' && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between pb-2 border-b border-border">
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">
-                      Deterministic Engine Execution Trace
-                    </h4>
-                    <span className="text-2xs font-mono text-muted-foreground">Pass 1 & Pass 2 Verified</span>
-                  </div>
-
-                  {/* Compiled SQL */}
-                  <div className="space-y-1.5">
-                    <span className="text-2xs font-mono uppercase text-muted-foreground">Compiled DuckDB SQL Query:</span>
-                    <pre className="p-3 bg-surface-muted/50 border border-border rounded font-mono text-xs text-foreground overflow-x-auto">
-                      {activeExecution?.compiled_sql || 'SELECT * FROM canonical_dataset'}
-                    </pre>
-                  </div>
-
-                  {/* Performance & Execution metrics */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 bg-surface-muted/20 border border-border rounded">
-                      <div className="text-2xs font-mono text-muted-foreground">Returned Rows</div>
-                      <div className="text-sm font-bold font-mono text-foreground">{activeExecution?.row_count ?? 0}</div>
-                    </div>
-                    <div className="p-3 bg-surface-muted/20 border border-border rounded">
-                      <div className="text-2xs font-mono text-muted-foreground">Failed Cast Rate</div>
-                      <div className="text-sm font-bold font-mono text-foreground">{(Number(activeExecution?.failed_cast_rate || 0) * 100).toFixed(1)}%</div>
-                    </div>
-                    <div className="p-3 bg-surface-muted/20 border border-border rounded">
-                      <div className="text-2xs font-mono text-muted-foreground">Execution Status</div>
-                      <div className="text-sm font-bold font-mono text-primary flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>PASSED</span>
-                      </div>
-                    </div>
-                    <div className="p-3 bg-surface-muted/20 border border-border rounded">
-                      <div className="text-2xs font-mono text-muted-foreground">Pass 2 Validation</div>
-                      <div className="text-sm font-bold font-mono text-success flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>VERIFIED</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Candidate Scores Table */}
-                  {pipelineResult?.ranked_candidates && pipelineResult.ranked_candidates.length > 0 && (
-                    <div className="space-y-2 pt-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-2xs font-mono uppercase text-muted-foreground flex items-center gap-1">
-                          <Layers className="w-3.5 h-3.5 text-primary" />
-                          <span>Candidate Scores & Rank Matrix:</span>
-                        </span>
-                        <span className="text-2xs font-mono text-muted-foreground">
-                          {pipelineResult.ranked_candidates.length} candidates evaluated
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto border border-border rounded">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead>
-                            <tr className="border-b border-border bg-surface-muted/50 text-muted-foreground font-mono uppercase text-2xs">
-                              <th className="py-2 px-3">Rank</th>
-                              <th className="py-2 px-3">Plan ID</th>
-                              <th className="py-2 px-3">Generator</th>
-                              <th className="py-2 px-3">Metric / Dims</th>
-                              <th className="py-2 px-3">Evidence</th>
-                              <th className="py-2 px-3">Coverage</th>
-                              <th className="py-2 px-3">Stability</th>
-                              <th className="py-2 px-3 font-bold">Total Score</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border font-mono text-2xs">
-                            {pipelineResult.ranked_candidates.map((c) => (
-                              <tr key={c.plan_id} className={c.is_winner ? 'bg-primary-soft/20 font-semibold' : ''}>
-                                <td className="py-2 px-3">
-                                  {c.is_winner ? (
-                                    <span className="inline-flex items-center gap-1 text-primary font-bold">
-                                      <Trophy className="w-3 h-3" />
-                                      #1
-                                    </span>
-                                  ) : (
-                                    `#${c.rank}`
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 truncate max-w-[100px]" title={c.plan_id}>{c.plan_id}</td>
-                                <td className="py-2 px-3 capitalize">
-                                  {c.generator.includes('baseline') ? 'Rule-based Baseline' : c.generator}
-                                </td>
-                                <td className="py-2 px-3 truncate max-w-[160px]">
-                                  {c.metric} ({c.dimensions.join(', ') || 'overall'})
-                                </td>
-                                <td className="py-2 px-3">{(c.score_breakdown.evidence * 100).toFixed(0)}%</td>
-                                <td className="py-2 px-3">{(c.score_breakdown.coverage * 100).toFixed(0)}%</td>
-                                <td className="py-2 px-3">{(c.score_breakdown.stability * 100).toFixed(0)}%</td>
-                                <td className="py-2 px-3 font-bold text-foreground">{c.score.toFixed(3)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Provider Status List in Trace */}
-                  <div className="space-y-2 pt-2">
-                    <span className="text-2xs font-mono uppercase text-muted-foreground flex items-center gap-1">
-                      <Cpu className="w-3.5 h-3.5 text-primary" />
-                      <span>Provider Status Ledger:</span>
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                      {providers.map((p) => (
-                        <div key={p.provider} className="p-2.5 bg-surface-muted/30 border border-border rounded text-2xs font-mono flex items-center justify-between">
-                          <div>
-                            <div className="font-bold text-foreground capitalize">{p.provider.replace('_', ' ')}</div>
-                            <div className="text-muted-foreground">{p.model || 'rule-based'}</div>
-                          </div>
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-semibold ${
-                            p.status === 'live' ? 'bg-success-soft text-success border border-success/30' : 'bg-attention-soft text-attention border border-attention/30'
-                          }`}>
-                            {p.status === 'live' ? <CheckCircle2 className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
-                            {p.status.toUpperCase()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab Overview: Insight summary */}
-              {activeTab === 'chart' && (
-                <div className="text-xs text-muted-foreground leading-relaxed">
-                  Generated deterministically from user brief &quot;{intent}&quot; without hardcoded schemas or dataset-specific logic.
-                </div>
-              )}
+            <div className="text-xs font-semibold text-foreground">
+              No Analysis Generated Yet
             </div>
-          </div>
-        </section>
-      )}
-
-      {/* 4. Loading State while Pipeline is executing */}
-      {pipelineStep !== 'idle' && pipelineStep !== 'done' && pipelineStep !== 'error' && !activePlan && (
-        <div className="p-10 border border-border rounded-card bg-surface shadow-xs text-center flex flex-col items-center justify-center gap-3">
-          <div className="p-3 bg-primary-soft text-primary rounded-full animate-spin">
-            <Loader2 className="w-8 h-8" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Executing Analytical Pipeline</h3>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md">
-              Running multi-agent candidate generation, Pass 1 validation, consensus scoring, and DuckDB execution...
+            <p className="text-2xs text-muted-foreground max-w-sm mx-auto">
+              Upload a dataset in Step 1 and type an analytical brief in Step 2 to generate an automated Recharts dashboard with perturbation robustness verification.
             </p>
           </div>
-        </div>
-      )}
-
-      {/* 5. Error State if Pipeline failed */}
-      {pipelineStep === 'error' && !activePlan && (
-        <div className="p-10 border border-error/30 rounded-card bg-error-soft/30 text-center flex flex-col items-center justify-center gap-4">
-          <div className="p-3 bg-error-soft text-error rounded-full">
-            <AlertTriangle className="w-8 h-8" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Pipeline Execution Stopped</h3>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md">
-              {pipelineError || 'The query or dataset could not be processed. Please check provider health or refine your brief.'}
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleRunPipeline()}
-            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-          >
-            Retry Pipeline
-          </Button>
-        </div>
-      )}
-
-      {/* 6. Empty State when no pipeline has been run yet */}
-      {!activePlan && pipelineStep === 'idle' && (
-        <div className="p-10 border border-dashed border-border rounded-card bg-surface/50 text-center flex flex-col items-center justify-center gap-3">
-          <div className="p-3 bg-primary-soft text-primary rounded-full">
-            <BarChart3 className="w-8 h-8 stroke-[1.5]" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Analytical Dashboard Canvas Ready</h3>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md">
-              Select or upload a dataset above, enter an analytical brief, and click &quot;Generate Insights&quot; to begin.
-            </p>
-          </div>
-        </div>
-      )}
+        )}
+      </section>
     </div>
   );
 }

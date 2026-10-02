@@ -127,20 +127,24 @@ class LLMProviderFactory:
         provider_names = [p.strip().lower() for p in raw_str.split(",") if p.strip()]
 
         clients: List[LLMClient] = []
-        is_testing = bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("TESTING"))
+        failed_errors: List[tuple[str, Exception]] = []
         for name in provider_names:
             try:
                 client = cls.create_client(provider=name)
                 clients.append(client)
             except Exception as e:
-                if is_testing:
-                    logger.warning(
-                        f"Optional provider '{name}' failed initialization and will be skipped in test: {e}"
-                    )
-                else:
-                    if isinstance(e, ProviderInitializationError):
-                        raise
-                    raise ProviderInitializationError(name, str(e)) from e
+                logger.warning(
+                    f"Provider '{name}' failed initialization and will be skipped: {e}"
+                )
+                failed_errors.append((name, e))
+
+        if not clients:
+            if failed_errors:
+                first_name, first_err = failed_errors[0]
+                if isinstance(first_err, ProviderInitializationError):
+                    raise first_err
+                raise ProviderInitializationError(first_name, str(first_err)) from first_err
+            raise ProviderInitializationError("none", "No active providers configured")
 
         return clients
 

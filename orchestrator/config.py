@@ -37,6 +37,9 @@ MAX_CASCADE_DEPTH: int = 2
 # Ties trigger a clarification prompt rather than arbitrary winner selection.
 RANK_TIE_EPSILON: float = 0.05
 
+# Configurable robustness floor below which the top candidate is considered ambiguous/tied
+ROBUSTNESS_TIE_FLOOR: float = 0.50
+
 # ---------------------------------------------------------------------------
 # Ranker V1 — Score Weights  (Project Decisions / Configurable Hypotheses)
 # ---------------------------------------------------------------------------
