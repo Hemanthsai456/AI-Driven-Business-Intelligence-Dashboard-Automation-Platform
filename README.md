@@ -67,7 +67,7 @@ An enterprise-grade, end-to-end platform for automated data ingestion, profiling
                                                              │
                                                              ▼
                                       ┌──────────────────────────────────────────────┐
-                                      │       Stage F: Power BI DashboardSpec        │
+                                      │       Power BI DashboardSpec                 │
                                       │   Row 1: KPI Context Strip (Max 4 Tiles)     │
                                       │   Row 2: Hero Tile (w=8) + Side Tile (w=4)   │
                                       │   Row 3+: Supporting Grid (w=6 or w=4)       │
