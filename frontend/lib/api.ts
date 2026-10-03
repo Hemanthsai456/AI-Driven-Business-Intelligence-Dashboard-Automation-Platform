@@ -7,7 +7,7 @@ import {
   SemanticProfile,
 } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -179,5 +179,24 @@ export async function resolvePipeline(
     }),
   });
   return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
+}
+
+export async function queryTile(
+  specId: string,
+  tileId: string,
+  filters: { column: string; operator: string; values: any[] }[]
+): Promise<{
+  tile_id: string;
+  data: Record<string, any>[];
+  row_count: number;
+  status: 'SUCCESS' | 'INSUFFICIENT_DATA';
+  filters_applied: any[];
+}> {
+  const res = await fetch(`${API_BASE}/dashboard/${specId}/tile/${tileId}/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filters }),
+  });
+  return handleResponse<any>(res);
 }
 

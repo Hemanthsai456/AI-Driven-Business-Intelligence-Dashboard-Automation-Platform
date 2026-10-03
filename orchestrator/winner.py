@@ -239,6 +239,49 @@ def select_winner(
         semantic_profile=semantic_profile,
     )
 
+    # Build focused tiles
+    from orchestrator.schemas import DashboardTile, TileSize, TileEvidence, PanelType
+    from orchestrator.discovery.tiles import _format_provenance, build_slicer_definitions
+
+    focused_tiles: List[DashboardTile] = []
+    main_chart_panel = next((p for p in panels if p.panel_type in (PanelType.BAR, PanelType.LINE, PanelType.KPI)), None)
+    if main_chart_panel:
+        c_type = "kpi" if main_chart_panel.panel_type == PanelType.KPI else ("line" if main_chart_panel.panel_type == PanelType.LINE else "bar")
+        focused_tiles.append(
+            DashboardTile(
+                id=f"tile_{main_chart_panel.panel_id[:8]}",
+                title=main_chart_panel.title,
+                chart_type=c_type,
+                size=TileSize(w=8, h=4) if c_type != "kpi" else TileSize(w=3, h=2),
+                priority=1,
+                generator=_format_provenance("rule_baseline"),
+                evidence=TileEvidence(
+                    strength=1.0,
+                    robustness=winner_ranked_candidate.score_breakdown.stability,
+                    score=winner_ranked_candidate.score_breakdown.total,
+                    n=winner_ranked_candidate.execution_result.row_count,
+                ),
+                why_chosen=f"Winner candidate plan: {winner_ranked_candidate.plan.reasoning.interpretation}",
+                plan=winner_ranked_candidate.plan,
+                compiled_sql=winner_ranked_candidate.execution_result.compiled_sql,
+                data=main_chart_panel.data,
+                x_key=main_chart_panel.x_key,
+                y_keys=main_chart_panel.y_keys,
+                dimensions=[d.column for d in winner_ranked_candidate.plan.dimensions],
+                metrics=[winner_ranked_candidate.plan.metric.column],
+            )
+        )
+
+    # Slicers from dataset if available
+    slicers = []
+    try:
+        from api.store import session_store
+        rec = session_store.get(dataset_id)
+        if rec and rec.dataset:
+            slicers = build_slicer_definitions(rec.dataset, semantic_profile)
+    except Exception:
+        pass
+
     return DashboardSpec(
         spec_id=str(uuid4()),
         dataset_id=dataset_id,
@@ -246,6 +289,8 @@ def select_winner(
         headline=headline,
         winner=winner_ranked_candidate,
         panels=panels,
+        tiles=focused_tiles,
+        slicers=slicers,
         alternate_interpretations=alternate_interpretations,
         trace=trace,
         created_at=datetime.now(timezone.utc).isoformat(),

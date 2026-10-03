@@ -209,6 +209,8 @@ class OrchestratorPipelineResponse(BaseModel):
     resolved_by: Optional[str] = None
     decision_log_entry: Optional[Dict[str, Any]] = None
     explainability_log_entry: Optional[Dict[str, Any]] = None
+    mode: Optional[str] = "focused"
+    rejected_insights: Optional[List[Dict[str, Any]]] = None
 
 
 class ResolvePipelineRequest(BaseModel):
@@ -225,4 +227,31 @@ class ResolveErrorResponse(BaseModel):
     message: str
     error_type: str
     status_code: int
+
+
+class TileFilter(BaseModel):
+    """Filter applied to a tile query."""
+
+    column: str
+    operator: str = "="
+    values: Optional[Any] = None
+    value: Optional[Any] = None
+
+
+class TileQueryRequest(BaseModel):
+    """Request payload for querying a single dashboard tile with cross-filters/slicers."""
+
+    filters: List[TileFilter] = Field(default_factory=list)
+
+
+class TileQueryResponse(BaseModel):
+    """Result data for a recompiled tile query."""
+
+    tile_id: str
+    status: str = "SUCCESS"  # "SUCCESS" | "INSUFFICIENT_DATA"
+    row_count: int
+    data: List[Dict[str, Any]]
+    cached: bool = False
+    message: Optional[str] = None
+
 

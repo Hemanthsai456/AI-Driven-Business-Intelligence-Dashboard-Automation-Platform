@@ -139,7 +139,10 @@ def validate_pass1a(
 
     # 2. Metric Column Checks
     metric_col = plan.metric.column
-    if metric_col not in available_cols:
+    if metric_col == "*" and plan.metric.aggregation in (AggregationType.COUNT, AggregationType.COUNT_DISTINCT):
+        # Valid wildcard count
+        pass
+    elif metric_col not in available_cols:
         issues.append(
             ValidationIssue(
                 check="metric_column_exists",

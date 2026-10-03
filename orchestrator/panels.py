@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from intelligence.semantic_analyzer import ColumnRole, DatasetSemanticProfile
+from orchestrator.config import ROBUSTNESS_FLOOR
 from orchestrator.schemas import (
     AggregationType,
     AlternateInterpretation,
@@ -114,10 +115,13 @@ def generate_headline_insight(
     plan: CandidatePlan,
     result: ExecutionResult,
     score: ScoreBreakdown,
+    robustness_floor: float = ROBUSTNESS_FLOOR,
 ) -> str:
     """Generate a single headline insight sentence from the spec.
 
     Includes: metric, dimension, top group, and robustness.
+    If robustness is below the configured floor, headline must say so,
+    show an amber 'Low stability' indicator, and must not say 'leads'.
     """
     metric_str = f"{plan.metric.aggregation.value} of {plan.metric.column}"
 
@@ -128,10 +132,17 @@ def generate_headline_insight(
         robustness_str = "untested"
 
     rows = result.rows or []
+    is_low_stability = score.stability is not None and score.stability < robustness_floor
+
     if not plan.dimensions or not rows:
         # No dimension (KPI)
         val = rows[0].get(result.columns[0]) if (rows and result.columns) else "N/A"
         formatted_val = _safe_format_value(val)
+        if is_low_stability:
+            return (
+                f"Low stability ({robustness_str}): Total {metric_str} is {formatted_val}, "
+                f"falling below the {round(robustness_floor * 100, 1)}% stability floor."
+            )
         return (
             f"Total {metric_str} is {formatted_val}, with {robustness_str} "
             "rank stability across variant interpretations."
@@ -139,6 +150,11 @@ def generate_headline_insight(
 
     dim_col, metric_col = _find_data_keys(rows, plan)
     if not metric_col or not dim_col:
+        if is_low_stability:
+            return (
+                f"Low stability ({robustness_str}): {metric_str} analyzed across {plan.dimensions[0].column} "
+                f"is below the {round(robustness_floor * 100, 1)}% robustness floor."
+            )
         return (
             f"{metric_str} analyzed across {plan.dimensions[0].column}, "
             f"with {robustness_str} rank stability across variant interpretations."
@@ -157,6 +173,12 @@ def generate_headline_insight(
     top_row = sorted_rows[0] if sorted_rows else {}
     top_group = top_row.get(dim_col, "Top group")
     top_val = _safe_format_value(top_row.get(metric_col))
+
+    if is_low_stability:
+        return (
+            f"Low stability ({robustness_str}): {metric_str} across {dim_col} is below the {round(robustness_floor * 100, 1)}% robustness floor; "
+            f"observed margin for {top_group} ({top_val}) is sensitive to variant interpretations."
+        )
 
     return (
         f"{top_group} leads with {top_val} in {metric_str} across {dim_col}, "
@@ -458,6 +480,7 @@ def build_dashboard_panels(
     winner_score: ScoreBreakdown,
     alternates: List[AlternateInterpretation],
     semantic_profile: Optional[DatasetSemanticProfile] = None,
+    robustness_floor: float = ROBUSTNESS_FLOOR,
 ) -> Tuple[str, List[DashboardPanel]]:
     """Assemble the complete generic dashboard panels list and headline insight.
 
@@ -473,11 +496,13 @@ def build_dashboard_panels(
         plan=winner_plan,
         result=winner_result,
         score=winner_score,
+        robustness_floor=robustness_floor,
     )
 
     panels: List[DashboardPanel] = []
 
     # Headline Insight Panel
+    is_low_stability = winner_score.stability is not None and winner_score.stability < robustness_floor
     headline_panel = DashboardPanel(
         panel_id=str(uuid4()),
         panel_type=PanelType.INSIGHT,
@@ -488,6 +513,10 @@ def build_dashboard_panels(
             "metric": winner_plan.metric.column,
             "aggregation": winner_plan.metric.aggregation.value,
             "stability": winner_score.stability,
+            "robustness_floor": robustness_floor,
+            "is_low_stability": is_low_stability,
+            "badge": "Low stability" if is_low_stability else None,
+            "badge_variant": "amber" if is_low_stability else None,
         },
     )
     panels.append(headline_panel)

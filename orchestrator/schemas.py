@@ -677,11 +677,83 @@ class DashboardPanel(BaseModel):
     model_config = {"frozen": True}
 
 
+class TileSize(BaseModel):
+    """Tile dimensions on a 12-column grid."""
+
+    w: int = Field(default=4, description="Width on 12-column grid (e.g. 3, 4, 6, 8, 12)")
+    h: int = Field(default=3, description="Height or row span (e.g. 2, 3, 4)")
+
+    model_config = {"frozen": True}
+
+
+class SlicerOption(BaseModel):
+    """A distinct option in a categorical/dimension slicer."""
+
+    value: Any
+    label: str
+    count: Optional[int] = None
+
+    model_config = {"frozen": True}
+
+
+class SlicerDef(BaseModel):
+    """Runtime slicer filter definition generated dynamically from the dataset."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    column: str
+    role: str = Field(description="DATETIME or DIMENSION")
+    control_type: str = Field(description="'date_range' or 'multi_select'")
+    min_date: Optional[str] = None
+    max_date: Optional[str] = None
+    options: List[SlicerOption] = Field(default_factory=list)
+
+    model_config = {"frozen": True}
+
+
+class TileEvidence(BaseModel):
+    """Statistical and provenance evidence attached to a tile."""
+
+    strength: Optional[float] = None
+    robustness: Optional[float] = None
+    fdr_passed: Optional[bool] = None
+    fdr_q_value: Optional[float] = None
+    n: Optional[int] = None
+    score: Optional[float] = None
+
+    model_config = {"frozen": True}
+
+
+class DashboardTile(BaseModel):
+    """A Power BI-style dashboard tile positioned on a 12-column grid."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    title: str = Field(description="Insight title sentence")
+    chart_type: str = Field(description="kpi, bar, horizontal_bar, line, area, donut, stacked_bar, scatter, histogram, table")
+    size: TileSize = Field(default_factory=TileSize)
+    priority: int = Field(default=0, description="Sorting priority (1=highest)")
+    candidate_id: Optional[str] = None
+    generator: str = Field(default="rule_baseline", description="Generator provenance: Gemini, Groq, agent, rule-based baseline")
+    evidence: Optional[TileEvidence] = None
+    why_chosen: Optional[str] = None
+    plan: Optional[CandidatePlan] = None
+    compiled_sql: Optional[str] = None
+    data: List[Dict[str, Any]] = Field(default_factory=list)
+    x_key: Optional[str] = None
+    y_keys: List[str] = Field(default_factory=list)
+    dimensions: List[str] = Field(default_factory=list)
+    metrics: List[str] = Field(default_factory=list)
+    delta: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"frozen": True}
+
+
 class DashboardSpec(BaseModel):
     """Final orchestrator output: canonical dashboard specification.
 
     Contains the winning candidate specification, alternate interpretations,
-    generic dashboard panels, and the full execution trace for auditing and explainability.
+    generic dashboard panels, Power BI-style dashboard tiles, runtime slicers,
+    and the full execution trace for auditing and explainability.
     """
 
     spec_id: str = Field(default_factory=lambda: str(uuid4()))
@@ -696,6 +768,14 @@ class DashboardSpec(BaseModel):
         default_factory=list,
         description="Generic renderable dashboard panels built from execution results.",
     )
+    tiles: List[DashboardTile] = Field(
+        default_factory=list,
+        description="Power BI-style dashboard tiles positioned on a 12-column grid.",
+    )
+    slicers: List[SlicerDef] = Field(
+        default_factory=list,
+        description="Runtime slicer filter definitions generated dynamically from the dataset.",
+    )
     alternate_interpretations: List[AlternateInterpretation] = Field(
         default_factory=list,
         description="Runner-up candidates preserved for transparency.",
@@ -705,6 +785,18 @@ class DashboardSpec(BaseModel):
     is_tie: bool = Field(
         default=False,
         description="True when top-2 candidates scored within RANK_TIE_EPSILON; clarification was triggered.",
+    )
+    mode: str = Field(
+        default="focused",
+        description="Execution mode: 'focused' (goal-directed) or 'discovery' (insight discovery mode).",
+    )
+    rejected_insights: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of candidate insights considered and rejected during discovery mode.",
+    )
+    discovery_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Summary statistics of discovery candidate evaluation.",
     )
 
     model_config = {"frozen": True}

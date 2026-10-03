@@ -140,3 +140,31 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
 }
+
+/* Print Stylesheet for Stage F7 */
+@media print {
+  body {
+    background: #FFFFFF !important;
+    color: #1F2A37 !important;
+  }
+  .no-print,
+  nav,
+  aside,
+  .tile-menu-button,
+  .action-buttons,
+  .slicer-controls {
+    display: none !important;
+  }
+  .dashboard-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .dashboard-tile {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
+    border: 1px solid #E3E7EC !important;
+  }
+}
+

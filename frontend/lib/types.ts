@@ -298,12 +298,70 @@ export interface DashboardPanelUI {
   metadata?: Record<string, any>;
 }
 
+export interface TileSize {
+  w: number;
+  h: number;
+}
+
+export interface SlicerOption {
+  value: any;
+  label: string;
+  count?: number;
+}
+
+export interface SlicerDef {
+  id: string;
+  column: string;
+  role: string;
+  control_type: 'date_range' | 'multi_select';
+  min_date?: string;
+  max_date?: string;
+  options: SlicerOption[];
+}
+
+export interface TileEvidence {
+  strength?: number;
+  robustness?: number;
+  fdr_passed?: boolean;
+  fdr_q_value?: number;
+  n?: number;
+  score?: number;
+}
+
+export interface DashboardTileUI {
+  id: string;
+  title: string;
+  chart_type: string;
+  size: TileSize;
+  priority: number;
+  candidate_id?: string;
+  generator: string;
+  evidence: TileEvidence;
+  why_chosen?: string;
+  plan?: any;
+  compiled_sql?: string;
+  data: Record<string, any>[];
+  x_key?: string;
+  y_keys: string[];
+  dimensions: string[];
+  metrics: string[];
+  delta?: {
+    value?: number | string;
+    percentage?: number;
+    direction?: 'up' | 'down' | 'neutral';
+    label?: string;
+  };
+  metadata?: Record<string, any>;
+}
+
 export interface OrchestratorPipelineResponse {
   status: 'SUCCESS' | 'REFUSED' | 'UNANSWERABLE' | 'NEEDS_CLARIFICATION' | string;
   message: string;
   spec_id?: string;
   headline?: string;
   panels?: DashboardPanelUI[];
+  tiles?: DashboardTileUI[];
+  slicers?: SlicerDef[];
   dashboard_spec?: any;
   ranked_candidates: RankedCandidateUI[];
   winner?: {
@@ -340,4 +398,7 @@ export interface OrchestratorPipelineResponse {
   resolved_by?: string;
   decision_log_entry?: any;
   explainability_log_entry?: any;
+  mode?: 'focused' | 'discovery';
+  rejected_insights?: any[];
 }
+

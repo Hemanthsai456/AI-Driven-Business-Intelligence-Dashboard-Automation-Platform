@@ -22,6 +22,9 @@ class ColumnSemanticEvidence:
         confidence: Deterministic confidence score from 0.0 to 1.0.
         confidence_level: Human-readable confidence category ("HIGH", "MEDIUM", "LOW", "NONE").
         evidence: List of deterministic evidence statements explaining why the candidate role was chosen.
+        sub_role: Optional sub-role classification ("FOREIGN_KEY", "PRIMARY_KEY", "DERIVED", etc.).
+        derived_parts: If DERIVED, names of contributing columns.
+        derived_op: If DERIVED, arithmetic operation ("product", "ratio", "sum").
     """
 
     column_name: str
@@ -29,10 +32,13 @@ class ColumnSemanticEvidence:
     confidence: float
     confidence_level: str
     evidence: List[str] = field(default_factory=list)
+    sub_role: Optional[str] = None
+    derived_parts: Optional[List[str]] = None
+    derived_op: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert semantic evidence to a JSON-serializable dictionary."""
-        return {
+        d: Dict[str, Any] = {
             "column_name": self.column_name,
             "candidate_role": (
                 self.candidate_role.value
@@ -43,6 +49,13 @@ class ColumnSemanticEvidence:
             "confidence_level": self.confidence_level,
             "evidence": self.evidence,
         }
+        if self.sub_role is not None:
+            d["sub_role"] = self.sub_role
+        if self.derived_parts is not None:
+            d["derived_parts"] = self.derived_parts
+        if self.derived_op is not None:
+            d["derived_op"] = self.derived_op
+        return d
 
 
 @dataclass
@@ -99,6 +112,14 @@ class SemanticAnalyzer:
     UUID_REGEX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
     CODE_ID_REGEX = re.compile(r"^[A-Za-z]{1,8}[-_#][0-9A-Za-z]{1,16}$")
 
+    def __init__(
+        self,
+        foreign_key_threshold: float = 0.90,
+        derived_tolerance: float = 1e-3,
+    ) -> None:
+        self.foreign_key_threshold = foreign_key_threshold
+        self.derived_tolerance = derived_tolerance
+
     def _inspect_sample_patterns(self, series: Optional[pd.Series], sample_size: int = 50) -> Dict[str, Any]:
         """Inspect non-null sample string representations for currency, percentage, UUID, and code patterns."""
         if series is None or len(series) == 0:
@@ -149,6 +170,112 @@ class SemanticAnalyzer:
             "sample_values": sample_str,
         }
 
+    def _detect_derived_measures(
+        self,
+        evidences: Dict[str, ColumnSemanticEvidence],
+        df: pd.DataFrame,
+    ) -> None:
+        """Detect if a numeric measure is an arithmetic combination (product, ratio, sum) of others."""
+        if df is None or df.empty:
+            return
+
+        numeric_measures = [
+            col for col, ev in evidences.items()
+            if ev.candidate_role == ColumnRole.MEASURE and col in df.columns and pd.api.types.is_numeric_dtype(df[col])
+        ]
+        if len(numeric_measures) < 3:
+            return
+
+        # Phase 1: Products and Sums (composites)
+        for m in numeric_measures:
+            sm_orig = pd.to_numeric(df[m], errors="coerce")
+            found = False
+            for i in range(len(numeric_measures)):
+                if found:
+                    break
+                a = numeric_measures[i]
+                if a == m:
+                    continue
+                sa_orig = pd.to_numeric(df[a], errors="coerce")
+                for j in range(i, len(numeric_measures)):
+                    b = numeric_measures[j]
+                    if b == m:
+                        continue
+                    sb_orig = pd.to_numeric(df[b], errors="coerce")
+
+                    valid_mask = sm_orig.notna() & sa_orig.notna() & sb_orig.notna()
+                    if valid_mask.sum() < 5:
+                        continue
+                    sm = sm_orig[valid_mask]
+                    sa = sa_orig[valid_mask]
+                    sb = sb_orig[valid_mask]
+
+                    # 1. Product: m ≈ a * b
+                    prod = sa * sb
+                    if np.allclose(sm, prod, rtol=self.derived_tolerance, atol=1e-4):
+                        evidences[m].sub_role = "DERIVED"
+                        evidences[m].derived_parts = [a, b]
+                        evidences[m].derived_op = "product"
+                        evidences[m].evidence.append(
+                            f"derived measure: {m} ≈ {a} * {b} (product arithmetic relationship)"
+                        )
+                        found = True
+                        break
+
+                    # 2. Sum: m ≈ a + b
+                    total = sa + sb
+                    if np.allclose(sm, total, rtol=self.derived_tolerance, atol=1e-4):
+                        evidences[m].sub_role = "DERIVED"
+                        evidences[m].derived_parts = [a, b]
+                        evidences[m].derived_op = "sum"
+                        evidences[m].evidence.append(
+                            f"derived measure: {m} ≈ {a} + {b} (sum arithmetic relationship)"
+                        )
+                        found = True
+                        break
+
+        # Phase 2: Explicit ratios (only for measures not already involved as factors of derived products)
+        for m in numeric_measures:
+            if evidences[m].sub_role == "DERIVED":
+                continue
+            # If m is a factor of an already-detected derived product/sum, don't mark m as ratio
+            is_factor = any(
+                ev.sub_role == "DERIVED" and ev.derived_parts and m in ev.derived_parts
+                for ev in evidences.values()
+            )
+            if is_factor:
+                continue
+
+            sm_orig = pd.to_numeric(df[m], errors="coerce")
+            for a in numeric_measures:
+                if a == m:
+                    continue
+                sa_orig = pd.to_numeric(df[a], errors="coerce")
+                for b in numeric_measures:
+                    if b in (m, a):
+                        continue
+                    sb_orig = pd.to_numeric(df[b], errors="coerce")
+                    valid_mask = sm_orig.notna() & sa_orig.notna() & sb_orig.notna()
+                    if valid_mask.sum() < 5:
+                        continue
+                    sm = sm_orig[valid_mask]
+                    sa = sa_orig[valid_mask]
+                    sb = sb_orig[valid_mask]
+
+                    non_zero = sb != 0
+                    if non_zero.sum() >= 5:
+                        ratio = sa[non_zero] / sb[non_zero]
+                        if np.allclose(sm[non_zero], ratio, rtol=self.derived_tolerance, atol=1e-4):
+                            evidences[m].sub_role = "DERIVED"
+                            evidences[m].derived_parts = [a, b]
+                            evidences[m].derived_op = "ratio"
+                            evidences[m].evidence.append(
+                                f"derived measure: {m} ≈ {a} / {b} (ratio arithmetic relationship)"
+                            )
+                            break
+                if evidences[m].sub_role == "DERIVED":
+                    break
+
     def analyze(
         self,
         canonical: CanonicalDataset,
@@ -182,8 +309,16 @@ class SemanticAnalyzer:
             ev = self._classify_column(col_meta, profile, row_cnt, canonical.data)
             evidences[col_name] = ev
 
-            if apply_roles:
-                col_meta.semantic_role = ev.candidate_role
+        # Detect derived measures across numeric measures
+        self._detect_derived_measures(evidences, canonical.data)
+
+        if apply_roles:
+            for col_meta in canonical.metadata.schema:
+                col_name = col_meta.original_name
+                if col_name in evidences:
+                    ev = evidences[col_name]
+                    col_meta.semantic_role = ev.candidate_role
+                    col_meta.sub_role = ev.sub_role
 
         semantic_profile = DatasetSemanticProfile(
             dataset_id=dataset_id, column_evidences=evidences
@@ -222,6 +357,9 @@ class SemanticAnalyzer:
                 continue
             # Pure short digits like "123" are not datetimes
             if val_str.isdigit() and len(val_str) < 4:
+                continue
+            # Pure text with no digits (e.g. month names "January", weekday "Monday") are categorical, not timestamps
+            if not any(c.isdigit() for c in val_str):
                 continue
             try:
                 with warnings.catch_warnings():
@@ -505,12 +643,17 @@ class SemanticAnalyzer:
             evidence_statements.append(f"value-pattern evidence: structured identifier/UUID pattern detected ({patterns['id_code_ratio']:.0%} match, cardinality ratio {cardinality_ratio:.2f})")
             if has_id_token:
                 evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
+            is_fk = (cardinality_ratio < self.foreign_key_threshold) and (distinct_cnt < non_null_cnt)
+            sub_role = "FOREIGN_KEY" if is_fk else ("PRIMARY_KEY" if (is_uniq or cardinality_ratio >= self.foreign_key_threshold) else None)
+            if is_fk:
+                evidence_statements.append(f"foreign key sub-role: repeated identifier values (cardinality ratio {cardinality_ratio:.2%} < {self.foreign_key_threshold:.0%})")
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.IDENTIFIER,
                 confidence=0.92,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                sub_role=sub_role,
             )
 
         # Signal 11: Conflict Resolution — IDENTIFIER
@@ -531,12 +674,17 @@ class SemanticAnalyzer:
                 evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
             if is_integer:
                 evidence_statements.append("numeric identifier disambiguation (unique key overrides numeric dtype)")
+            is_fk = (unique_ratio < self.foreign_key_threshold) and (distinct_cnt < non_null_cnt)
+            sub_role = "FOREIGN_KEY" if is_fk else ("PRIMARY_KEY" if (is_uniq or unique_ratio >= self.foreign_key_threshold) else None)
+            if is_fk:
+                evidence_statements.append(f"foreign key sub-role: repeated identifier values (cardinality ratio {unique_ratio:.2%} < {self.foreign_key_threshold:.0%})")
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.IDENTIFIER,
                 confidence=0.95 if has_id_token else 0.75,  # no id token → lower certainty
                 confidence_level="HIGH" if has_id_token else "MEDIUM",
                 evidence=evidence_statements,
+                sub_role=sub_role,
             )
 
         # Part B — Name-based repeated IDs (Foreign keys)
@@ -545,12 +693,17 @@ class SemanticAnalyzer:
             evidence_statements.append(f"distinct count: {distinct_cnt}")
             if is_numeric:
                 evidence_statements.append("numeric key/code pattern (id token overrides numeric dtype)")
+            is_fk = (cardinality_ratio < self.foreign_key_threshold) and (distinct_cnt < non_null_cnt)
+            sub_role = "FOREIGN_KEY" if is_fk else ("PRIMARY_KEY" if (is_uniq or cardinality_ratio >= self.foreign_key_threshold) else None)
+            if is_fk:
+                evidence_statements.append(f"foreign key sub-role: repeated identifier values (cardinality ratio {cardinality_ratio:.2%} < {self.foreign_key_threshold:.0%})")
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.IDENTIFIER,
                 confidence=0.88,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                sub_role=sub_role,
             )
 
         # Signal 12: Continuous Float MEASURE

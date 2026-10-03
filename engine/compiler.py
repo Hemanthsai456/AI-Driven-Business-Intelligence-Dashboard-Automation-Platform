@@ -69,7 +69,7 @@ def format_sql_literal(value: Any) -> str:
 
 def _compile_aggregation(agg: Any, column_name: str) -> str:
     """Compile aggregation function into safe DuckDB expression."""
-    quoted_col = quote_identifier(column_name)
+    quoted_col = "*" if column_name == "*" else quote_identifier(column_name)
     val = (agg.value if hasattr(agg, "value") else str(agg)).upper()
     if val == "SUM":
         return f"SUM({quoted_col})"
@@ -158,7 +158,8 @@ def compile_plan_to_sql(
     metric_agg = plan.metric.aggregation
     agg_str = metric_agg.value if hasattr(metric_agg, "value") else str(metric_agg)
     metric_expr = _compile_aggregation(metric_agg, plan.metric.column)
-    metric_alias = f"{agg_str.lower()}_{plan.metric.column}"
+    metric_col_name = "records" if plan.metric.column == "*" else plan.metric.column
+    metric_alias = f"{agg_str.lower()}_{metric_col_name}"
     select_items.append(f"{metric_expr} AS {quote_identifier(metric_alias)}")
 
     # SELECT & FROM

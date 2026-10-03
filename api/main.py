@@ -9,7 +9,7 @@ load_dotenv()
 print(f"[STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
 
 import pandas as pd
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -43,9 +43,16 @@ from api.schemas import (
     OrchestratorPipelineResponse,
     ResolvePipelineRequest,
     ResolveErrorResponse,
+    TileFilter,
+    TileQueryRequest,
+    TileQueryResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
+
+# In-memory stores for dashboard specifications and cached tile queries
+dashboard_specs_store: Dict[str, Any] = {}
+tile_query_cache: Dict[Tuple[str, str, str], TileQueryResponse] = {}
 from orchestrator.run_store import (
     PlanNotFoundError,
     RunExpiredError,
@@ -729,6 +736,9 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
             "execution": spec.winner.execution_result.model_dump(),
         }
 
+    if spec:
+        dashboard_specs_store[spec.spec_id] = spec
+
     return OrchestratorPipelineResponse(
         status=pipeline_result.status,
         message=pipeline_result.message,
@@ -753,6 +763,8 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
         cached_candidates=[c.model_dump() for c in pipeline_result.cached_candidates] if pipeline_result.cached_candidates else None,
         decision_log_entry=pipeline_result.decision_log_entry,
         explainability_log_entry=pipeline_result.explainability_log_entry,
+        mode=spec.mode if spec else "focused",
+        rejected_insights=spec.rejected_insights if spec else None,
     )
 
 
@@ -832,6 +844,9 @@ def resolve_pipeline_endpoint(req: ResolvePipelineRequest):
             "execution": spec.winner.execution_result.model_dump(),
         }
 
+    if spec:
+        dashboard_specs_store[spec.spec_id] = spec
+
     return OrchestratorPipelineResponse(
         status=pipeline_result.status,
         message=pipeline_result.message,
@@ -853,7 +868,209 @@ def resolve_pipeline_endpoint(req: ResolvePipelineRequest):
         resolved_by="user",
         decision_log_entry=pipeline_result.decision_log_entry,
         explainability_log_entry=pipeline_result.explainability_log_entry,
+        mode=spec.mode if spec else "focused",
+        rejected_insights=spec.rejected_insights if spec else None,
     )
+
+
+@app.post(
+    "/dashboard/{spec_id}/tile/{tile_id}/query",
+    response_model=TileQueryResponse,
+    summary="Query a dashboard tile with recompiled filters",
+)
+@app.post(
+    "/api/dashboard/{spec_id}/tile/{tile_id}/query",
+    response_model=TileQueryResponse,
+    summary="Query a dashboard tile with recompiled filters (API prefix)",
+)
+def query_dashboard_tile(
+    spec_id: str,
+    tile_id: str,
+    req: TileQueryRequest,
+):
+    """Recompiles the tile's stored plan with added client filters.
+
+    Validates columns against semantic profile roles.
+    Rejects unknown columns with typed error (400).
+    Rejects SQL injection patterns with typed error (400).
+    Caches responses by (spec, tile, filters).
+    Returns INSUFFICIENT_DATA status if row count is below threshold.
+    """
+    # 1. Lookup DashboardSpec
+    spec = dashboard_specs_store.get(spec_id)
+    if not spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dashboard spec not found",
+                "message": f"Spec '{spec_id}' was not found in active session",
+                "error_type": "SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    # 2. Find Tile
+    tile = next((t for t in spec.tiles if t.id == tile_id or getattr(t, "candidate_id", None) == tile_id), None)
+    if not tile:
+        if hasattr(spec, "winner") and spec.winner:
+            from orchestrator.schemas import DashboardTile
+            tile = DashboardTile(
+                id=tile_id,
+                title=spec.headline or "Key Analytical Finding",
+                chart_type="bar",
+                plan=spec.winner.plan,
+                compiled_sql=spec.winner.execution_result.compiled_sql,
+                data=spec.winner.execution_result.rows or [],
+            )
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "Tile not found",
+                    "message": f"Tile '{tile_id}' not found in dashboard spec",
+                    "error_type": "TILE_NOT_FOUND",
+                    "status_code": 404,
+                },
+            )
+
+    # 3. Cache check
+    filter_repr = tuple(
+        sorted(
+            (f.column, f.operator.strip().upper(), str(f.values if f.values is not None else f.value))
+            for f in req.filters
+        )
+    )
+    cache_key = (spec_id, tile_id, str(filter_repr))
+    if cache_key in tile_query_cache:
+        cached_resp = tile_query_cache[cache_key]
+        return TileQueryResponse(
+            tile_id=tile_id,
+            status=cached_resp.status,
+            row_count=cached_resp.row_count,
+            data=cached_resp.data,
+            cached=True,
+            message=cached_resp.message,
+        )
+
+    # 4. Dataset & Semantic Profile lookup
+    session_rec = session_store.get(spec.dataset_id)
+    if session_rec:
+        dataset = session_rec.dataset
+        semantic_profile = session_rec.semantic_profile
+    else:
+        dataset = None
+        semantic_profile = None
+
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{spec.dataset_id}' could not be located",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    valid_columns = set()
+    if semantic_profile and semantic_profile.column_evidences:
+        valid_columns = set(semantic_profile.column_evidences.keys())
+    elif hasattr(dataset, "data") and dataset.data is not None:
+        valid_columns = set(dataset.data.columns)
+
+    # 5. Validate filters
+    ALLOWED_OPERATORS = {"=", "!=", "<>", "<", "<=", ">", ">=", "IN", "NOT IN", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"}
+    INJECTION_TOKENS = ["'", '"', ";", "--", "/*", "xp_", "exec ", "union ", "drop ", "delete "]
+
+    for flt in req.filters:
+        # Validate column
+        if valid_columns and flt.column not in valid_columns:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Unknown column",
+                    "message": f"Column '{flt.column}' does not exist in dataset roles",
+                    "error_type": "UNKNOWN_COLUMN",
+                    "status_code": 400,
+                },
+            )
+
+        # Validate operator
+        if flt.operator.strip().upper() not in ALLOWED_OPERATORS:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "Invalid operator",
+                    "message": f"Operator '{flt.operator}' is not supported",
+                    "error_type": "INVALID_OPERATOR",
+                    "status_code": 400,
+                },
+            )
+
+        # Check injection in string representation of individual values
+        vals_to_check = flt.values if isinstance(flt.values, list) else [flt.values if flt.values is not None else flt.value]
+        for v in vals_to_check:
+            v_str = str(v).lower()
+            if any(token in v_str for token in INJECTION_TOKENS):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "error": "Invalid filter value",
+                        "message": "SQL injection pattern detected in filter value",
+                        "error_type": "INVALID_FILTER_VALUE",
+                        "status_code": 400,
+                    },
+                )
+
+    # 6. Recompile Plan with Filters
+    from orchestrator.schemas import FilterSpec
+    from engine.duckdb_executor import DuckDBExecutor
+
+    base_plan = tile.plan or spec.winner.plan
+    new_filters = list(base_plan.filters or [])
+    for flt in req.filters:
+        val = flt.values if flt.values is not None else flt.value
+        if flt.operator.strip().upper() in ("=", "!=", "<>", "<", "<=", ">", ">=") and isinstance(val, (list, tuple)) and len(val) == 1:
+            val = val[0]
+        new_filters.append(
+            FilterSpec(
+                column=flt.column,
+                operator=flt.operator,
+                value=val,
+            )
+        )
+
+    modified_plan = base_plan.model_copy(
+        update={
+            "filters": new_filters,
+            "plan_id": str(uuid.uuid4()),
+        }
+    )
+
+    executor = DuckDBExecutor()
+    result = executor.execute_plan(modified_plan, dataset, semantic_profile)
+
+    rows = result.rows or []
+    if len(rows) < 1:
+        resp = TileQueryResponse(
+            tile_id=tile_id,
+            status="INSUFFICIENT_DATA",
+            row_count=len(rows),
+            data=rows,
+            cached=False,
+            message="Insufficient data after filtering (0 rows returned)",
+        )   
+    else:
+        resp = TileQueryResponse(
+            tile_id=tile_id,
+            status="SUCCESS",
+            row_count=len(rows),
+            data=rows,
+            cached=False,
+        )
+
+    tile_query_cache[cache_key] = resp
+    return resp
 
 
 @app.exception_handler(HTTPException)
@@ -862,8 +1079,8 @@ def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(
         status_code=exc.status_code,
         content=APIErrorResponse(
-            error=exc.detail if isinstance(exc.detail, str) else "Request error",
-            message=str(exc.detail),
+            error=exc.detail if isinstance(exc.detail, str) else (exc.detail.get("error", "Request error") if isinstance(exc.detail, dict) else "Request error"),
+            message=str(exc.detail if isinstance(exc.detail, str) else (exc.detail.get("message", str(exc.detail)) if isinstance(exc.detail, dict) else str(exc.detail))),
             status_code=exc.status_code,
         ).model_dump(),
     )

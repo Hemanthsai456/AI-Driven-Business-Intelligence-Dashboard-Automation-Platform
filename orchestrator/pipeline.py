@@ -184,6 +184,64 @@ def run_orchestration_pipeline(
             message=refusal_msg,
         )
 
+    # Stage E: Insight Discovery Mode Trigger Check
+    # If the brief is empty or generic, run DISCOVERY mode.
+    # A specific brief keeps the existing focused mode.
+    # A brief that names a topic only biases scoring in discovery mode.
+    # Never ask for clarification in discovery mode; default to rendering.
+    from orchestrator.discovery import classify_intent_mode, run_discovery_pipeline
+
+    intent_mode, topic = classify_intent_mode(intent, semantic_profile)
+    if intent_mode == "discovery" and not chosen_plan_id and not existing_candidates:
+        discovery_spec, discovery_rejected, discovery_summary = run_discovery_pipeline(
+            dataset=dataset,
+            semantic_profile=semantic_profile,
+            readiness=readiness,
+            intent=intent,
+            data_profile=data_profile,
+            engine=exec_engine,
+            topic=topic,
+        )
+
+        ranked_tuples = [
+            (
+                discovery_spec.winner.plan,
+                discovery_spec.winner.execution_result,
+                discovery_spec.winner.score_breakdown,
+                1,
+            )
+        ]
+
+        emit_decision_log(
+            request_id=request_id,
+            dataset_id=dataset.metadata.dataset_id,
+            intent=intent or "Discovery Mode",
+            context_hash="discovery",
+            mode=mode,
+            plans_generated=discovery_summary.candidates_generated,
+            plans_valid_pass1a=discovery_summary.candidates_executed,
+            plans_valid_pass1b=discovery_summary.candidates_executed,
+            winner_plan_id=discovery_spec.winner.plan.plan_id,
+            is_tie=False,
+            cascade_depth=0,
+            status="SUCCESS",
+            generator_logs=[],
+        )
+
+        emit_explainability_log(
+            spec=discovery_spec,
+            ranked_candidates=ranked_tuples,
+        )
+
+        return OrchestrationPipelineResult(
+            status="SUCCESS",
+            message="Discovery mode completed successfully.",
+            dashboard_spec=discovery_spec,
+            ranked_candidates=ranked_tuples,
+            is_tie=False,
+            cascade_depth=0,
+        )
+
     # 1. Step 1: Intent Interpretation
     structured_intent = interpret_user_request(
         request_text=intent,

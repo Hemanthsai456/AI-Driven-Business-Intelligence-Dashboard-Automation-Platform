@@ -220,7 +220,7 @@ export default function HomePage() {
 
   // Trigger End-to-End Pipeline Execution
   const handleRunPipeline = async (chosenPlanId?: string) => {
-    if (!selectedDatasetId || !intent.trim()) return;
+    if (!selectedDatasetId) return;
 
     abortControllerRef.current = new AbortController();
     setPipelineError(null);
@@ -603,12 +603,12 @@ export default function HomePage() {
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
                   e.preventDefault();
-                  if (!isPipelineRunning && selectedDatasetId && intent.trim()) {
+                  if (!isPipelineRunning && selectedDatasetId) {
                     handleRunPipeline();
                   }
                 }
               }}
-              placeholder="e.g. Compare total revenue by product category, or inspect discount percentage trend over date"
+              placeholder="e.g. Compare total revenue by product category, or leave empty for an automated executive dashboard overview"
               className="w-full p-3 text-xs bg-surface border border-border rounded-card text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary focus:outline-none resize-none leading-relaxed"
             />
           </div>
@@ -655,7 +655,7 @@ export default function HomePage() {
             variant="primary"
             size="sm"
             onClick={() => handleRunPipeline()}
-            disabled={!selectedDatasetId || !intent.trim() || isPipelineRunning}
+            disabled={!selectedDatasetId || isPipelineRunning}
             isLoading={isPipelineRunning}
             leftIcon={!isPipelineRunning ? <Play className="w-3.5 h-3.5" /> : undefined}
           >
@@ -739,11 +739,12 @@ export default function HomePage() {
         )}
 
         {/* Sub-state 4: Success Result State with Full DashboardPanelsView */}
-        {pipelineStep === 'done' && pipelineResult?.dashboard_spec && (
+        {pipelineStep === 'done' && (pipelineResult?.dashboard_spec || pipelineResult?.panels || (pipelineResult as any)?.tiles) && (
           <DashboardPanelsView
-            spec={pipelineResult.dashboard_spec}
+            spec={pipelineResult?.dashboard_spec || pipelineResult}
             previewData={previewData}
             cleaningReport={cleaningReport}
+            providers={providers}
             onSelectCandidate={(planId) => handleRunPipeline(planId)}
           />
         )}

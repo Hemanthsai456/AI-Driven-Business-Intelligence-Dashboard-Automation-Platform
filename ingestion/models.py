@@ -81,6 +81,7 @@ class ColumnMetadata:
     normalized_name: str
     detected_datatype: str
     semantic_role: ColumnRole = ColumnRole.UNKNOWN
+    sub_role: Optional[str] = None
     null_count: int = 0
     null_percentage: float = 0.0
     distinct_count: int = 0
@@ -94,6 +95,7 @@ class ColumnMetadata:
             "normalized_name": self.normalized_name,
             "detected_datatype": self.detected_datatype,
             "semantic_role": self.semantic_role.value if isinstance(self.semantic_role, Enum) else str(self.semantic_role),
+            "sub_role": self.sub_role,
             "null_count": int(self.null_count),
             "null_percentage": float(self.null_percentage),
             "distinct_count": int(self.distinct_count),
