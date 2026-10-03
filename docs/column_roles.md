@@ -37,8 +37,22 @@ A field primarily used to identify records or entities rather than represent an 
 - **Characteristics:** Unique or pseudo-unique keys, foreign keys, surrogate keys, system UUIDs, or record IDs.
 - **Examples:** `order_id`, `customer_id`, `sku_code`, `transaction_hash`, `user_guid`.
 
-### 5. UNKNOWN
+#### Sub-Roles for IDENTIFIER:
+- **`PRIMARY_KEY`**: Near-unique entity identifiers where the distinct/non-null ratio is at or above a configurable threshold (`FOREIGN_KEY_RATIO_THRESHOLD = 0.90`). These represent entity instances and are excluded as grouping dimensions.
+- **`FOREIGN_KEY`**: Identifier-like columns where the distinct/non-null ratio is below the threshold and values repeat across records (e.g., `CustomerID`, `ProductID`, `StoreID` in transaction tables). These are retained as eligible grouping dimensions and join keys.
+
+### 5. DERIVED Sub-Role (MEASURE)
+A quantitative measure mathematically generated from arithmetic combinations of other measures in the dataset.
+
+- **Detection**: Automatically detected during semantic analysis using configurable tolerance (`DERIVED_TOLERANCE = 1e-3`) for operations:
+  - Product: $M_3 \approx M_1 \times M_2$ (e.g., `TotalSales == Quantity * UnitPrice`)
+  - Sum: $M_3 \approx M_1 + M_2$
+  - Ratio: $M_3 \approx M_1 / M_2$
+- **Analytical Guard**: Spurious statistical correlations between the derived composite and its constituent factors are rejected during candidate discovery with rejection reason `"arithmetic relationship"`.
+
+### 6. UNKNOWN
 A field whose semantic role cannot yet be reliably determined.
 
 - **Characteristics:** Unclassified column prior to semantic profiling or user specification; default initial state during raw ingestion before profiling and role inference are executed.
 - **Examples:** Newly imported columns with mixed, ambiguous, or un-analyzed contents.
+

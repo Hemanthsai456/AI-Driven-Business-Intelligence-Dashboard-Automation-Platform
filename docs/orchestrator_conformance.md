@@ -32,6 +32,10 @@ The following table itemizes every requirement across existing documentation and
 | **Ambiguity Engine & UNANSWERABLE** | Pre-check rules detect multiple measures/dates/groupings or missing aggregations. Returns `CLEAR`, `AMBIGUOUS`, or `UNANSWERABLE`. Rejects ungrounded requests where required columns/definitions do not exist (never invent KPIs). | Orchestrator Prompt Decisions | Stage 3, Stage 6 | Stage 3, 6 |
 | **Dashboard Specification** | Orchestrator outputs `DashboardSpec` containing canonical spec, `alternate_interpretations`, and complete execution trace. | Orchestrator Prompt Decisions | Stage 3, Stage 7 | Stage 3, 7 |
 | **Decision & Explainability Logs** | Structured JSONL decision log records (request, context hash, plans, errors, latency, tokens). Explainability log records ranking rationale and cascade fallbacks. | Orchestrator Prompt Decisions | Stage 5, Stage 7 | Stage 5, 7 |
+| **Stage E: Autonomous Insight Discovery** | Deterministic enumeration across 8 insight types, bounded stats summary for agent proposals, Benjamini-Hochberg FDR control ($\alpha=0.05$), diversity selection, and number-grounded narration. | Stage E Specification | `docs/stage_e_insight_discovery.md` | Stage E |
+| **Stage F: Power BI-Style Dashboard Grid** | Deterministic 12-column grid layout (Row 1 KPI strip capped at 4, Row 2 Hero 8-col + Side 4-col, Row 3+ 2/3-col), runtime slicers, interactive filter recompilation via DuckDB (`/tile/{id}/query`), and dual-theme tokens. | Stage F Specification | `docs/stage_f_power_bi_dashboard.md` | Stage F |
+| **Foreign Key & Derived Profiling** | `FOREIGN_KEY` sub-role for repetitive IDs retained as dimensions; `DERIVED` measure detection with arithmetic relationship correlation rejection. | Post-Stage-F Specification | `docs/column_roles.md` | Post-Stage-F |
+
 
 ---
 
