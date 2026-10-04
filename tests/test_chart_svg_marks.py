@@ -8,7 +8,7 @@ Delete or replace test_chart_svg_marks.py if it doesn't do this. Give the real F
 import json
 import pytest
 from playwright.sync_api import sync_playwright
-
+from pathlib import Path
 
 def test_bar_chart_elements_height_greater_than_zero():
     """Load dashboard from fixture spec and assert each bar chart has bar elements with height > 0."""
@@ -153,7 +153,9 @@ def test_bar_chart_elements_height_greater_than_zero():
         page.wait_for_timeout(2500)
 
         # Save screenshot for audit
-        page.screenshot(path=r"C:\Users\GANDL\.gemini\antigravity-ide\brain\5a549c02-a7be-4339-8e22-e1de197d3206\debug_test_chart.png")
+        ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "artifacts"
+        ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=ARTIFACT_DIR / "debug_test_chart.png")
 
         # Find all bar charts on the page
         bar_charts = page.query_selector_all(".recharts-wrapper:has(.recharts-bar)")
