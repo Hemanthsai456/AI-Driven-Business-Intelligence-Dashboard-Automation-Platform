@@ -16,7 +16,6 @@ from orchestrator.discovery.narration import generate_panel_narration, verify_nu
 from orchestrator.discovery.engine import (
     classify_intent_mode,
     run_discovery_pipeline,
-    GENERIC_DISCOVERY_PROMPTS,
 )
 
 __all__ = [
@@ -35,5 +34,4 @@ __all__ = [
     "verify_numbers_grounded",
     "classify_intent_mode",
     "run_discovery_pipeline",
-    "GENERIC_DISCOVERY_PROMPTS",
 ]
