@@ -51,16 +51,75 @@ class RuleBasedBaselineClient(LLMClient):
                 elif "DIMENSION" in role or "IDENTIFIER" in role:
                     dimensions.append(col)
 
-        # Fallback if no schema in prompt
-        metric_col = measures[0] if measures else "TotalSales"
-        dim_col = dimensions[0] if dimensions else (dates[0] if dates else "Category")
-
         # Extract dataset id and intent
         ds_match = re.search(r"Dataset ID:\s*([A-Za-z0-9_\-\.]+)", prompt)
         dataset_id = ds_match.group(1) if ds_match else "dataset_01"
 
         intent_match = re.search(r"User Intent:\s*(.+)", prompt)
         intent_text = intent_match.group(1).strip() if intent_match else "Analyze primary business metrics"
+
+        # Check for Target Semantic Interpretations in prompt
+        interp_metric_match = re.search(r"Metric:\s*([A-Za-z0-9_]+)\s*\[([A-Za-z_]+)\]", prompt)
+        interp_dims_match = re.search(r"Dimensions:\s*\[([^\]]*)\]", prompt)
+
+        metric_col: Optional[str] = None
+        agg_func: str = "SUM"
+        dim_col: Optional[str] = None
+
+        if interp_metric_match:
+            cand_m = interp_metric_match.group(1)
+            cand_a = interp_metric_match.group(2).upper()
+            if cand_m in measures:
+                metric_col = cand_m
+                if cand_a in ("SUM", "AVG", "COUNT", "MIN", "MAX", "MEDIAN", "STDDEV"):
+                    agg_func = cand_a
+
+        if interp_dims_match:
+            raw_dims = [d.strip().strip("'\"") for d in interp_dims_match.group(1).split(",") if d.strip().strip("'\"")]
+            for d in raw_dims:
+                if d in dimensions or d in dates:
+                    dim_col = d
+                    break
+
+        intent_lower = intent_text.lower()
+
+        # Prioritize matching measures explicitly mentioned in user intent
+        if not metric_col:
+            for m in measures:
+                if re.search(r"\b" + re.escape(m.lower()) + r"\b", intent_lower) or m.lower() in intent_lower:
+                    metric_col = m
+                    break
+
+        if not metric_col:
+            metric_col = measures[0] if measures else "TotalSales"
+
+        # Prioritize matching dimensions explicitly mentioned in user intent
+        if not dim_col:
+            for d in dimensions:
+                if re.search(r"\b" + re.escape(d.lower()) + r"\b", intent_lower) or d.lower() in intent_lower:
+                    dim_col = d
+                    break
+            if not dim_col:
+                for dt in dates:
+                    if re.search(r"\b" + re.escape(dt.lower()) + r"\b", intent_lower) or dt.lower() in intent_lower:
+                        dim_col = dt
+                        break
+
+        if not dim_col:
+            dim_col = dimensions[0] if dimensions else (dates[0] if dates else "Category")
+
+        # Determine aggregation function if not already extracted from interpretation
+        if not interp_metric_match:
+            if any(w in intent_lower for w in ["avg", "average", "mean"]):
+                agg_func = "AVG"
+            elif "count" in intent_lower:
+                agg_func = "COUNT"
+            elif any(w in intent_lower for w in ["min", "minimum", "lowest"]):
+                agg_func = "MIN"
+            elif any(w in intent_lower for w in ["max", "maximum", "highest"]):
+                agg_func = "MAX"
+            else:
+                agg_func = "SUM"
 
         dims_spec = []
         if dim_col in dates:
@@ -76,7 +135,7 @@ class RuleBasedBaselineClient(LLMClient):
             "intent": intent_text,
             "metric": {
                 "column": metric_col,
-                "aggregation": "SUM",
+                "aggregation": agg_func,
             },
             "dimensions": dims_spec,
             "filters": [],

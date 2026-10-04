@@ -81,8 +81,8 @@ class LLMClient(ABC):
     def _execute_with_retries(self, func, *args, **kwargs):
         """Execute a function with exponential backoff for 429 rate limit errors."""
         import re
-        max_retries = 4
-        base_delay = 2.0
+        max_retries = 2
+        base_delay = 1.0
         for attempt in range(max_retries):
             try:
                 return func(*args, **kwargs)

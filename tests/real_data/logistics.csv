@@ -1,0 +1,1011 @@
+shipment_id,destination,delivery_time,shipment_date,status
+SHP10001,Delhi,3.4,2025-07-21,Delivered
+SHP10002,Hyderabad,2.0,2025-06-13,Delivered
+SHP10003,Ahmedabad,2.1,2025-10-21,Delivered
+SHP10004,Mumbai,0.5,2025-07-21,Delivered
+SHP10005,Delhi,0.8,2025-02-27,Delivered
+SHP10006,Hyderabad,3.0,2025-04-06,Delivered
+SHP10007,Pune,0.6,2025-07-09,Delivered
+SHP10008,Kolkata,0.5,2025-08-15,In Transit
+SHP10009,Ahmedabad,2.0,2025-01-31,Delivered
+SHP10010,Mumbai,0.5,2025-12-26,Delivered
+SHP10011,Kochi,4.1,2025-08-12,Delivered
+SHP10012,Bengaluru,2.2,2025-10-28,Delivered
+SHP10013,Kolkata,4.8,2025-05-18,Delivered
+SHP10014,Mumbai,5.4,2025-10-24,Delivered
+SHP10015,Kolkata,2.7,2025-10-08,Delivered
+SHP10016,Kochi,4.4,05/18/2025,In Transit
+SHP10017,Jaipur,2.2,2025-07-07,In Transit
+SHP10018,Delhi,2.7,2025-03-21,In Transit
+SHP10019,Hyderabad,1.2,2025-05-23,Delivered
+SHP10020,Chennai,5.2,2025-12-23,Delivered
+SHP10021,Bengaluru,1.8,2025-07-28,In Transit
+SHP10022,Hyderabad,3.3,2025-08-15,Delivered
+SHP10023,Chennai,48.0,2025-11-10,Delivered
+SHP10024,Hyderabad,4.4,2025-03-22,Delivered
+SHP10025,Kochi,2.5,2025-03-08,Delivered
+SHP10026,Bengaluru,4.8,2025-04-01,Delivered
+SHP10027,Mumbai,0.5,2025-09-24,Delivered
+SHP10028,Hyderabad,4.2,2025-04-12,Delayed
+SHP10029,Ahmedabad,5.8,2025-09-02,Delivered
+SHP10030,Ahmedabad,0.5,2025-07-20,Delivered
+SHP10031,Jaipur,4.5,2025-09-07,Delivered
+SHP10032,Mumbai,3.7,2025-11-03,In Transit
+SHP10033,Chennai,4.3,2025-02-07,Delivered
+SHP10034,Mumbai,5.7,2025-08-02,Delivered
+SHP10035,Pune,5.3,2025-03-16,In Transit
+SHP10036,Kolkata,1.8,2025-05-29,Delivered
+SHP10037,Pune,4.4,2025-07-15,Delivered
+SHP10038,Bengaluru,-2.0,2025-08-13,Delivered
+SHP10039,Delhi,2.4,2025-06-23,Delayed
+SHP10040,Jaipur,3.3,2025-05-18,In Transit
+SHP10041,Chennai,4.2,2025-09-28,Delivered
+SHP10042,Hyderabad,6.8,2025-02-02,Delivered
+SHP10043,Hyderabad,4.3,2025-02-20,Delivered
+SHP10044,Kolkata,4.4,2025-02-06,Delivered
+SHP10045,Pune,3.2,2025-09-22,Delivered
+SHP10046,Ahmedabad,5.2,2025-03-04,In Transit
+SHP10047,Chennai,1.2,2025-07-17,Delivered
+SHP10048,Pune,2.7,2025-08-25,Delivered
+SHP10049,Ahmedabad,8.4,2025-12-26,Delivered
+SHP10050,Ahmedabad,2.1,2025-03-05,Delivered
+SHP10051,Kochi,3.0,2025-02-14,Delivered
+SHP10052,Bengaluru,3.4,2025-04-02,In Transit
+SHP10053,Kochi,6.9,2025-05-15,Delivered
+SHP10054,Jaipur,5.4,2025-07-05,Delayed
+SHP10055,Bengaluru,5.5,2025-07-09,Delivered
+SHP10056,Ahmedabad,4.5,2025-01-31,Delivered
+SHP10057,Mumbai,0.6,2025-03-02,Delivered
+SHP10058,Chennai,1.9,2025-09-24,Delivered
+SHP10059,Hyderabad,4.6,2025-03-20,Delivered
+SHP10060,Jaipur,2.3,2025-06-23,Delivered
+SHP10061,Hyderabad,4.8,2025-12-19,Delayed
+SHP10062,Kolkata,2.6,2025-04-12,Delivered
+SHP10063,Chennai,2.9,2025-12-08,In Transit
+SHP10064,Chennai,3.8,2025-10-20,In Transit
+SHP10065,Hyderabad,7.8,2025-06-21,Delivered
+SHP10066,Mumbai,5.0,2025-11-02,In Transit
+SHP10067,Jaipur,1.4,2025-08-11,Delivered
+SHP10068,Jaipur,2.7,2025-02-13,Delayed
+SHP10069,Mumbai,3.5,2025-05-06,Delivered
+SHP10070,Mumbai,4.5,2025-12-01,Delivered
+SHP10071,Delhi,3.4,2025-07-01,Delivered
+SHP10072,Pune,1.7,2025-05-31,Delivered
+SHP10073,Bengaluru,2.8,2025-07-17,Delivered
+SHP10074,Delhi,3.6,2025-10-10,In Transit
+SHP10075,Jaipur,3.6,2025-01-14,Delivered
+SHP10076,Jaipur,5.4,2025-11-01,delivered
+SHP10077,Ahmedabad,2.4,2025-05-13,Delayed
+SHP10078,Chennai,2.3,2025-05-17,Delivered
+SHP10079,Jaipur,0.5,2025-02-02,Delivered
+SHP10080,Delhi,5.4,2025-12-27,In Transit
+SHP10081,Mumbai,4.0,2025-10-27,In Transit
+SHP10082,Mumbai,3.6,2025-04-30,Delivered
+SHP10083,Bengaluru,5.8,2025-12-27,In Transit
+SHP10084,Delhi,0.5,2025-06-05,Delivered
+SHP10085,Kolkata,2.7,2025-02-25,Delivered
+SHP10086,Kochi,4.8,2025-04-07,Delivered
+SHP10087,Jaipur,7.3,2025-08-05,Delivered
+SHP10088,Kochi,4.3,2025-03-04,Delivered
+SHP10089,Jaipur,3.7,2025-12-14,Delivered
+SHP10090,Bengaluru,3.8,2025-07-09,In Transit
+SHP10091,Bengaluru,2.0,2025-05-21,Delivered
+SHP10092,Kochi,5.2,2025-01-30,Delivered
+SHP10093,Chennai,7.1,2025-10-24,In Transit
+SHP10094,Kochi,4.7,2025-07-17,In Transit
+SHP10095,Mumbai,5.3,2025-01-20,Delivered
+SHP10096,Ahmedabad,5.2,2025-09-08,Delivered
+SHP10097,Chennai,5.9,2025-09-04,Delivered
+SHP10098,Chennai,4.9,2025-04-11,Delayed
+SHP10099,Pune,5.1,2025-07-01,In Transit
+SHP10100,Jaipur,4.6,2025-08-03,Delivered
+SHP10101,Hyderabad,5.4,2025-01-05,In Transit
+SHP10102,Pune,4.6,2025-11-09,Delivered
+SHP10103,Kochi,5.7,2025-06-10,Delivered
+SHP10104,Jaipur,3.9,2025-11-09,Delivered
+SHP10105,Kochi,5.3,2025-11-03,Delivered
+SHP10106,Kolkata,2.8,2025-09-08,In Transit
+SHP10107,Kochi,1.8,2025-08-27,Delivered
+SHP10108,Bengaluru,4.1,2025-01-27,In Transit
+SHP10109,Delhi,1.6,2025-02-14,Delivered
+SHP10110,Pune,3.0,2025-05-31,Delivered
+SHP10111,Pune,4.2,2025-07-25,Delivered
+SHP10112,Ahmedabad,5.2,2025-12-17,Delayed
+SHP10113,Chennai,1.1,2025-09-23,Delivered
+SHP10114,Delhi,1.6,2025-08-15,In Transit
+SHP10115,Mumbai,3.7,2025-09-20,Delivered
+SHP10116,Pune,1.6,2025-10-14,Delivered
+SHP10117,Kochi,1.6,2025-01-05,Delivered
+SHP10118,Ahmedabad,3.8,2025-11-15,In Transit
+SHP10119,Bengaluru,5.9,2025-01-11,Delivered
+SHP10120,Pune,3.2,2025-09-21,Delivered
+SHP10121,Mumbai,3.7,2025-06-13,Delivered
+SHP10122,Chennai,2.7,2025-09-30,Delivered
+SHP10123,Chennai,2.7,2025-12-07,Delivered
+SHP10124,Jaipur,2.9,2025-08-14,In Transit
+SHP10125,Kolkata,2.1,2025-08-05,Delivered
+SHP10126,Pune,3.7,2025-08-23,In Transit
+SHP10127,Chennai,2.2,2025-08-25,Delivered
+SHP10128,Hyderabad,4.2,2025-11-10,Delayed
+SHP10129,Mumbai,5.0,2025-11-12,In Transit
+SHP10130,Kolkata,6.5,2025-07-15,Delivered
+SHP10131,Mumbai,1.5,2025-03-02,In Transit
+SHP10132,Kolkata,0.9,2025-06-30,Delivered
+SHP10133,Jaipur,2.5,2025-08-16,In Transit
+SHP10134,Kolkata,2.1,2025-07-10,Delivered
+SHP10135,Kolkata,1.2,2025-02-05,Delivered
+SHP10136,Delhi,4.7,2025-11-05,Delivered
+SHP10137,Bengaluru,0.5,2025-01-03,Delivered
+SHP10138,Mumbai,0.5,2025-03-18,Delayed
+SHP10139,Mumbai,5.7,2025-10-18,In Transit
+SHP10140,Kochi,3.1,2025-02-04,Delivered
+SHP10141,Hyderabad,3.8,2025-05-19,Delivered
+SHP10142,Mumbai,4.8,2025-03-25,Delivered
+SHP10143,Bengaluru,5.4,2025-02-09,Delivered
+SHP10144,Kolkata,2.2,2025-05-30,Delivered
+SHP10145,Mumbai,3.7,2025-08-13,Delivered
+SHP10146,Kolkata,0.5,2025-09-12,In Transit
+SHP10147,Mumbai,2.1,2025-03-28,Delivered
+SHP10148,Mumbai,3.9,2025-03-14,Delivered
+SHP10149,Mumbai,5.8,2025-12-03,Delivered
+SHP10150,Chennai,5.3,2025-08-11,Delivered
+SHP10151,Pune,7.1,2025-06-07,In Transit
+SHP10152,Kolkata,2.5,2025-09-27,Delivered
+SHP10153,Chennai,8.3,2025-10-04,Delivered
+SHP10154,Kolkata,1.7,2025-10-28,Delivered
+SHP10155,Hyderabad,1.7,2025-02-18,In Transit
+SHP10156,Hyderabad,4.5,2025-10-08,Delivered
+SHP10157,Pune,0.5,2025-10-01,Delivered
+SHP10158,Hyderabad,5.8,2025-03-18,Delivered
+SHP10159,Chennai,2.1,2025-07-18,Delivered
+SHP10160,Delhi,6.5,2025-10-26,Delivered
+SHP10161,Kolkata,5.1,2025-12-04,Delivered
+SHP10162,Bengaluru,3.9,2025-06-26,Delivered
+SHP10163,Pune,1.2,2025-04-20,Delivered
+SHP10164,Ahmedabad,3.0,2025-05-04,Delivered
+SHP10165,Chennai,3.8,2025-08-16,Delivered
+SHP10166,Delhi,2.0,2025-02-15,Delivered
+SHP10167,Delhi,5.7,2025-01-24,Delivered
+SHP10168,Hyderabad,3.8,2025-07-05,Delivered
+SHP10169,Chennai,3.6,2025-12-31,Delivered
+SHP10170,Kochi,3.0,2025-12-11,Delivered
+SHP10171,Ahmedabad,1.9,2025-05-26,Delivered
+SHP10172,Kochi,4.0,2025-02-24,Delivered
+SHP10173,Chennai,4.0,2025-08-12,In Transit
+SHP10174,Delhi,2.1,2025-02-18,Delivered
+SHP10175,Ahmedabad,5.2,2025-06-11,Delivered
+SHP10176,Jaipur,4.2,2025-12-02,Delivered
+SHP10177,Mumbai,2.6,2025-09-07,Delivered
+SHP10178,Pune,3.1,2025-10-05,Delivered
+SHP10179,Pune,3.1,2025-11-01,Delivered
+SHP10180,Kochi,2.0,2025-04-12,Delivered
+SHP10181,Bengaluru,2.7,2025-01-16,Delivered
+SHP10182,Delhi,3.4,2025-09-17,In Transit
+SHP10183,Delhi,1.3,2025-09-08,Delivered
+SHP10184,Pune,3.7,2025-02-18,Delayed
+SHP10185,Hyderabad,5.1,2025-11-15,Delivered
+SHP10186,Ahmedabad,0.5,2025-06-04,Cancelled
+SHP10187,Bengaluru,4.7,2025-08-24,Delivered
+SHP10188,Chennai,8.5,2025-07-21,In Transit
+SHP10189,Hyderabad,2.9,2025-12-31,Delivered
+SHP10190,Chennai,3.4,2025-08-07,Delivered
+SHP10191,,3.1,2025-05-09,Cancelled
+SHP10192,Mumbai,0.5,2025-09-27,Delivered
+SHP10193,Chennai,4.2,2025-05-06,In Transit
+SHP10194,Pune,4.0,2025-12-03,Delivered
+SHP10195,Chennai,4.3,2025-07-28,Delivered
+SHP10196,Pune,1.3,2025-04-19,Delivered
+SHP10197,Kochi,3.2,2025-04-09,Delivered
+SHP10198,Delhi,6.7,2025-02-12,Delivered
+SHP10199,Ahmedabad,3.5,2025-06-18,In Transit
+SHP10200,Ahmedabad,4.3,2025-04-09,Delivered
+SHP10201,Delhi,0.5,2025-11-05,Delivered
+SHP10202,Bengaluru,0.5,2025-11-29,Delivered
+SHP10203,Mumbai,2.8,2025-11-26,In Transit
+SHP10204,Pune,2.6,2025-06-03,Delayed
+SHP10205,Delhi,3.2,2025-10-15,Delivered
+SHP10206,Chennai,3.5,2025-10-12,Delivered
+SHP10207,Jaipur,4.0,2025-12-22,Delivered
+SHP10208,Kochi,0.5,2025-02-02,In Transit
+SHP10209,Jaipur,7.0,2025-10-14,Delivered
+SHP10210,Pune,2.3,2025-06-05,Delivered
+SHP10211,Delhi,5.0,2025-03-08,In Transit
+SHP10212,Kolkata,4.2,2025-03-18,Delayed
+SHP10213,Kochi,6.8,2025-10-01,Delivered
+SHP10214,Jaipur,1.4,2025-05-02,Delivered
+SHP10215,Chennai,0.8,2025-12-06,Delivered
+SHP10216,Kochi,3.5,2025-02-16,Delivered
+SHP10217,Mumbai,4.4,2025-02-09,Delivered
+SHP10218,Ahmedabad,6.3,2025-12-09,Delayed
+SHP10219,Mumbai,1.8,2025-05-27,Cancelled
+SHP10220,Kolkata,2.7,2025-01-24,In Transit
+SHP10221,Jaipur,6.9,2025-03-01,Delivered
+SHP10222,Kochi,2.5,2025-12-04,In Transit
+SHP10223,Kolkata,3.9,2025-07-28,Delivered
+SHP10224,Kolkata,0.9,2025-02-12,Delivered
+SHP10225,Chennai,4.6,2025-03-27,Delivered
+SHP10226,Ahmedabad,1.6,2025-11-14,Delivered
+SHP10227,Hyderabad,6.1,2025-06-14,In Transit
+SHP10228,Ahmedabad,3.5,2025-01-22,In Transit
+SHP10229,Kochi,4.4,2025-05-08,Delivered
+SHP10230,Jaipur,4.7,2025-05-13,Delivered
+SHP10231,Mumbai,2.6,2025-11-09,Cancelled
+SHP10232,Jaipur,4.2,2025-10-25,Delivered
+SHP10233,Ahmedabad,0.5,2025-07-07,Delivered
+SHP10234,Kolkata,6.5,2025-01-01,Delivered
+SHP10235,Bengaluru,2.2,2025-07-19,Delivered
+SHP10236,Chennai,0.5,2025-01-20,In Transit
+SHP10237,Mumbai,0.5,2025-04-14,Delivered
+SHP10238,Pune,3.3,2025-03-07,In Transit
+SHP10239,Jaipur,2.8,2025-08-01,Delivered
+SHP10240,Mumbai,3.5,2025-03-17,Delivered
+SHP10241,Delhi,4.4,2025-07-06,Delivered
+SHP10242,Pune,4.8,2025-05-20,In Transit
+SHP10243,Chennai,3.9,2025-02-25,In Transit
+SHP10244,Jaipur,0.5,2025-07-07,Delivered
+SHP10245,Pune,2.3,2025-10-30,Delivered
+SHP10246,Delhi,6.7,2025-04-24,In Transit
+SHP10247,Ahmedabad,5.4,2025-02-13,Delayed
+SHP10248,Chennai,2.5,2025-03-11,Delivered
+SHP10249,Bengaluru,7.1,2025-12-27,In Transit
+SHP10250,Chennai,7.7,2025-07-30,Delivered
+SHP10251,Delhi,0.5,2025-06-05,Delivered
+SHP10252,Delhi,2.0,2025-08-21,In Transit
+SHP10253,Chennai,1.3,2025-07-21,Delayed
+SHP10254,Ahmedabad,4.5,2025-04-16,Delivered
+SHP10255,Pune,0.9,2025-01-27,Delivered
+SHP10256,Kochi,4.7,2025-08-18,Delivered
+SHP10257,Bengaluru,8.5,2025-11-18,In Transit
+SHP10258,Hyderabad,0.5,2025-03-30,Delivered
+SHP10259,Bengaluru,2.3,2025-10-20,Delivered
+SHP10260,Hyderabad,5.0,2025-05-31,In Transit
+SHP10261,Mumbai,1.2,2025-12-22,In Transit
+SHP10262,Kolkata,4.4,2025-09-21,In Transit
+SHP10263,Jaipur,1.7,2025-09-02,Delivered
+SHP10264,Hyderabad,4.9,2025-12-13,In Transit
+SHP10265,Jaipur,3.1,2025-06-05,Delivered
+SHP10266,Chennai,2.7,2025-08-28,Delivered
+SHP10267,Kolkata,4.8,2025-07-29,Delivered
+SHP10268,Mumbai,7.3,2025-04-17,In Transit
+SHP10269,Ahmedabad,2.3,2025-03-20,Cancelled
+SHP10270,Ahmedabad,3.6,2025-07-06,In Transit
+SHP10271,Kochi,4.0,2025-05-21,Delivered
+SHP10272,Hyderabad,4.6,2025-09-16,Delivered
+SHP10273,Kolkata,1.6,2025-02-28,Delivered
+SHP10274,Kochi,9.4,2025-10-07,Delivered
+SHP10275,Ahmedabad,4.2,2025-03-17,In Transit
+SHP10276,Chennai,0.6,2025-11-18,Delivered
+SHP10277,Pune,1.7,2025-02-20,Delivered
+SHP10278,Ahmedabad,1.8,2025-11-30,Cancelled
+SHP10279,Hyderabad,1.3,2025-04-12,Delivered
+SHP10280,Pune,3.6,2025-02-07,Delivered
+SHP10281,Delhi,1.3,2025-09-05,Delivered
+SHP10282,Hyderabad,5.5,2025-05-11,Delayed
+SHP10283,Jaipur,6.2,2025-05-01,Delayed
+SHP10284,Mumbai,3.5,2025-02-24,Delivered
+SHP10285,Ahmedabad,3.7,2025-08-01,Delivered
+SHP10286,Bengaluru,3.8,2025-10-22,Delivered
+SHP10287,Bengaluru,2.6,2025-03-09,Delivered
+SHP10288,Jaipur,7.3,2025-07-07,Delivered
+SHP10289,Mumbai,7.4,2025-03-15,Delayed
+SHP10290,Chennai,5.3,2025-01-03,Delivered
+SHP10291,Kochi,0.6,2025-06-24,Delivered
+SHP10292,Kolkata,3.8,2025-12-24,In Transit
+SHP10293,Kolkata,8.7,2025-08-01,Delivered
+SHP10294,Mumbai,3.7,2025-11-21,Delivered
+SHP10295,Kochi,4.3,,Delivered
+SHP10296,Bengaluru,4.7,2025-04-20,Delivered
+SHP10297,Bengaluru,6.6,2025-07-25,Delayed
+SHP10298,Pune,4.6,2025-07-14,In Transit
+SHP10299,Ahmedabad,5.2,2025-06-24,Delivered
+SHP10300,Delhi,2.8,2025-12-14,In Transit
+SHP10301,Ahmedabad,4.9,2025-04-11,Delivered
+SHP10302,Kolkata,5.2,2025-11-07,Delivered
+SHP10303,Jaipur,7.7,2025-05-02,Delivered
+SHP10304,Chennai,6.5,2025-10-28,Delivered
+SHP10305,Delhi,2.2,2025-04-19,Delivered
+SHP10306,Kochi,3.7,2025-10-12,Delivered
+SHP10307,Mumbai,2.6,2025-02-02,Delayed
+SHP10308,Ahmedabad,4.2,2025-03-20,In Transit
+SHP10309,Chennai,2.3,2025-12-16,In Transit
+SHP10310,Bengaluru,5.7,2025-09-05,Delivered
+SHP10311,Jaipur,7.6,2025-11-03,Delivered
+SHP10312,Delhi,4.0,2025-08-10,Delivered
+SHP10313,Delhi,5.6,2025-05-20,Delivered
+SHP10314,Chennai,6.1,2025-07-20,Delivered
+SHP10315,Hyderabad,5.1,2025-08-17,Delivered
+SHP10316,Jaipur,2.7,2025-03-22,Delivered
+SHP10317,Kochi,4.1,2025-05-05,Delivered
+SHP10318,Pune,5.7,2025-11-05,Delivered
+SHP10319,Kolkata,2.1,2025-04-22,Delivered
+SHP10320,Pune,0.5,2025-12-23,Delivered
+SHP10321,Jaipur,1.9,2025-10-03,Delayed
+SHP10322,Jaipur,6.4,2025-12-03,Delivered
+SHP10323,Hyderabad,1.8,2025-04-01,Delivered
+SHP10324,Ahmedabad,4.8,2025-12-22,Delayed
+SHP10325,Hyderabad,5.9,2025-05-24,Delivered
+SHP10326,Mumbai,3.7,2025-06-13,In Transit
+SHP10327,Kolkata,3.7,2025-02-07,Delivered
+SHP10328,Hyderabad,4.2,2025-03-06,In Transit
+SHP10329,Mumbai,5.7,2025-05-27,Delivered
+SHP10330,Jaipur,2.3,2025-08-14,Delivered
+SHP10331,Hyderabad,3.6,2025-01-30,Delayed
+SHP10332,Jaipur,7.0,2025-07-30,In Transit
+SHP10333,Bengaluru,4.8,2025-07-07,Delayed
+SHP10334,Hyderabad,1.2,2025-12-06,Delivered
+SHP10335,Mumbai,0.5,2025-07-22,Delivered
+SHP10336,Bengaluru,3.6,2025-12-08,Delayed
+SHP10337,Pune,4.1,2025-03-21,Delivered
+SHP10338,Mumbai,4.0,2025-10-03,Delivered
+SHP10339,Ahmedabad,7.0,2025-10-20,In Transit
+SHP10340,Jaipur,4.9,2025-12-21,Delivered
+SHP10341,Hyderabad,4.4,2025-01-17,Delayed
+SHP10342,Mumbai,7.5,2025-01-29,Delivered
+SHP10343,Hyderabad,3.7,2025-11-10,Delivered
+SHP10344,Delhi,4.5,2025-11-18,Delivered
+SHP10345,Delhi,4.9,2025-08-23,Delivered
+SHP10346,Bengaluru,4.0,2025-09-08,Delivered
+SHP10347,Ahmedabad,1.8,2025-03-02,Delivered
+SHP10348,Mumbai,5.5,2025-05-15,Delivered
+SHP10349,Hyderabad,0.5,2025-05-26,In Transit
+SHP10350,Mumbai,1.7,2025-10-29,In Transit
+SHP10351,Bengaluru,5.6,2025-12-18,Delivered
+SHP10352,Kochi,5.1,2025-11-16,Delivered
+SHP10353,Delhi,2.0,2025-06-23,Delivered
+SHP10354,Kolkata,3.0,2025-06-17,Delivered
+SHP10355,Hyderabad,6.0,2025-05-30,Cancelled
+SHP10356,Hyderabad,0.6,2025-11-18,Delivered
+SHP10357,Kochi,3.8,2025-06-21,Delayed
+SHP10358,Pune,3.0,2025-08-18,Delivered
+SHP10359,Ahmedabad,3.4,2025-10-17,In Transit
+SHP10360,Bengaluru,2.7,2025-09-28,Delivered
+SHP10361,Delhi,4.7,2025-11-02,Delivered
+SHP10362,Jaipur,3.5,2025-08-23,In Transit
+,Kochi,3.8,2025-07-20,In Transit
+SHP10364,Jaipur,5.7,2025-10-31,Delivered
+SHP10365,Bengaluru,4.2,2025-12-24,In Transit
+SHP10366,Jaipur,6.2,2025-07-02,Delivered
+SHP10367,Jaipur,0.9,2025-08-15,In Transit
+SHP10368,Chennai,6.4,2025-03-01,Delivered
+SHP10369,Bengaluru,0.9,2025-03-26,In Transit
+SHP10370,Bengaluru,5.7,2025-02-24,In Transit
+SHP10371,Pune,4.2,2025-09-21,Delivered
+SHP10372,Hyderabad,7.8,2025-09-22,Delivered
+SHP10373,Mumbai,8.4,2025-04-29,Delivered
+SHP10374,Kolkata,7.8,2025-02-07,Delivered
+SHP10375,Mumbai,0.6,2025-05-12,Delivered
+SHP10376,Jaipur,3.5,2025-09-20,Delivered
+SHP10377,Kolkata,3.7,2025-09-06,In Transit
+SHP10378,Bengaluru,2.6,2025-01-03,Delivered
+SHP10379,Kolkata,7.2,2025-06-05,Delivered
+SHP10380,Chennai,1.1,2025-03-10,Delivered
+SHP10381,Delhi,4.1,2025-06-02,In Transit
+SHP10382,Bengaluru,4.2,2025-10-07,Delayed
+SHP10383,Chennai,4.0,2025-12-10,Cancelled
+SHP10384,Pune,4.7,2025-12-19,In Transit
+SHP10385,Delhi,3.4,2025-09-27,In Transit
+SHP10386,Ahmedabad,2.9,2025-12-01,Delivered
+SHP10387,Jaipur,5.2,2025-06-11,In Transit
+SHP10388,Mumbai,3.3,2025-08-13,Delivered
+SHP10389,Pune,4.4,2025-08-29,In Transit
+SHP10390,Ahmedabad,4.8,2025-04-25,In Transit
+SHP10391,Ahmedabad,7.4,2025-05-27,In Transit
+SHP10392,Hyderabad,7.8,2025-02-10,Delivered
+SHP10393,Delhi,7.0,2025-05-25,Delivered
+SHP10394,Ahmedabad,4.1,2025-09-30,Delivered
+SHP10395,Kolkata,3.5,2025-06-16,Delivered
+SHP10396,Bengaluru,2.7,2025-12-17,In Transit
+SHP10397,Delhi,1.7,2025-05-09,Delivered
+SHP10398,Delhi,3.7,2025-10-25,Delivered
+SHP10399,Ahmedabad,0.5,2025-03-26,Delivered
+SHP10400,Ahmedabad,2.2,2025-06-29,In Transit
+SHP10401,Delhi,4.4,2025-08-14,In Transit
+SHP10402,Pune,3.2,2025-11-07,Delivered
+SHP10403,Bengaluru,0.5,2025-03-17,In Transit
+SHP10404,Kochi,3.7,2025-04-14,Delivered
+SHP10405,Jaipur,2.7,2025-07-17,Delivered
+SHP10406,Bengaluru,4.5,2025-03-22,In Transit
+SHP10407,Mumbai,3.6,2025-09-27,Delivered
+SHP10408,Jaipur,6.2,2025-04-21,Delivered
+SHP10409,Chennai,1.4,2025-01-17,In Transit
+SHP10410,Chennai,5.1,2025-09-01,Cancelled
+SHP10411,Kochi,2.0,2025-03-01,Delivered
+SHP10412,Kolkata,3.2,2025-02-27,Delivered
+SHP10413,Mumbai,2.3,2025-11-14,In Transit
+SHP10414,Bengaluru,3.1,2025-11-17,Delivered
+SHP10415,Kochi,2.6,2025-07-25,Delivered
+SHP10416,Chennai,2.5,2025-03-28,Delivered
+SHP10417,Bengaluru,1.0,2025-09-17,Delivered
+SHP10418,Bengaluru,3.7,2025-07-25,Delivered
+SHP10419,Kochi,1.7,2025-11-06,Delivered
+SHP10420,Jaipur,5.1,2025-01-20,Delivered
+SHP10421,Bengaluru,4.8,2025-08-29,Delivered
+SHP10422,Mumbai,6.2,2025-06-01,Delivered
+SHP10423,Kochi,5.8,2025-04-12,Delivered
+SHP10424,Bengaluru,4.6,2025-05-16,Delivered
+SHP10425,Ahmedabad,8.6,2025-11-02,Delivered
+SHP10426,Ahmedabad,4.4,2025-04-03,Delivered
+SHP10427,Ahmedabad,4.2,2025-05-21,Delivered
+SHP10428,Pune,2.4,2025-12-06,Delivered
+SHP10429,Kolkata,3.9,2025-01-14,Delivered
+SHP10430,Jaipur,6.7,2025-06-30,Delivered
+SHP10431,Bengaluru,5.1,2025-01-16,Delivered
+SHP10432,Bengaluru,4.6,2025-10-12,Delivered
+SHP10433,Delhi,0.7,2025-07-02,Delivered
+SHP10434,Bengaluru,0.5,2025-10-06,Delivered
+SHP10435,Kolkata,1.2,2025-11-08,In Transit
+SHP10436,Chennai,2.8,2025-09-01,Delivered
+SHP10437,Delhi,8.8,2025-06-19,In Transit
+SHP10438,Kochi,6.5,2025-12-12,Delivered
+SHP10439,Hyderabad,1.1,2025-06-07,Delayed
+SHP10440,Bengaluru,2.7,2025-07-16,Delivered
+SHP10441,Delhi,3.4,2025-07-09,Delivered
+SHP10442,Bengaluru,5.4,2025-09-30,In Transit
+SHP10443,Kolkata,6.0,2025-05-21,Delivered
+SHP10444,Kochi,1.4,2025-04-19,In Transit
+SHP10445,Jaipur,5.1,2025-12-12,
+SHP10446,Bengaluru,5.8,2025-06-21,Delivered
+SHP10447,Bengaluru,4.0,2025-04-11,Delivered
+SHP10448,Ahmedabad,3.8,2025-03-04,In Transit
+SHP10449,Mumbai,2.6,2025-03-08,Delivered
+SHP10450,Kochi,3.6,2025-01-11,Delayed
+SHP10451,Kolkata,2.6,2025-04-29,Delivered
+SHP10452,Kolkata,4.2,2025-10-21,Delayed
+SHP10453,Jaipur,4.6,2025-06-19,Delivered
+SHP10454,Mumbai,7.9,2025-07-01,Delivered
+SHP10455,Mumbai,5.6,2025-04-25,Delivered
+SHP10456,Chennai,5.6,2025-06-24,Delivered
+SHP10457,Pune,3.0,2025-09-21,Delivered
+SHP10458,Ahmedabad,10.1,2025-08-17,Delivered
+SHP10459,Ahmedabad,5.7,2025-07-12,Delivered
+SHP10460,Pune,3.1,2025-12-31,In Transit
+SHP10461,Jaipur,3.2,2025-08-13,Delivered
+SHP10462,Delhi,4.1,2025-06-29,In Transit
+SHP10463,Kochi,3.4,2025-02-11,Delivered
+SHP10464,Chennai,7.7,2025-02-10,Delivered
+SHP10465,Chennai,4.3,2025-08-20,Delivered
+SHP10466,Jaipur,9.0,2025-10-13,Delivered
+SHP10467,Kolkata,2.8,2025-01-10,Delivered
+SHP10468,Ahmedabad,4.3,2025-04-25,Delivered
+SHP10469,Bengaluru,5.6,2025-05-27,Delivered
+SHP10470,Delhi,1.4,2025-10-28,Delivered
+SHP10471,Pune,,2025-02-26,Delivered
+SHP10472,Pune,3.2,2025-12-09,Delivered
+SHP10473,Bengaluru,4.8,2025-08-12,Delivered
+SHP10474,Hyderabad,8.6,2025-04-05,In Transit
+SHP10475,Bengaluru,5.8,2025-08-31,Delivered
+SHP10476,Mumbai,4.3,2025-01-30,Delivered
+SHP10477,Ahmedabad,2.4,2025-02-16,Delivered
+SHP10478,Hyderabad,0.5,2025-03-21,Delivered
+SHP10479,Pune,6.6,2025-06-27,Delivered
+SHP10480,Jaipur,4.8,2025-03-17,Delivered
+SHP10481,Delhi,3.3,2025-03-05,Delivered
+SHP10482,Jaipur,0.9,2025-08-07,Delivered
+SHP10483,Kochi,6.2,2025-02-22,Delivered
+SHP10484,Bengaluru,4.9,2025-04-19,Delivered
+SHP10485,Ahmedabad,0.9,2025-02-09,Delivered
+SHP10486,Chennai,3.3,2025-10-04,Delayed
+SHP10487,Pune,2.2,2025-08-15,In Transit
+SHP10488,Chennai,3.6,2025-02-17,Delayed
+SHP10489,Hyderabad,1.3,2025-12-04,In Transit
+SHP10490,Mumbai,1.3,2025-10-06,Delivered
+SHP10491,Mumbai,4.6,2025-11-13,Delivered
+SHP10492,Kolkata,6.6,2025-08-27,In Transit
+SHP10493,delhi,4.6,2025-02-02,In Transit
+SHP10494,Ahmedabad,8.1,2025-08-07,In Transit
+SHP10495,Ahmedabad,2.2,2025-02-18,Delivered
+SHP10496,Chennai,2.2,2025-12-23,Cancelled
+SHP10497,Hyderabad,4.2,2025-08-20,In Transit
+SHP10498,Chennai,3.3,2025-12-02,In Transit
+SHP10499,Delhi,1.2,2025-02-25,Delivered
+SHP10500,Kolkata,0.9,2025-12-12,Delivered
+SHP10501,Chennai,3.6,2025-10-27,In Transit
+SHP10502,Pune,4.5,2025-05-09,In Transit
+SHP10503,Pune,4.3,2025-11-02,Delivered
+SHP10504,Kochi,3.1,2025-09-10,In Transit
+SHP10505,Hyderabad,2.3,2025-11-26,Delivered
+SHP10506,Ahmedabad,1.9,2025-06-25,Delivered
+SHP10507,Hyderabad,5.1,2025-07-10,Delivered
+SHP10508,Chennai,4.4,2025-03-04,In Transit
+SHP10509,Jaipur,3.6,2025-08-09,In Transit
+SHP10510,Chennai,5.5,2025-02-15,Delivered
+SHP10511,Kolkata,3.4,2025-01-26,Delivered
+SHP10512,Kolkata,1.9,2025-08-01,Delivered
+SHP10513,Delhi,4.0,2025-02-21,Cancelled
+SHP10514,Kolkata,3.3,2025-04-11,Delivered
+SHP10515,Ahmedabad,1.6,2025-07-01,Delivered
+SHP10516,Pune,3.6,2025-03-27,Delayed
+SHP10517,Pune,4.1,2025-03-09,Delivered
+SHP10518,Bengaluru,4.6,2025-05-17,Delivered
+SHP10519,Ahmedabad,6.2,2025-12-30,In Transit
+SHP10520,Pune,5.3,2025-09-25,In Transit
+SHP10521,Ahmedabad,4.7,2025-12-25,Delivered
+SHP10522,Jaipur,0.5,2025-04-28,Delivered
+SHP10523,Jaipur,7.0,2025-11-17,Delivered
+SHP10524,Kochi,8.0,2025-06-29,Delivered
+SHP10525,Bengaluru,3.6,2025-01-20,Delayed
+SHP10526,Kolkata,2.3,2025-08-04,Delivered
+SHP10527,Chennai,6.9,2025-06-25,Delayed
+SHP10528,Mumbai,5.7,2025-02-13,Delivered
+SHP10529,Hyderabad,1.5,2025-06-08,Delivered
+SHP10530,Kolkata,4.6,2025-09-30,Delayed
+SHP10531,Chennai,0.8,2025-09-25,Delivered
+SHP10532,Jaipur,4.1,2025-12-30,Delivered
+SHP10533,Chennai,3.6,2025-10-19,Delivered
+SHP10534,Jaipur,6.2,,Delivered
+SHP10535,Kochi,5.3,2025-10-28,Delayed
+SHP10536,Pune,1.1,2025-12-14,Delivered
+SHP10537,Kolkata,2.7,2025-02-07,Delivered
+SHP10538,Bengaluru,1.4,2025-05-20,In Transit
+SHP10539,Pune,4.0,2025-09-09,Delivered
+SHP10540,Jaipur,2.8,2025-05-11,Delivered
+SHP10541,Jaipur,6.5,2025-12-06,Delivered
+SHP10542,Jaipur,5.8,2025-09-27,Delivered
+SHP10543,DELHI,2.2,2025-05-15,In Transit
+SHP10544,Ahmedabad,7.5,2025-06-08,Delivered
+SHP10545,Kolkata,2.1,2025-06-11,Delivered
+SHP10546,Jaipur,5.8,2025-12-09,In Transit
+SHP10547,Mumbai,2.6,2025-01-25,In Transit
+SHP10548,Bengaluru,3.4,2025-01-20,Delivered
+SHP10549,Delhi,0.5,2025-07-30,Delivered
+SHP10550,Kochi,4.8,2025-10-18,Delivered
+SHP10551,Bengaluru,2.6,2025-07-30,Delayed
+SHP10552,Kolkata,3.0,2025-08-11,In Transit
+SHP10553,Chennai,3.0,2025-06-11,Cancelled
+SHP10554,Kochi,5.3,2025-02-10,Delivered
+SHP10555,Delhi,4.2,2025-03-03,Delivered
+SHP10556,Jaipur,2.0,2025-02-04,Delayed
+SHP10557,Kolkata,4.2,2025-03-26,Delivered
+SHP10558,Chennai,4.3,2025-07-14,Delivered
+SHP10559,Hyderabad,4.0,2025-02-24,In Transit
+SHP10560,Chennai,3.9,2025-05-16,Delayed
+SHP10561,Chennai,2.3,2025-05-17,Delivered
+SHP10562,Bengaluru,6.8,2025-10-24,Delivered
+SHP10563,Bengaluru,2.3,2025-01-22,Delivered
+SHP10564,Jaipur,3.8,2025-09-12,Delivered
+SHP10565,Pune,7.0,2025-10-25,In Transit
+SHP10566,Bengaluru,6.7,2025-01-21,Delivered
+SHP10567,Mumbai,4.5,2025-04-02,Delivered
+SHP10568,Kochi,2.4,2025-05-30,Delivered
+SHP10569,Kolkata,0.5,2025-07-14,Delivered
+SHP10570,Mumbai,3.3,2025-10-18,In Transit
+SHP10571,Delhi,4.2,2025-06-14,Delivered
+SHP10572,Bengaluru,6.4,2025-12-23,Delivered
+SHP10573,Bengaluru,5.8,2025-07-30,Delivered
+SHP10574,Kochi,4.8,2025-11-19,Delivered
+SHP10575,Chennai,4.0,2025-07-31,Delivered
+SHP10576,Kolkata,7.0,2025-12-31,Delivered
+SHP10577,Hyderabad,3.4,2025-01-28,Delivered
+SHP10578,Kolkata,2.4,2025-04-28,Delivered
+SHP10579,Jaipur,0.7,2025-02-17,In Transit
+SHP10580,Ahmedabad,5.2,2025-01-05,Delivered
+SHP10581,Jaipur,0.9,2025-07-03,Delivered
+SHP10582,Delhi,3.7,2025-10-24,Delivered
+SHP10583,Pune,1.2,2025-01-27,Delivered
+SHP10584,Mumbai,7.6,2025-09-25,In Transit
+SHP10585,Chennai,3.7,2025-04-08,Delivered
+SHP10586,Delhi,6.7,2025-10-19,Delayed
+SHP10587,Bengaluru,5.6,2025-06-13,Delivered
+SHP10588,Pune,0.9,2025-06-21,Delivered
+SHP10589,Chennai,4.9,2025-03-08,Delivered
+SHP10590,Kolkata,1.1,2025-11-06,In Transit
+SHP10591,Jaipur,1.3,2025-07-01,Delivered
+SHP10592,Delhi,6.9,2025-11-15,In Transit
+SHP10593,Delhi,0.5,2025-06-17,Delivered
+SHP10594,Chennai,8.7,2025-01-29,Delayed
+SHP10595,Pune,5.4,2025-12-10,Delivered
+SHP10596,Jaipur,4.4,2025-07-25,Delivered
+SHP10597,Jaipur,1.1,2025-04-14,In Transit
+SHP10598,Delhi,4.8,2025-10-17,Delivered
+SHP10599,Chennai,4.2,2025-08-14,Delivered
+SHP10600,Jaipur,6.8,2025-07-02,In Transit
+SHP10601,Mumbai,4.2,2025-11-04,Delivered
+SHP10602,Jaipur,1.1,2025-06-11,In Transit
+SHP10603,Bengaluru,9.2,2025-04-09,In Transit
+SHP10604,Pune,6.4,2025-04-28,Delivered
+SHP10605,Jaipur,0.8,2025-03-30,Delivered
+SHP10606,Pune,4.7,2025-07-23,Delivered
+SHP10607,Kolkata,4.8,2025-03-26,Delivered
+SHP10608,Delhi,4.8,2025-02-28,Delivered
+SHP10609,Kochi,2.6,2025-10-11,Delivered
+SHP10610,Kolkata,4.2,2025-03-11,Cancelled
+SHP10611,Bengaluru,2.0,2025-09-23,Delivered
+SHP10612,Hyderabad,2.6,2025-11-13,Delivered
+SHP10613,Pune,2.9,2025-04-09,Delivered
+SHP10614,Bengaluru,1.1,2025-11-26,In Transit
+SHP10615,Hyderabad,3.5,2025-06-08,Delivered
+SHP10616,Mumbai,0.5,2025-05-01,Delivered
+SHP10617,Chennai,1.4,2025-09-15,Delivered
+SHP10618,Kochi,6.4,2025-07-10,Delayed
+SHP10619,Kochi,5.5,2025-01-24,Cancelled
+SHP10620,Delhi,2.5,2025-11-04,Delivered
+SHP10621,Delhi,5.1,2025-11-29,Delivered
+SHP10622,Kolkata,4.3,2025-02-07,In Transit
+SHP10623,Pune,2.4,2025-10-09,Delivered
+SHP10624,Kochi,6.8,2025-05-25,Delivered
+SHP10625,Mumbai,3.2,2025-02-08,Delivered
+SHP10626,Jaipur,3.2,2025-08-11,Delayed
+SHP10627,Mumbai,3.8,2025-09-22,Delivered
+SHP10628,Kolkata,6.5,2025-03-24,In Transit
+SHP10629,Kolkata,4.4,2025-04-14,Delivered
+SHP10630,Bengaluru,5.9,2025-08-18,Delivered
+SHP10631,Pune,2.3,2025-01-22,Delivered
+SHP10632,Kolkata,2.2,2025-07-03,Delivered
+SHP10633,Ahmedabad,3.9,2025-10-26,Delivered
+SHP10634,Ahmedabad,2.6,2025-10-14,Cancelled
+SHP10635,Kolkata,7.8,2025-03-07,Delivered
+SHP10636,Bengaluru,3.5,2025-10-16,Delivered
+SHP10637,Kolkata,6.5,2025-07-16,Delivered
+SHP10638,Pune,4.5,2025-07-21,Delivered
+SHP10639,Jaipur,4.1,2025-06-16,Delivered
+SHP10640,Pune,5.1,2025-06-09,Delivered
+SHP10641,Kolkata,3.4,2025-06-14,Delivered
+SHP10642,Kochi,1.4,2025-09-16,In Transit
+SHP10643,Mumbai,6.7,2025-05-20,Delivered
+SHP10644,Chennai,3.4,2025-07-22,Delivered
+SHP10645,Kolkata,3.3,2025-05-10,Delivered
+SHP10646,Jaipur,1.7,2025-07-07,Delivered
+SHP10647,Delhi,6.2,2025-03-19,Cancelled
+SHP10648,Pune,1.8,2025-10-07,Delivered
+SHP10649,Hyderabad,4.5,2025-04-02,Delayed
+SHP10650,Kochi,2.0,2025-11-25,Delivered
+SHP10651,Hyderabad,3.0,2025-04-14,Delayed
+SHP10652,Ahmedabad,2.0,2025-05-27,In Transit
+SHP10653,Delhi,3.8,2025-12-08,Delivered
+SHP10654,Kolkata,1.5,2025-06-05,Delayed
+SHP10655,Delhi,2.5,2025-11-22,Delivered
+SHP10656,Bengaluru,2.3,2025-06-06,Delayed
+SHP10657,Chennai,2.5,2025-07-11,Delivered
+SHP10658,Chennai,2.3,2025-12-10,Delivered
+SHP10659,Ahmedabad,5.7,2025-01-27,Delivered
+SHP10660,Delhi,4.1,2025-10-07,Delayed
+SHP10661,Kochi,0.5,2025-07-04,Delivered
+SHP10662,Ahmedabad,2.3,2025-01-19,Delivered
+SHP10663,Ahmedabad,5.4,2025-05-28,Delivered
+SHP10664,Kolkata,5.7,2025-09-14,In Transit
+SHP10665,Bengaluru,6.0,2025-03-28,Delivered
+SHP10666,Pune,2.1,2025-09-07,Delivered
+SHP10667,Kochi,4.4,2025-05-17,In Transit
+SHP10668,Mumbai,3.0,2025-10-21,Delivered
+SHP10669,Hyderabad,6.6,2025-10-28,Delivered
+SHP10670,Bengaluru,3.5,2025-05-08,Delayed
+SHP10671,Chennai,3.4,2025-05-19,Delivered
+SHP10672,Kolkata,0.5,2025-03-22,Delivered
+SHP10673,Kochi,2.8,2025-02-13,Delayed
+SHP10674,Mumbai,3.1,2025-08-29,Delayed
+SHP10675,Bengaluru,5.7,2025-03-29,Delivered
+SHP10676,Ahmedabad,5.4,2025-07-18,Delivered
+SHP10677,Hyderabad,3.5,2025-08-23,Delivered
+SHP10678,Kochi,0.5,2025-12-30,Delivered
+SHP10679,Ahmedabad,6.0,2025-07-28,In Transit
+SHP10680,Kochi,3.2,2025-05-19,In Transit
+SHP10681,Ahmedabad,0.5,2025-04-27,Delivered
+SHP10682,Mumbai,1.9,2025-03-04,Delivered
+SHP10683,Mumbai,0.5,2025-07-18,Delivered
+SHP10684,Pune,1.0,2025-05-11,Delivered
+SHP10685,Kochi,3.1,2025-07-31,Delivered
+SHP10686,Pune,3.1,2025-09-18,
+SHP10687,Bengaluru,3.4,2025-12-24,Cancelled
+SHP10688,Delhi,0.9,2025-12-24,Delayed
+SHP10689,Mumbai,5.7,2025-11-16,Delivered
+SHP10690,Kochi,9.1,2025-11-10,Delivered
+SHP10691,Jaipur,3.0,2025-08-21,Delivered
+SHP10692,Chennai,3.8,2025-02-16,Delivered
+SHP10693,Pune,6.1,2025-04-09,In Transit
+SHP10694,Mumbai,3.7,2025-05-28,Delivered
+SHP10695,Mumbai,2.4,2025-02-03,In Transit
+SHP10696,Bengaluru,4.7,2025-04-09,Delivered
+SHP10697,Chennai,7.0,2025-11-06,Delivered
+SHP10698,Jaipur,1.6,2025-05-07,Delivered
+SHP10699,Chennai,3.8,2025-07-21,Delivered
+SHP10700,Delhi,4.6,2025-12-12,Delivered
+SHP10701,Hyderabad,6.9,2025-05-18,In Transit
+SHP10702,Chennai,4.3,2025-04-17,Delivered
+SHP10703,Hyderabad,5.0,2025-03-20,Delayed
+SHP10704,Jaipur,4.5,2025-03-19,Delivered
+SHP10705,Jaipur,2.8,2025-11-22,Delivered
+SHP10706,Kolkata,5.3,2025-09-05,Delivered
+SHP10707,Kolkata,2.6,2025-02-09,In Transit
+SHP10708,Hyderabad,1.7,2025-07-18,Delivered
+SHP10709,Kochi,7.6,2025-03-07,In Transit
+SHP10710,Bengaluru,4.6,2025-02-15,Delivered
+SHP10711,Kolkata,7.2,2025-01-08,In Transit
+SHP10712,Mumbai,3.9,2025-06-17,Delayed
+SHP10713,Kochi,5.8,2025-10-26,DELIVERED
+SHP10714,Delhi,0.5,2025-01-24,Delivered
+SHP10715,Ahmedabad,4.5,2025-02-20,Delivered
+SHP10716,Jaipur,2.6,2025-06-14,Delivered
+SHP10717,Chennai,6.0,2025-08-07,Delivered
+SHP10718,Jaipur,4.4,2025-07-11,In Transit
+SHP10719,Delhi,6.7,2025-07-30,Delivered
+SHP10720,Pune,1.4,2025-06-23,Delivered
+SHP10721,Chennai,4.2,2025-09-04,Delivered
+SHP10722,Mumbai,3.1,2025-10-23,Delivered
+SHP10723,Kolkata,4.0,2025-08-18,Delivered
+SHP10724,Pune,5.0,2025-12-07,Delivered
+SHP10725,Mumbai,1.7,2025-12-08,In Transit
+SHP10726,Delhi,3.4,2025-09-03,Delivered
+SHP10727,Chennai,6.9,2025-01-08,In Transit
+SHP10728,Chennai,5.3,2025-07-20,Delivered
+SHP10729,Hyderabad,2.0,2025-08-08,Delivered
+SHP10730,Hyderabad,3.4,2025-04-21,Delivered
+SHP10731,Ahmedabad,4.5,2025-06-27,Delivered
+SHP10732,Chennai,7.3,2025-07-06,Delivered
+SHP10733,Chennai,4.5,2025-10-20,In Transit
+SHP10734,Kochi,3.1,2025-03-25,Delivered
+SHP10735,Bengaluru,2.5,2025-10-31,Delivered
+SHP10736,Hyderabad,5.4,2025-07-18,Delayed
+SHP10737,Hyderabad,3.8,2025-11-30,In Transit
+SHP10738,Pune,5.3,2025-10-18,In Transit
+SHP10739,Hyderabad,2.6,2025-11-06,Delivered
+SHP10740,Delhi,6.4,2025-11-07,Delayed
+SHP10741,Mumbai,2.2,2025-02-21,Delivered
+SHP10742,Delhi,2.8,2025-11-21,In Transit
+SHP10743,Pune,5.2,2025-04-14,Delivered
+SHP10744,Bengaluru,5.9,2025-10-04,Delivered
+SHP10745,Jaipur,4.8,2025-10-04,Cancelled
+SHP10746,Delhi,3.5,2025-07-10,Cancelled
+SHP10747,Kolkata,4.6,2025-05-18,Delayed
+SHP10748,Hyderabad,6.4,2025-01-12,Delivered
+SHP10749,Pune,2.9,2025-08-17,Delivered
+SHP10750,Hyderabad,0.5,2025-12-01,Delivered
+SHP10751,Jaipur,1.7,2025-10-24,Delivered
+SHP10752,Hyderabad,1.8,2025-03-16,Delivered
+SHP10753,Jaipur,4.3,2025-05-15,Delivered
+SHP10754,Jaipur,3.1,2025-05-21,Delivered
+SHP10755,Jaipur,2.7,2025-01-30,Delivered
+SHP10756,Kochi,1.1,2025-01-07,In Transit
+SHP10757,Hyderabad,3.6,2025-04-30,In Transit
+SHP10758,Chennai,1.8,2025-06-13,Delivered
+SHP10759,Pune,1.4,2025-12-21,Delivered
+SHP10760,Bengaluru,0.5,2025-05-16,Delayed
+SHP10761,Kolkata,4.1,2025-01-07,Delivered
+SHP10762,Chennai,3.2,2025-09-08,Delivered
+SHP10763,Pune,3.6,2025-07-07,In Transit
+SHP10764,Delhi,1.1,2025-12-02,Delivered
+SHP10765,Kolkata,3.9,2025-07-26,Delivered
+SHP10766,Chennai,1.9,2025-12-12,Delivered
+SHP10767,Delhi,4.2,2025-11-28,Delivered
+SHP10768,Delhi,4.3,2025-12-13,Delivered
+SHP10769,Delhi,2.2,2025-10-23,Delayed
+SHP10770,Mumbai,1.8,2025-04-16,Cancelled
+SHP10771,Bengaluru,5.6,2025-08-18,Delayed
+SHP10772,Chennai,7.4,2025-02-23,Delayed
+SHP10773,Kolkata,0.5,2025-05-02,Delayed
+SHP10774,Pune,5.0,2025-10-21,Delivered
+SHP10775,Delhi,3.0,2025-02-05,Delivered
+SHP10776,Jaipur,3.7,2025-12-07,Delivered
+SHP10777,Pune,6.2,2025-11-23,Delivered
+SHP10778,Kolkata,9.6,2025-02-04,Delivered
+SHP10779,Delhi,5.3,2025-07-10,In Transit
+SHP10780,Delhi,7.8,2025-12-01,Cancelled
+SHP10781,Hyderabad,0.7,2025-02-22,Delivered
+SHP10782,Delhi,2.9,2025-08-04,Delivered
+SHP10783,Jaipur,4.4,2025-03-13,Delivered
+SHP10784,Bengaluru,2.8,2025-03-06,Delivered
+SHP10785,Jaipur,2.3,2025-06-02,In Transit
+SHP10786,Jaipur,2.9,2025-04-30,Delivered
+SHP10787,Jaipur,6.1,2025-03-20,Delivered
+SHP10788,Bengaluru,2.7,2025-11-28,In Transit
+SHP10789,Pune,0.9,2025-05-28,Delayed
+SHP10790,Mumbai,2.3,2025-06-20,Delayed
+SHP10791,Hyderabad,1.7,2025-10-17,Delivered
+SHP10792,Jaipur,1.2,2025-03-06,Delivered
+SHP10793,Mumbai,4.9,2025-10-12,Delivered
+SHP10794,Chennai,1.1,2025-09-02,Delivered
+SHP10795,Kochi,2.6,2025-12-09,Delayed
+SHP10796,Chennai,3.7,2025-11-10,Delivered
+SHP10797,Pune,3.4,2025-08-23,In Transit
+SHP10798,Jaipur,2.8,2025-08-05,Delivered
+SHP10799,Chennai,2.6,2025-02-02,Delivered
+SHP10800,Ahmedabad,0.9,2025-04-27,Delivered
+SHP10801,Bengaluru,7.0,2025-07-11,Delayed
+SHP10802,Jaipur,2.5,2025-09-05,In Transit
+SHP10803,Kolkata,5.1,2025-10-16,Delivered
+SHP10804,Jaipur,0.5,2025-08-11,Delayed
+SHP10805,Bengaluru,2.4,2025-12-22,Delivered
+SHP10806,Mumbai,5.0,2025-06-01,Delivered
+SHP10807,Bengaluru,1.4,2025-08-28,Delayed
+SHP10808,Jaipur,7.3,2025-10-22,In Transit
+SHP10809,Jaipur,4.3,2025-10-21,In Transit
+SHP10810,Delhi,6.8,2025-04-30,Delivered
+SHP10811,Pune,3.6,2025-10-31,Delivered
+SHP10812,Ahmedabad,1.9,2025-05-15,Delivered
+SHP10813,Kochi,7.2,2025-02-13,Delivered
+SHP10814,Bengaluru,1.0,2025-06-08,In Transit
+SHP10815,Mumbai,5.0,2025-09-12,Delivered
+SHP10816,Mumbai,5.0,2025-03-10,Delivered
+SHP10817,Mumbai,4.9,2025-12-27,Delivered
+SHP10818,Pune,3.9,2025-09-20,In Transit
+SHP10819,Hyderabad,3.7,2025-04-20,Delivered
+SHP10820,Kochi,3.7,2025-10-02,Delivered
+SHP10821,Jaipur,1.6,2025-01-22,Delayed
+SHP10822,Bengaluru,3.9,2025-07-02,In Transit
+SHP10823,Jaipur,3.5,2025-06-02,Delivered
+SHP10824,Ahmedabad,1.3,2025-08-03,Delivered
+SHP10825,Ahmedabad,3.6,2025-12-23,Delayed
+SHP10826,Pune,4.7,2025-10-15,Delivered
+SHP10827,Ahmedabad,4.1,2025-05-08,In Transit
+SHP10828,Jaipur,6.9,2025-07-15,Delivered
+SHP10829,Chennai,2.8,2025-10-02,Delivered
+SHP10830,Kolkata,,2025-10-22,Delivered
+SHP10831,Pune,1.7,2025-05-27,Delayed
+SHP10832,Delhi,2.4,2025-09-15,Delivered
+SHP10833,Chennai,4.4,2025-12-07,In Transit
+SHP10834,Hyderabad,3.3,2025-01-27,In Transit
+SHP10835,Delhi,2.1,2025-02-27,Delivered
+SHP10836,Kochi,4.1,2025-11-21,Delivered
+SHP10837,Mumbai,0.5,2025-10-30,In Transit
+SHP10838,Kochi,7.2,2025-08-16,Delivered
+SHP10839,Bengaluru,3.0,2025-11-04,Delivered
+SHP10840,Kolkata,6.0,2025-08-13,Delivered
+SHP10841,Delhi,4.4,2025-02-06,In Transit
+SHP10842,Mumbai,1.8,2025-06-04,Delivered
+SHP10843,Delhi,4.5,2025-12-12,Delivered
+SHP10844,Chennai,3.4,2025-02-10,In Transit
+SHP10845,Jaipur,0.6,2025-04-01,Delivered
+SHP10846,Delhi,1.4,2025-12-24,Delivered
+SHP10847,Ahmedabad,3.7,2025-06-02,Delivered
+SHP10848,Pune,4.4,2025-05-22,Delivered
+SHP10849,Mumbai,2.8,2025-10-26,Delivered
+SHP10850,Ahmedabad,2.1,2025-08-09,Delivered
+SHP10851,Ahmedabad,7.0,2025-04-17,Delivered
+SHP10852,Delhi,4.5,2025-09-03,Delivered
+SHP10853,Bengaluru,4.8,2025-05-06,Delivered
+SHP10854,Hyderabad,3.8,2025-01-22,Delivered
+SHP10855,Jaipur,5.0,2025-03-21,In Transit
+SHP10856,Ahmedabad,6.3,2025-04-30,Delayed
+SHP10857,Hyderabad,3.0,2025-04-13,Delivered
+SHP10858,Kochi,2.9,2025-07-23,Delivered
+SHP10859,Kochi,4.5,2025-08-25,Delivered
+SHP10860,Chennai,4.6,2025-04-19,Delayed
+SHP10861,Delhi,0.5,2025-04-21,Delivered
+SHP10862,Hyderabad,2.7,2025-11-17,In Transit
+SHP10863,Kochi,4.0,2025-09-07,Delivered
+SHP10864,Chennai,6.7,2025-04-02,Delivered
+SHP10865,Hyderabad,4.9,2025-07-26,In Transit
+SHP10866,Hyderabad,7.2,2025-10-21,In Transit
+SHP10867,Chennai,0.5,2025-01-30,Delivered
+SHP10868,Chennai,1.1,2025-06-18,In Transit
+SHP10869,Kochi,2.1,2025-03-03,In Transit
+SHP10870,Hyderabad,4.2,2025-05-31,Delivered
+SHP10871,Chennai,7.0,2025-09-30,Delayed
+SHP10872,Kolkata,3.2,2025-03-24,In Transit
+SHP10873,Kolkata,2.3,2025-05-18,Delivered
+SHP10874,Kolkata,1.3,2025-06-25,Delayed
+SHP10875,Hyderabad,6.3,2025-10-20,Delivered
+SHP10876,Bengaluru,7.8,2025-01-17,Delivered
+SHP10877,Kolkata,2.6,2025-12-05,Delivered
+SHP10878,Bengaluru,2.2,2025-01-03,Delivered
+SHP10879,Pune,4.1,2025-09-11,Delivered
+SHP10880,Pune,5.7,2025-07-31,In Transit
+SHP10881,Ahmedabad,4.4,2025-08-20,Delayed
+SHP10882,Hyderabad,2.8,2025-07-25,Delivered
+SHP10883,Jaipur,3.8,2025-01-15,Delivered
+SHP10884,Mumbai,0.8,2025-08-16,Delivered
+SHP10885,Delhi,5.5,2025-06-01,Delivered
+SHP10886,Mumbai,5.4,2025-04-29,Delivered
+SHP10887,Pune,1.5,2025-09-11,Delivered
+SHP10888,Bengaluru,3.5,2025-05-03,In Transit
+SHP10889,Kolkata,1.4,2025-01-26,Delivered
+SHP10890,Hyderabad,4.1,2025-12-06,Delivered
+SHP10891,Kolkata,0.9,2025-03-09,Delivered
+SHP10892,Bengaluru,3.4,2025-10-10,Delivered
+SHP10893,Kolkata,6.7,2025-07-26,Delivered
+SHP10894,Pune,7.7,2025-05-29,Delivered
+SHP10895,Hyderabad,1.6,2025-12-15,Delivered
+SHP10896,Chennai,5.3,2025-09-01,Delayed
+SHP10897,Mumbai,2.6,2025-08-29,Delivered
+SHP10898,Hyderabad,4.9,2025-04-10,Delivered
+SHP10899,Kolkata,5.2,2025-01-05,In Transit
+SHP10900,Ahmedabad,4.4,2025-01-05,Delivered
+SHP10901,Kolkata,2.1,2025-06-05,Delayed
+SHP10902,Ahmedabad,3.8,2025-03-21,In Transit
+SHP10903,Mumbai,2.9,2025-07-02,Delivered
+SHP10904,Ahmedabad,0.5,2025-10-12,Delivered
+SHP10905,Mumbai,2.7,2025-05-05,Delivered
+SHP10906,Pune,3.5,2025-07-25,Delivered
+SHP10907,Ahmedabad,3.8,2025-10-08,Delivered
+SHP10908,Pune,4.1,2025-06-04,Delivered
+SHP10909,Ahmedabad,6.0,2025-11-26,Cancelled
+SHP10910,Mumbai,2.2,2025-01-30,In Transit
+SHP10911,Hyderabad,3.4,2025-02-13,Delivered
+SHP10912,Kolkata,0.5,2025-01-08,In Transit
+SHP10913,Chennai,4.1,2025-12-27,Delivered
+SHP10914,Mumbai,4.3,2025-03-24,Delivered
+SHP10915,Jaipur,6.0,2025-12-19,Delayed
+SHP10916,Hyderabad,2.4,2025-01-11,Delivered
+SHP10917,Bengaluru,5.1,2025-04-20,Delivered
+SHP10918,Pune,7.1,2025-09-02,Delivered
+SHP10919,Kolkata,3.0,2025-08-05,In Transit
+SHP10920,Ahmedabad,4.3,2025-04-18,Delivered
+SHP10921,Pune,4.1,2025-03-02,Delivered
+SHP10922,Bengaluru,2.8,2025-07-02,Delivered
+SHP10923,Bengaluru,3.4,2025-08-10,Delivered
+SHP10924,Mumbai,1.7,2025-02-15,Delayed
+SHP10925,Pune,5.5,2025-01-15,Delivered
+SHP10926,Delhi,4.7,2025-10-16,Delivered
+SHP10927,Bengaluru,7.3,2025-07-18,In Transit
+SHP10928,Chennai,3.8,2025-02-20,Delivered
+SHP10929,Chennai,2.5,2025-11-01,Delivered
+SHP10930,Hyderabad,0.5,2025-07-30,Delivered
+SHP10931,Hyderabad,3.2,2025-07-14,In Transit
+SHP10932,Kochi,7.9,2025-04-24,Delivered
+SHP10933,Bengaluru,5.2,2025-05-08,In Transit
+SHP10934,Bengaluru,3.3,2025-06-05,Delivered
+SHP10935,Ahmedabad,2.6,2025-07-27,Delivered
+SHP10936,Kochi,4.8,2025-03-11,Delivered
+SHP10937,Mumbai,3.3,2025-05-16,In Transit
+SHP10938,Chennai,5.8,2025-01-12,Delivered
+SHP10939,Ahmedabad,3.5,2025-01-04,Delivered
+SHP10940,Chennai,3.1,,Delivered
+SHP10941,Delhi,0.5,2025-12-29,Delivered
+SHP10942,Bengaluru,2.1,2025-08-27,Delayed
+SHP10943,Ahmedabad,4.8,2025-03-20,In Transit
+SHP10944,Bengaluru,7.4,2025-09-02,Delivered
+SHP10945,Ahmedabad,2.8,2025-08-28,In Transit
+SHP10946,Hyderabad,3.4,2025-02-10,Delayed
+SHP10947,Mumbai,5.3,2025-05-24,Delivered
+SHP10948,Ahmedabad,5.1,2025-09-05,In Transit
+SHP10949,Jaipur,5.2,2025-08-30,Delivered
+SHP10950,Delhi,4.1,2025-02-15,Delivered
+SHP10951,Jaipur,3.9,2025-02-26,Delivered
+SHP10952,Pune,6.8,2025-05-31,Delivered
+SHP10953,Pune,7.8,2025-07-28,Delivered
+SHP10954,Chennai,4.2,2025-03-12,Delayed
+SHP10955,Mumbai,2.8,2025-01-25,In Transit
+SHP10956,Kochi,7.4,2025-08-10,In Transit
+SHP10957,Chennai,5.6,2025-03-25,Delivered
+SHP10958,Chennai,2.0,2025-05-12,Delivered
+SHP10959,Delhi,2.0,2025-04-26,Delivered
+SHP10960,Pune,6.9,2025-05-29,Delivered
+SHP10961,Delhi,2.9,2025-10-23,Delayed
+SHP10962,Chennai,0.8,2025-10-28,In Transit
+SHP10963,Delhi,7.2,2025-11-28,Delivered
+SHP10964,Bengaluru,5.7,2025-04-16,Delivered
+SHP10965,Delhi,7.2,2025-09-16,In Transit
+SHP10966,Bengaluru,5.4,2025-07-08,Delivered
+SHP10967,Ahmedabad,1.2,2025-10-15,Delayed
+SHP10968,Ahmedabad,3.8,2025-04-30,Delivered
+SHP10969,Kochi,5.1,2025-12-04,Delivered
+SHP10970,Hyderabad,2.4,2025-07-10,Delayed
+SHP10971,Ahmedabad,1.3,2025-09-22,Delayed
+SHP10972,Chennai,3.1,2025-07-13,In Transit
+SHP10973,Delhi,5.8,2025-11-03,Delivered
+SHP10974,Hyderabad,4.9,2025-10-15,Delivered
+SHP10975,Mumbai,4.7,2025-10-12,Delivered
+SHP10976,Delhi,0.5,2025-11-04,Delivered
+SHP10977,Delhi,0.5,2025-08-08,Delivered
+SHP10978,Pune,0.5,2025-02-01,Delivered
+SHP10979,Kolkata,4.9,2025-07-04,Delivered
+SHP10980,Bengaluru,8.2,2025-09-29,Delivered
+SHP10981,Bengaluru,3.8,2025-05-14,Delayed
+SHP10982,Kochi,3.8,2025-10-02,Delayed
+SHP10983,Pune,0.5,2025-06-07,Delivered
+SHP10984,Jaipur,4.2,2025-07-04,Delivered
+SHP10985,Jaipur,3.4,2025-02-08,Delivered
+SHP10986,Jaipur,7.3,2025-05-02,Delivered
+SHP10987,Kolkata,3.1,2025-06-01,Delivered
+SHP10988,Kolkata,4.7,2025-02-14,Delivered
+SHP10989,Kolkata,2.4,2025-08-02,In Transit
+SHP10990,Hyderabad,7.3,2025-05-10,Delayed
+SHP10991,Mumbai,6.7,2025-03-25,Delivered
+SHP10992,Kochi,4.2,2025-07-31,Delivered
+SHP10993,Ahmedabad,2.0,2025-10-17,Delivered
+SHP10994,Chennai,5.2,2025-05-23,Delivered
+SHP10995,Chennai,4.6,2025-11-20,Delayed
+SHP10996,Ahmedabad,7.1,2025-04-18,Delivered
+SHP10997,Kochi,0.5,2025-05-17,Delivered
+SHP10998,Delhi,1.8,2025-01-19,Delayed
+SHP10999,Hyderabad,5.1,2025-11-26,Delivered
+SHP11000,Ahmedabad,6.6,2025-11-13,Delivered
+SHP10256,Kochi,4.7,2025-08-18,Delivered
+SHP10762,Chennai,3.2,2025-09-08,Delivered
+SHP10586,Delhi,6.7,2025-10-19,Delayed
+SHP10520,Pune,5.3,2025-09-25,In Transit
+SHP10809,Jaipur,4.3,2025-10-21,In Transit
+SHP10430,Jaipur,6.7,2025-06-30,Delivered
+SHP10432,Bengaluru,4.6,2025-10-12,Delivered
+SHP10664,Kolkata,5.7,2025-09-14,In Transit
+SHP10827,Ahmedabad,4.1,2025-05-08,In Transit
+SHP10023,Chennai,6.4,2025-11-10,Delivered
