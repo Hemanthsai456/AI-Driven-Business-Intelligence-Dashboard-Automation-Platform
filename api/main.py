@@ -558,6 +558,7 @@ def select_winner_endpoint(req: SelectWinnerRequest):
             generator_logs=gen_logs,
             consistency_check=consistency,
             semantic_profile=record.semantic_profile,
+            dataset=record.dataset,
         )
     except WinnerSelectionError as e:
         raise HTTPException(

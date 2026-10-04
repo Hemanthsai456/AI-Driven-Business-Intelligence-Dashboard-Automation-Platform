@@ -629,6 +629,7 @@ def run_orchestration_pipeline(
             candidate_validations=candidate_validations,
             resolved_by="user" if is_user_resolved else None,
             semantic_profile=semantic_profile,
+            dataset=dataset,
         )
     except WinnerSelectionError as e:
         emit_decision_log(

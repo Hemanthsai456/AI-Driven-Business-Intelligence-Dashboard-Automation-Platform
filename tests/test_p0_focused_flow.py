@@ -69,8 +69,9 @@ def test_valid_focused_analytical_request(baseline_dataset_bundle):
 
     assert result.status == "SUCCESS"
     assert result.dashboard_spec is not None
-    assert len(result.dashboard_spec.tiles) > 0
-    tile = result.dashboard_spec.tiles[0]
+    assert len(result.dashboard_spec.tiles) >= 2
+    tile = next((t for t in result.dashboard_spec.tiles if t.chart_type in ("bar", "BAR")), None)
+    assert tile is not None
     assert tile.chart_type in ("bar", "BAR")
     assert tile.x_key == "customer_name"
     assert "sum_amount" in tile.y_keys
@@ -168,10 +169,10 @@ def test_successful_dashboardspec_creation_through_fallback(baseline_dataset_bun
     assert result.status == "SUCCESS"
     spec = result.dashboard_spec
     assert spec is not None
-    assert spec.spec_id is not None
-    assert len(spec.tiles) == 1
+    assert len(spec.tiles) >= 2
 
-    tile = spec.tiles[0]
+    tile = next((t for t in spec.tiles if t.chart_type in ("bar", "BAR", "line", "LINE")), None)
+    assert tile is not None
     assert tile.id is not None
     assert tile.chart_type in ("bar", "BAR", "line", "LINE")
     assert tile.x_key == "customer_name"

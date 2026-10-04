@@ -36,6 +36,40 @@ def _col_confidence(semantic_profile: DatasetSemanticProfile, col: str) -> float
     return float(ev.confidence) if ev else 0.5
 
 
+def _resolve_aggregation(
+    metric_col: str,
+    intent_text: str,
+    semantic_profile: DatasetSemanticProfile,
+) -> AggregationType:
+    intent_lower = (intent_text or "").lower()
+    # 1. Check explicit intent keywords first
+    if any(w in intent_lower for w in ["avg", "average", "mean"]):
+        return AggregationType.AVG
+    if any(w in intent_lower for w in ["sum", "total"]):
+        return AggregationType.SUM
+    if any(w in intent_lower for w in ["count", "number of", "how many"]):
+        return AggregationType.COUNT
+    if any(w in intent_lower for w in ["min", "minimum", "lowest"]):
+        return AggregationType.MIN
+    if any(w in intent_lower for w in ["max", "maximum", "highest"]):
+        return AggregationType.MAX
+    if "median" in intent_lower:
+        return AggregationType.MEDIAN
+
+    # 2. Fall back to semantic profile default aggregation (Step 2 semantic intelligence)
+    ev = semantic_profile.get_evidence(metric_col)
+    if ev and ev.aggregation_default:
+        try:
+            return AggregationType(ev.aggregation_default.upper())
+        except (ValueError, KeyError):
+            pass
+
+    if ev and ev.candidate_role == ColumnRole.MEASURE:
+        return AggregationType.SUM
+
+    return AggregationType.COUNT
+
+
 def generate_interpretations(
     structured_intent: StructuredIntent,
     semantic_profile: DatasetSemanticProfile,
@@ -70,7 +104,7 @@ def generate_interpretations(
     # Resolve primary metric
     candidate_metrics = structured_intent.requested_metrics or measures
     primary_metric = candidate_metrics[0] if candidate_metrics else (measures[0] if measures else "count")
-    metric_agg = AggregationType.SUM if primary_metric in measures else AggregationType.COUNT
+    metric_agg = _resolve_aggregation(primary_metric, structured_intent.original_request, semantic_profile)
 
     # Resolve primary dimension
     primary_dims = structured_intent.requested_dimensions
@@ -118,12 +152,13 @@ def generate_interpretations(
     # Scenario 2: Multiple candidate metrics requested -> fork interpretations
     elif len(structured_intent.requested_metrics) > 1:
         for m_col in structured_intent.requested_metrics[:k]:
+            m_agg = _resolve_aggregation(m_col, structured_intent.original_request, semantic_profile)
             vis = VisualizationType.BAR if primary_dims else VisualizationType.KPI
             interp = SemanticInterpretation(
                 interpretation_id=str(uuid4()),
                 intent_summary=f"Aggregate {m_col} across {primary_dims or 'entire dataset'}",
                 metric_column=m_col,
-                aggregation=AggregationType.SUM,
+                aggregation=m_agg,
                 dimension_columns=primary_dims,
                 granularity=granularity,
                 visualization=vis,
@@ -144,7 +179,9 @@ def generate_interpretations(
     # Scenario 3: Canonical single interpretation
     if not interpretations:
         dim_cols = list(primary_dims)
-        temporal_col = structured_intent.temporal_scope or (datetimes[0] if structured_intent.analytical_goal == "trend" and datetimes else None)
+        temporal_col = structured_intent.temporal_scope or (
+            datetimes[0] if (structured_intent.analytical_goal == "trend" and not primary_dims and datetimes) else None
+        )
 
         if temporal_col and temporal_col not in dim_cols:
             dim_cols.append(temporal_col)
@@ -161,7 +198,7 @@ def generate_interpretations(
                 "area": VisualizationType.AREA,
             }
             vis = vis_map.get(structured_intent.requested_visual_preferences.lower(), VisualizationType.BAR)
-        elif structured_intent.analytical_goal == "trend":
+        elif structured_intent.analytical_goal == "trend" and any(d in datetimes for d in dim_cols):
             vis = VisualizationType.LINE
         elif not dim_cols:
             vis = VisualizationType.KPI
