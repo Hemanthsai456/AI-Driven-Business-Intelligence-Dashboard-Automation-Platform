@@ -263,19 +263,23 @@ def build_dashboard_tiles(
         if measures and dims:
             m_col = measures[0]
             d_col = dims[0]
-            grouped = df.groupby(d_col)[m_col].sum().reset_index()
-            rows = grouped.to_dict(orient="records")
+            ev_m = semantic_profile.get_evidence(m_col) if semantic_profile else None
+            is_avg = ev_m and ev_m.aggregation_default == "AVG"
             from orchestrator.schemas import MetricSpec, DimensionSpec, AggregationType, PlanReasoning
+            base_agg = AggregationType.AVG if is_avg else AggregationType.SUM
+            grouped = df.groupby(d_col)[m_col].mean().reset_index() if is_avg else df.groupby(d_col)[m_col].sum().reset_index()
+            rows = grouped.to_dict(orient="records")
+            base_title = f"Average {m_col} by {d_col}" if is_avg else f"Total {m_col} by {d_col}"
             cand_plan = CandidatePlan(
                 dataset_id=dataset.metadata.dataset_id if hasattr(dataset, "metadata") else "ds",
-                intent=f"Total {m_col} by {d_col}",
-                metric=MetricSpec(column=m_col, aggregation=AggregationType.SUM),
+                intent=base_title,
+                metric=MetricSpec(column=m_col, aggregation=base_agg),
                 dimensions=[DimensionSpec(column=d_col)],
-                reasoning=PlanReasoning(interpretation=f"Total {m_col} by {d_col}", evidence=[]),
+                reasoning=PlanReasoning(interpretation=base_title, evidence=[]),
             )
             base_tile = DashboardTile(
                 id=f"tile_base_{uuid4().hex[:8]}",
-                title=f"Total {m_col} by {d_col}",
+                title=base_title,
                 chart_type="bar",
                 size=TileSize(w=8, h=4),
                 priority=len(tiles) + 1,

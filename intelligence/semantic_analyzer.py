@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import datetime
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 import pandas as pd
 
@@ -25,6 +25,9 @@ class ColumnSemanticEvidence:
         sub_role: Optional sub-role classification ("FOREIGN_KEY", "PRIMARY_KEY", "DERIVED", etc.).
         derived_parts: If DERIVED, names of contributing columns.
         derived_op: If DERIVED, arithmetic operation ("product", "ratio", "sum").
+        aggregation_default: Default aggregation operator ("SUM", "AVG", "COUNT", "MEDIAN").
+        aggregation_category: Aggregation category ("ADDITIVE", "INTENSIVE", "SCORE", "DURATION", "RATE", "COUNT").
+        conflicts: List of conflicting semantic observations considered during classification.
     """
 
     column_name: str
@@ -35,6 +38,9 @@ class ColumnSemanticEvidence:
     sub_role: Optional[str] = None
     derived_parts: Optional[List[str]] = None
     derived_op: Optional[str] = None
+    aggregation_default: Optional[str] = None
+    aggregation_category: Optional[str] = None
+    conflicts: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert semantic evidence to a JSON-serializable dictionary."""
@@ -55,6 +61,12 @@ class ColumnSemanticEvidence:
             d["derived_parts"] = self.derived_parts
         if self.derived_op is not None:
             d["derived_op"] = self.derived_op
+        if self.aggregation_default is not None:
+            d["aggregation_default"] = self.aggregation_default
+        if self.aggregation_category is not None:
+            d["aggregation_category"] = self.aggregation_category
+        if self.conflicts:
+            d["conflicts"] = self.conflicts
         return d
 
 
@@ -85,19 +97,54 @@ class SemanticAnalyzer:
     """Deterministic, read-only rule-based engine for preliminary column semantic role classification."""
 
     # Token patterns for naming evidence
-    ID_TOKENS = {"id", "guid", "uuid", "key", "code", "pk", "fk", "num", "number"}
-    MEASURE_TOKENS = {
-        "amount", "revenue", "sales", "price", "cost", "qty", "quantity", "val", "value",
-        "count", "score", "total", "subtotal", "tax", "fee", "rate", "pct", "percentage",
-        "weight", "height", "depth", "distance", "length", "margin", "profit", "discount",
-        "balance", "age", "unit", "units", "volume"
+    ID_TOKENS = {"id", "guid", "uuid", "key", "code", "pk", "fk", "num", "number", "identifier"}
+
+    # Categorized Measure Tokens for aggregation and measure detection
+    INTENSIVE_TOKENS = {
+        "temp", "temperature", "pressure", "humidity", "speed", "velocity", "voltage",
+        "current", "power", "vibration", "frequency", "density", "viscosity", "altitude",
+        "salary", "wage", "pay", "compensation", "unitprice", "unit_price", "price_per", "cost_per",
     }
+    DURATION_TOKENS = {
+        "delivery_time", "length_of_stay", "duration", "latency", "delay", "wait_time",
+        "transit_time", "response_time", "stay", "elapsed", "runtime", "period", "age", "tenure",
+    }
+    SCORE_TOKENS = {
+        "score", "marks", "mark", "gpa", "performance", "performance_score",
+        "satisfaction", "points", "accuracy", "loss",
+    }
+    RATE_TOKENS = {
+        "rate", "ratio", "pct", "percent", "percentage", "margin", "discount", "proportion",
+        "share", "yield", "fraction",
+    }
+    ADDITIVE_TOKENS = {
+        "sales", "revenue", "profit", "amount", "total", "subtotal", "cost", "expense",
+        "spend", "tax", "fee", "budget", "balance",
+    }
+    COUNT_TOKENS = {
+        "quantity", "qty", "units", "volume", "count", "headcount", "inventory", "stock",
+        "orders", "transactions", "items", "rows", "records",
+    }
+
+    MEASURE_TOKENS = (
+        INTENSIVE_TOKENS
+        | DURATION_TOKENS
+        | SCORE_TOKENS
+        | RATE_TOKENS
+        | ADDITIVE_TOKENS
+        | COUNT_TOKENS
+        | {
+            "price", "val", "value", "weight", "height", "depth", "distance", "length",
+            "width", "size", "reading", "readings", "measurement", "metric", "income",
+        }
+    )
+
     DATE_TOKENS = {"date", "time", "timestamp", "dt", "datetime", "created_at", "updated_at", "dob"}
     TEMPORAL_PART_TOKENS = {"month", "day", "quarter", "qtr", "weekday", "dayofweek", "day_of_week"}
     DIMENSION_TOKENS = {
         "name", "category", "type", "kind", "class", "group", "status", "state", "city",
         "country", "region", "segment", "dept", "department", "brand", "model", "gender",
-        "genre", "level", "tier"
+        "genre", "level", "tier", "rating", "grade", "rank"
     }
     BOOLEAN_PREFIXES = ("is_", "has_", "can_", "should_", "flag_")
     BOOLEAN_EXACT = {"active", "enabled", "deleted", "is_active", "has_insurance", "deceased"}
@@ -119,6 +166,71 @@ class SemanticAnalyzer:
     ) -> None:
         self.foreign_key_threshold = foreign_key_threshold
         self.derived_tolerance = derived_tolerance
+
+    def _infer_measure_aggregation(
+        self,
+        clean_name: str,
+        tokens: Set[str],
+        col_stats: Dict[str, Any],
+        is_continuous_float: bool,
+    ) -> Tuple[str, str, List[str]]:
+        """Infer aggregation category (ADDITIVE, INTENSIVE, DURATION, SCORE, RATE, COUNT) and default agg (SUM vs AVG)."""
+        ev_notes: List[str] = []
+
+        # 1. Rate / Percentage / Ratio
+        if (
+            any(t in tokens for t in self.RATE_TOKENS)
+            or clean_name.endswith(("_pct", "_percent", "_percentage", "_rate", "_ratio", "_margin", "_discount", "_share"))
+        ):
+            ev_notes.append(f"measure semantics: rate/percentage indicator in '{clean_name}' suggests intensive average aggregation (AVG)")
+            return "RATE", "AVG", ev_notes
+
+        # 2. Durations / Time Spans / Latency
+        if (
+            any(t in tokens for t in self.DURATION_TOKENS)
+            or clean_name.endswith(("_time", "_duration", "_latency", "_delay", "_stay", "_period", "_age", "_tenure"))
+        ):
+            ev_notes.append(f"measure semantics: duration/time-span indicator in '{clean_name}' suggests duration average aggregation (AVG)")
+            return "DURATION", "AVG", ev_notes
+
+        # 3. Scores / Ratings / Performance / Grades
+        if (
+            any(t in tokens for t in self.SCORE_TOKENS)
+            or clean_name.endswith(("_score", "_rating", "_grade", "_gpa", "_marks", "_mark", "_points", "_rank"))
+        ):
+            ev_notes.append(f"measure semantics: score/rating scale indicator in '{clean_name}' suggests central-tendency aggregation (AVG)")
+            return "SCORE", "AVG", ev_notes
+
+        # 4. Intensive Physical Properties / Environmental States / Pay Rates
+        if (
+            any(t in tokens for t in self.INTENSIVE_TOKENS)
+            or clean_name.endswith(("_temp", "_temperature", "_pressure", "_humidity", "_speed", "_velocity", "_voltage", "_salary", "_wage", "_pay"))
+        ):
+            ev_notes.append(f"measure semantics: intensive physical/rate measurement in '{clean_name}' suggests intensive aggregation (AVG)")
+            return "INTENSIVE", "AVG", ev_notes
+
+        # 5. Discrete Counts / Quantities / Items
+        if any(t in tokens for t in self.COUNT_TOKENS) or clean_name.endswith(("_qty", "_count", "_units", "_volume", "_items")):
+            ev_notes.append(f"measure semantics: discrete count/quantity indicator in '{clean_name}' suggests additive aggregation (SUM)")
+            return "COUNT", "SUM", ev_notes
+
+        # 6. Additive Totals / Monetary Totals
+        if any(t in tokens for t in self.ADDITIVE_TOKENS) or clean_name.endswith(("_sales", "_revenue", "_profit", "_amount", "_cost", "_total", "_spend", "_expense", "_tax", "_fee", "_budget", "_balance")):
+            ev_notes.append(f"measure semantics: additive monetary/volume indicator in '{clean_name}' suggests additive aggregation (SUM)")
+            return "ADDITIVE", "SUM", ev_notes
+
+        # 7. Distribution characteristics fallback:
+        if is_continuous_float:
+            min_v = col_stats.get("min")
+            if min_v is not None and float(min_v) < 0:
+                ev_notes.append("continuous float measure with negative values suggests intensive aggregation (AVG)")
+                return "INTENSIVE", "AVG", ev_notes
+            ev_notes.append("continuous floating-point measurement defaults to intensive aggregation (AVG)")
+            return "INTENSIVE", "AVG", ev_notes
+
+        # Default for general numeric measure (e.g. integer amounts without specific intensive tokens)
+        ev_notes.append("general numeric measure defaults to additive aggregation (SUM)")
+        return "ADDITIVE", "SUM", ev_notes
 
     def _inspect_sample_patterns(self, series: Optional[pd.Series], sample_size: int = 50) -> Dict[str, Any]:
         """Inspect non-null sample string representations for currency, percentage, UUID, and code patterns."""
@@ -380,6 +492,7 @@ class SemanticAnalyzer:
         col_name = col_meta.original_name
         col_stats = profile.column_statistics.get(col_name, {})
         evidence_statements: List[str] = []
+        conflicts: List[str] = []
 
         dtype_str = col_meta.detected_datatype.lower()
         non_null_cnt = col_stats.get("non_null_count", 0)
@@ -415,11 +528,14 @@ class SemanticAnalyzer:
 
         has_id_token = (
             any(t in self.ID_TOKENS for t in tokens)
-            or clean_name.endswith(("_id", "_guid", "_uuid", "_code", "_key", "_pk", "_fk"))
-            or (clean_name.endswith("id") and len(clean_name) > 2 and clean_name not in {"grid", "solid", "fluid", "acid", "hybrid", "pyramid", "squid", "lipid"})
+            or clean_name.endswith(("_id", "_guid", "_uuid", "_code", "_key", "_pk", "_fk", "_num", "_no"))
+            or (clean_name.endswith("id") and len(clean_name) > 2 and clean_name not in {"grid", "solid", "fluid", "acid", "hybrid", "pyramid", "squid", "lipid", "valid", "rapid"})
             or clean_name in self.ID_TOKENS
         )
-        has_measure_token = any(t in self.MEASURE_TOKENS for t in tokens)
+        has_measure_token = (
+            any(t in self.MEASURE_TOKENS for t in tokens)
+            or any(t in clean_name for t in self.MEASURE_TOKENS)
+        )
         has_date_token = any(t in self.DATE_TOKENS for t in tokens)
         has_temporal_part_token = any(t in self.TEMPORAL_PART_TOKENS for t in tokens)
         has_dimension_token = any(t in self.DIMENSION_TOKENS for t in tokens)
@@ -434,6 +550,7 @@ class SemanticAnalyzer:
                 confidence=0.0,
                 confidence_level="NONE",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         # Inspect data sample value patterns (currency, percentages, IDs, booleans)
@@ -452,6 +569,7 @@ class SemanticAnalyzer:
                 confidence=0.90,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         if patterns["is_boolean_vals"]:
@@ -462,6 +580,7 @@ class SemanticAnalyzer:
                 confidence=0.88,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         if distinct_cnt <= 2 and non_null_cnt > 0 and has_boolean_token:
@@ -472,6 +591,7 @@ class SemanticAnalyzer:
                 confidence=0.85,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         # Signal 3: Native Datetime
@@ -485,6 +605,7 @@ class SemanticAnalyzer:
                 confidence=0.95,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         # Signal 4: Content-based String/Object Datetime Detection
@@ -503,6 +624,7 @@ class SemanticAnalyzer:
                 confidence=0.92 if has_date_token else 0.88,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         # Signal 5: Numeric vs Integer-Like Profiling
@@ -511,12 +633,20 @@ class SemanticAnalyzer:
         )
         is_integer_like = False
         is_continuous_float = False
+        is_sequential_index = False
+
         if is_numeric and non_null_cnt > 0 and series is not None:
             try:
                 num_s = pd.to_numeric(series.dropna(), errors="coerce").dropna()
                 if len(num_s) > 0:
                     if ((num_s % 1) == 0).all():
                         is_integer_like = True
+                        if len(num_s) >= 3:
+                            sorted_uniq = np.sort(num_s.unique())
+                            if len(sorted_uniq) == non_null_cnt:
+                                diffs = np.diff(sorted_uniq)
+                                if np.all(diffs == 1):
+                                    is_sequential_index = True
                     else:
                         is_continuous_float = True
             except Exception:
@@ -530,8 +660,6 @@ class SemanticAnalyzer:
         unique_ratio = cardinality_ratio
 
         # Signal 6: Dedicated Year-Range Signal (e.g. 1900-2100)
-        # Evaluated before constant check so single-year calendar tables (e.g. Calendar.csv Year 2024)
-        # are properly classified as DATETIME rather than UNKNOWN.
         if is_numeric and non_null_cnt > 0 and not has_measure_token and is_integer:
             min_val = col_stats.get("min")
             max_val = col_stats.get("max")
@@ -550,6 +678,7 @@ class SemanticAnalyzer:
                                 confidence=0.92,
                                 confidence_level="HIGH",
                                 evidence=evidence_statements,
+                                conflicts=conflicts,
                             )
                         elif distinct_cnt > 1:
                             evidence_statements.append("numeric year distribution without date naming token")
@@ -559,6 +688,7 @@ class SemanticAnalyzer:
                                 confidence=0.85,
                                 confidence_level="HIGH",
                                 evidence=evidence_statements,
+                                conflicts=conflicts,
                             )
                 except Exception:
                     pass
@@ -579,6 +709,7 @@ class SemanticAnalyzer:
                             confidence=0.88,
                             confidence_level="HIGH",
                             evidence=evidence_statements,
+                            conflicts=conflicts,
                         )
                     if "day" in tokens and 1 <= min_f and max_f <= 31:
                         evidence_statements.append("numeric calendar component (day 1-31 represents temporal dimension, not an aggregatable measure)")
@@ -588,6 +719,7 @@ class SemanticAnalyzer:
                             confidence=0.85,
                             confidence_level="HIGH",
                             evidence=evidence_statements,
+                            conflicts=conflicts,
                         )
                     if ("quarter" in tokens or "qtr" in tokens) and 1 <= min_f and max_f <= 4:
                         evidence_statements.append("numeric calendar component (quarter 1-4 represents temporal dimension, not an aggregatable measure)")
@@ -597,6 +729,7 @@ class SemanticAnalyzer:
                             confidence=0.88,
                             confidence_level="HIGH",
                             evidence=evidence_statements,
+                            conflicts=conflicts,
                         )
                 except Exception:
                     pass
@@ -611,6 +744,7 @@ class SemanticAnalyzer:
                 confidence=0.30,
                 confidence_level="LOW",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
         # Signal 9: Formatted Currency or Percentage Patterns (even if stored as string/object)
@@ -618,24 +752,34 @@ class SemanticAnalyzer:
             evidence_statements.append(f"value-pattern evidence: {patterns['currency_ratio']:.0%} of sample values match formatted currency pattern")
             if has_measure_token:
                 evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+            agg_cat, agg_def, agg_notes = self._infer_measure_aggregation(clean_name, tokens, col_stats, is_continuous_float)
+            evidence_statements.extend(agg_notes)
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.MEASURE,
                 confidence=0.92,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                aggregation_category=agg_cat,
+                aggregation_default=agg_def,
+                conflicts=conflicts,
             )
 
         if patterns["percentage_ratio"] >= 0.8:
             evidence_statements.append(f"value-pattern evidence: {patterns['percentage_ratio']:.0%} of sample values match percentage pattern")
             if has_measure_token:
                 evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+            agg_cat, agg_def, agg_notes = self._infer_measure_aggregation(clean_name, tokens, col_stats, is_continuous_float)
+            evidence_statements.extend(agg_notes)
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.MEASURE,
                 confidence=0.90,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                aggregation_category=agg_cat,
+                aggregation_default=agg_def,
+                conflicts=conflicts,
             )
 
         # Signal 10: Value-pattern UUID or Code Identifier
@@ -654,41 +798,12 @@ class SemanticAnalyzer:
                 confidence_level="HIGH",
                 evidence=evidence_statements,
                 sub_role=sub_role,
+                conflicts=conflicts,
             )
 
-        # Signal 11: Conflict Resolution — IDENTIFIER
-        # Part A — Uniqueness-based: high unique ratio is a strong identifier signal.
-        #   Requires: integer dtype (not continuous float) OR explicit id naming token.
-        #   If dtype is continuous float with no identifier name token, do NOT assign IDENTIFIER.
-        has_id_signal = has_id_token or is_integer
-
-        if (
-            (is_uniq or unique_ratio >= 0.95)
-            and has_id_signal
-            and not is_continuous_float
-            and not has_date_token
-            and not has_measure_token  # explicit measure naming overrides uniqueness signal
-        ):
-            evidence_statements.append(f"high uniqueness ratio ({distinct_cnt}/{non_null_cnt} = {unique_ratio:.2f})")
-            if has_id_token:
-                evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
-            if is_integer:
-                evidence_statements.append("numeric identifier disambiguation (unique key overrides numeric dtype)")
-            is_fk = (unique_ratio < self.foreign_key_threshold) and (distinct_cnt < non_null_cnt)
-            sub_role = "FOREIGN_KEY" if is_fk else ("PRIMARY_KEY" if (is_uniq or unique_ratio >= self.foreign_key_threshold) else None)
-            if is_fk:
-                evidence_statements.append(f"foreign key sub-role: repeated identifier values (cardinality ratio {unique_ratio:.2%} < {self.foreign_key_threshold:.0%})")
-            return ColumnSemanticEvidence(
-                column_name=col_name,
-                candidate_role=ColumnRole.IDENTIFIER,
-                confidence=0.95 if has_id_token else 0.75,  # no id token → lower certainty
-                confidence_level="HIGH" if has_id_token else "MEDIUM",
-                evidence=evidence_statements,
-                sub_role=sub_role,
-            )
-
-        # Part B — Name-based repeated IDs (Foreign keys)
-        if has_id_token and distinct_cnt > 1 and not has_measure_token and not has_date_token:
+        # Signal 11: IDENTIFIER Candidate
+        # Case A — Explicit ID token (e.g. customer_id, store_id, product_id, sale_id, employee_id)
+        if has_id_token and not has_measure_token and not has_date_token and distinct_cnt > 1:
             evidence_statements.append(f"identifier naming pattern ('{clean_name}')")
             evidence_statements.append(f"distinct count: {distinct_cnt}")
             if is_numeric:
@@ -700,35 +815,35 @@ class SemanticAnalyzer:
             return ColumnSemanticEvidence(
                 column_name=col_name,
                 candidate_role=ColumnRole.IDENTIFIER,
-                confidence=0.88,
+                confidence=0.95 if (is_uniq or cardinality_ratio >= 0.90) else 0.88,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
                 sub_role=sub_role,
+                conflicts=conflicts,
             )
 
-        # Signal 12: Continuous Float MEASURE
-        if is_numeric and is_continuous_float and distinct_cnt > 1 and not has_id_token:
-            evidence_statements.append(f"continuous floating-point numeric distribution (distinct: {distinct_cnt}, min: {col_stats.get('min')}, max: {col_stats.get('max')})")
-            if has_measure_token:
-                evidence_statements.append(f"measure naming indicator: '{clean_name}'")
+        # Case B — Sequential Integer Index without measure token (e.g. row index 1..N or 10001..1000N)
+        if is_sequential_index and not has_measure_token and not has_date_token:
+            evidence_statements.append("dense sequential integer sequence (step=1) represents primary record index/key")
+            evidence_statements.append(f"high uniqueness ratio ({distinct_cnt}/{non_null_cnt} = {unique_ratio:.2f})")
             return ColumnSemanticEvidence(
                 column_name=col_name,
-                candidate_role=ColumnRole.MEASURE,
-                confidence=0.92 if has_measure_token else 0.85,
+                candidate_role=ColumnRole.IDENTIFIER,
+                confidence=0.90,
                 confidence_level="HIGH",
                 evidence=evidence_statements,
+                sub_role="PRIMARY_KEY",
+                conflicts=conflicts,
             )
 
-        # Signal 13: Numeric MEASURE / Low-cardinality DIMENSION
+        # Signal 12: Numeric MEASURE / Low-cardinality DIMENSION
         if is_numeric:
             evidence_statements.append(f"numeric datatype ({dtype_str})")
             evidence_statements.append(f"distinct count: {distinct_cnt}")
-            if not is_uniq:
-                evidence_statements.append("non-unique numeric distribution")
 
-            # Low-cardinality discrete numeric check (ratings 1..5, status 1..4)
-            if distinct_cnt <= 5 and not has_measure_token:
-                evidence_statements.append(f"low distinct count ({distinct_cnt}) without explicit measure naming")
+            # Low-cardinality discrete numeric check (ratings 1..5, status 1..4) without additive measure naming
+            if distinct_cnt <= 5 and (not has_measure_token or has_dimension_token) and not is_continuous_float:
+                evidence_statements.append(f"low distinct count ({distinct_cnt}) without explicit additive measure naming")
                 evidence_statements.append("low-cardinality numeric values represent discrete categories or scale ratings")
                 if has_dimension_token:
                     evidence_statements.append(f"dimension naming pattern ('{clean_name}')")
@@ -738,28 +853,41 @@ class SemanticAnalyzer:
                     confidence=0.70,
                     confidence_level="MEDIUM",
                     evidence=evidence_statements,
+                    conflicts=conflicts,
                 )
+
+            # Record conflict if high uniqueness on measure
+            if (is_uniq or unique_ratio >= 0.90) and not has_id_token:
+                conflicts.append(
+                    f"high cardinality ratio ({unique_ratio:.1%}) observed; continuous numeric distribution and measurement semantics confirm MEASURE role"
+                )
+                evidence_statements.append(f"high cardinality continuous numeric distribution ({distinct_cnt} distinct values)")
+            elif not is_uniq:
+                evidence_statements.append("non-unique numeric distribution")
+
+            if is_continuous_float:
+                evidence_statements.append(f"continuous floating-point numeric distribution (min: {col_stats.get('min')}, max: {col_stats.get('max')})")
 
             if has_measure_token:
                 evidence_statements.append(f"measure naming indicator: '{clean_name}'")
-                return ColumnSemanticEvidence(
-                    column_name=col_name,
-                    candidate_role=ColumnRole.MEASURE,
-                    confidence=0.92,
-                    confidence_level="HIGH",
-                    evidence=evidence_statements,
-                )
 
-            if distinct_cnt > 5 and not has_id_token:
-                return ColumnSemanticEvidence(
-                    column_name=col_name,
-                    candidate_role=ColumnRole.MEASURE,
-                    confidence=0.82,
-                    confidence_level="HIGH",
-                    evidence=evidence_statements,
-                )
+            agg_cat, agg_def, agg_notes = self._infer_measure_aggregation(clean_name, tokens, col_stats, is_continuous_float)
+            evidence_statements.extend(agg_notes)
 
-        # Signal 14: String/Object with date token fallback
+            conf_score = 0.92 if has_measure_token else (0.85 if is_continuous_float else 0.82)
+
+            return ColumnSemanticEvidence(
+                column_name=col_name,
+                candidate_role=ColumnRole.MEASURE,
+                confidence=conf_score,
+                confidence_level="HIGH",
+                evidence=evidence_statements,
+                aggregation_category=agg_cat,
+                aggregation_default=agg_def,
+                conflicts=conflicts,
+            )
+
+        # Signal 13: String/Object with date token fallback
         if is_text_or_obj and has_date_token:
             evidence_statements.append(f"string/object datatype ({dtype_str}) with date naming token ('{clean_name}')")
             evidence_statements.append("candidate datetime (read-only: no aggressive type conversion applied)")
@@ -769,9 +897,10 @@ class SemanticAnalyzer:
                 confidence=0.65,
                 confidence_level="MEDIUM",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
-        # Signal 15: DIMENSION Candidate (String/Object or Categorical)
+        # Signal 14: DIMENSION Candidate (String/Object or Categorical)
         if is_text_or_obj:
             evidence_statements.append(f"text/categorical datatype ({dtype_str})")
             evidence_statements.append(f"distinct count: {distinct_cnt} out of {row_cnt} rows")
@@ -787,6 +916,7 @@ class SemanticAnalyzer:
                     confidence=0.60,
                     confidence_level="MEDIUM",
                     evidence=evidence_statements,
+                    conflicts=conflicts,
                 )
 
             return ColumnSemanticEvidence(
@@ -795,9 +925,10 @@ class SemanticAnalyzer:
                 confidence=0.88 if distinct_cnt < row_cnt else 0.70,
                 confidence_level="HIGH" if distinct_cnt < row_cnt else "MEDIUM",
                 evidence=evidence_statements,
+                conflicts=conflicts,
             )
 
-        # Signal 16: Ambiguous Column -> UNKNOWN
+        # Signal 15: Ambiguous Column -> UNKNOWN
         evidence_statements.append(f"ambiguous signals (datatype: {dtype_str}, distinct count: {distinct_cnt})")
         evidence_statements.append("insufficient evidence to reliably assign a specific semantic role")
         return ColumnSemanticEvidence(
@@ -806,6 +937,7 @@ class SemanticAnalyzer:
             confidence=0.40,
             confidence_level="LOW",
             evidence=evidence_statements,
+            conflicts=conflicts,
         )
 
 
