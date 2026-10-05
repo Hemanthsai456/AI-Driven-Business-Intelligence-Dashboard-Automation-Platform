@@ -4,6 +4,7 @@ import {
   DataProfile,
   DatasetListItem,
   DatasetMetadata,
+  QualityAssessment,
   SemanticProfile,
 } from './types';
 
@@ -68,6 +69,11 @@ export async function getDatasetSemanticAnalysis(datasetId: string): Promise<Sem
 export async function getDatasetReadiness(datasetId: string): Promise<AnalysisReadiness> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/readiness`);
   return handleResponse<AnalysisReadiness>(res);
+}
+
+export async function getDatasetQualityAssessment(datasetId: string): Promise<QualityAssessment> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/quality-assessment`);
+  return handleResponse<QualityAssessment>(res);
 }
 
 export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {

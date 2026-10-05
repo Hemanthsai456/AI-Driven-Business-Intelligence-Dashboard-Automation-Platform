@@ -167,27 +167,22 @@ async def upload_dataset(file: UploadFile = File(...)):
         raw_ds = load_dataset(tmp_path)
         raw_ds.metadata.name = filename  # Preserve original filename
 
-        # 2. Data Cleaning: Ingestion -> Clean -> Profile -> Semantic -> Readiness
-        from cleaning.cleaner import clean_dataset
-        cleaned_ds, cleaning_report = clean_dataset(raw_ds)
-        cleaned_ds.metadata.name = filename
+        # 2. Data Profiler on raw ingested data
+        profile = profile_dataset(raw_ds)
 
-        # 3. Data Profiler on cleaned data
-        profile = profile_dataset(cleaned_ds)
+        # 3. Semantic Intelligence Analyzer
+        semantic_profile = analyze_semantics(raw_ds, profile=profile)
 
-        # 4. Semantic Intelligence Analyzer
-        semantic_profile = analyze_semantics(cleaned_ds, profile=profile)
+        # 4. Schema & Analysis Readiness Validator
+        readiness = assess_readiness(raw_ds, profile=profile, semantic_profile=semantic_profile)
 
-        # 5. Schema & Analysis Readiness Validator
-        readiness = assess_readiness(cleaned_ds, profile=profile, semantic_profile=semantic_profile)
-
-        # 6. Save in Session Store
+        # 5. Save in Session Store (original raw dataset preserved untouched)
         record = DatasetSessionRecord(
-            dataset=cleaned_ds,
+            dataset=raw_ds,
             profile=profile,
             semantic_profile=semantic_profile,
             readiness=readiness,
-            cleaning_report=cleaning_report,
+            cleaning_report=None,
         )
         session_store.save(record)
 
@@ -317,6 +312,26 @@ def get_dataset_readiness(dataset_id: str):
             detail=f"Dataset '{dataset_id}' not found in current session.",
         )
     return record.readiness.to_dict()
+
+
+@app.get("/api/datasets/{dataset_id}/quality-assessment")
+@app.get("/api/datasets/{dataset_id}/quality")
+def get_dataset_quality_assessment(dataset_id: str):
+    """Retrieve deterministic data quality assessment for a dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    from intelligence.quality_assessor import assess_quality
+    assessment = assess_quality(
+        canonical=record.dataset,
+        profile=record.profile,
+        semantic_profile=record.semantic_profile,
+        readiness=record.readiness,
+    )
+    return assessment.to_dict()
 
 
 @app.post(

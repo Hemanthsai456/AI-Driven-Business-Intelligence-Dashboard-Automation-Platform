@@ -275,3 +275,30 @@ def test_readiness_multiple_warnings():
         assert isinstance(warning, str)
     assert any("isbn13" in w and "constant" in w for w in data["warnings"])
     assert any("score" in w and "missingness" in w for w in data["warnings"])
+
+
+def test_upload_preserves_raw_dataset():
+    """Verify that uploading a dataset preserves raw untouched data without automatic cleaning."""
+    # CSV containing exact duplicates and untrimmed strings
+    csv_content = b"id,city,revenue\n1,  New York  ,100\n2,Chicago,200\n1,  New York  ,100\n"
+    files = {"file": ("raw_test.csv", csv_content, "text/csv")}
+    upload_resp = client.post("/api/datasets/upload", files=files)
+    assert upload_resp.status_code == 201
+    dataset_id = upload_resp.json()["dataset_id"]
+
+    # Preview should reflect exact raw 3 rows including duplicate row
+    prev_resp = client.get(f"/api/datasets/{dataset_id}/preview")
+    assert prev_resp.status_code == 200
+    prev_data = prev_resp.json()
+    assert prev_data["total_rows"] == 3
+    assert len(prev_data["rows"]) == 3
+    assert prev_data["rows"][0]["city"] == "  New York  "
+    assert prev_data["rows"][2]["city"] == "  New York  "
+
+    # Profile should detect duplicate row in quality issues without mutating
+    prof_resp = client.get(f"/api/datasets/{dataset_id}/profile")
+    assert prof_resp.status_code == 200
+    prof_data = prof_resp.json()
+    assert prof_data["dataset_summary"]["duplicate_row_count"] == 1
+    assert prof_data["dataset_summary"]["row_count"] == 3
+

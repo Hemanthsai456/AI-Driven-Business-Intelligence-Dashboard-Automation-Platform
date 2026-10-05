@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   UploadCloud,
   BarChart3,
+  SlidersHorizontal,
   Sparkles,
   Terminal,
   Settings,
@@ -25,6 +26,7 @@ interface NavItem {
 const WORKSPACE_NAV: NavItem[] = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/upload', label: 'Upload Dataset', icon: UploadCloud },
+  { href: '/data-studio', label: 'Data Studio', icon: SlidersHorizontal },
   { href: '/analysis', label: 'Analysis Workspace', icon: BarChart3 },
 ];
 

@@ -113,6 +113,79 @@ export interface AnalysisReadiness {
   checks: ReadinessCheck[];
 }
 
+export interface MissingColumnInfo {
+  column_name: string;
+  detected_datatype: string;
+  semantic_role: string;
+  null_count: number;
+  null_percentage: number;
+  completeness_percentage: number;
+}
+
+export interface NumericQualityInfo {
+  column_name: string;
+  detected_datatype: string;
+  non_null_count: number;
+  zero_count: number;
+  zero_percentage: number;
+  negative_count: number;
+  negative_percentage: number;
+  infinite_count: number;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  median?: number | null;
+}
+
+export interface DatetimeQualityInfo {
+  column_name: string;
+  detected_datatype: string;
+  non_null_count: number;
+  null_count: number;
+  null_percentage: number;
+  min_datetime?: string | null;
+  max_datetime?: string | null;
+  distinct_dates_count: number;
+}
+
+export interface CardinalityInfo {
+  column_name: string;
+  detected_datatype: string;
+  semantic_role: string;
+  distinct_count: number;
+  is_unique: boolean;
+  is_constant: boolean;
+  cardinality_ratio: number;
+}
+
+export interface QualityAssessment {
+  dataset_id: string;
+  status: 'Good' | 'Needs Attention' | 'Critical';
+  status_reason: string;
+  total_rows: number;
+  total_columns: number;
+  duplicate_row_count: number;
+  duplicate_row_percentage: number;
+  overall_missing_count: number;
+  overall_missing_percentage: number;
+  completeness_percentage: number;
+  uniqueness_percentage: number;
+  affected_missing_columns_count: number;
+  missing_columns: MissingColumnInfo[];
+  numeric_observations: NumericQualityInfo[];
+  datetime_observations: DatetimeQualityInfo[];
+  cardinality_observations: CardinalityInfo[];
+  quality_issues: {
+    issue_type: string;
+    target?: string;
+    message: string;
+    severity: string;
+  }[];
+  readiness_warnings: string[];
+  readiness_blocking_issues: string[];
+}
+
+
 export interface DatasetListItem {
   dataset_id: string;
   filename: string;
