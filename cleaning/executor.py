@@ -48,8 +48,10 @@ class CleaningExecutor:
         "NORMALIZE_EMPTY_STRINGS",
         "IMPUTE_MEDIAN",
         "IMPUTE_MEAN",
+        "IMPUTE_SPECIFIC_VALUE",
         "FILL_MODE",
         "FILL_UNKNOWN",
+        "FILL_SPECIFIC_VALUE",
         "CONVERT_NUMERIC",
         "CONVERT_DATETIME",
         "NORMALIZE_BOOLEAN",
@@ -74,9 +76,10 @@ class CleaningExecutor:
         selected_ids: List[str],
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
+        operation_values: Optional[Dict[str, Any]] = None,
     ) -> List[CleaningRecommendation]:
         """Resolve recommendation IDs against the canonical dataset's deterministic plan,
-        applying and validating any user-selected operation overrides.
+        applying and validating any user-selected operation overrides and specific custom values.
         """
         if plan is None:
             plan = self.planner.generate_plan(canonical=canonical)
@@ -85,53 +88,83 @@ class CleaningExecutor:
         resolved: List[CleaningRecommendation] = []
         unknown_ids: List[str] = []
         overrides = operation_overrides or {}
+        custom_values = operation_values or {}
 
         for rec_id in selected_ids:
             if rec_id in plan_map:
                 base_rec = plan_map[rec_id]
-                if rec_id in overrides and overrides[rec_id]:
-                    user_chosen_op = overrides[rec_id]
-                    # Validate against supported variants
-                    variants = base_rec.supported_variants or get_default_supported_variants(base_rec.operation)
-                    valid_ops = {v["operation"] for v in variants}
+                user_chosen_op = overrides.get(rec_id, base_rec.operation)
 
-                    if user_chosen_op not in valid_ops and user_chosen_op != "LEAVE_UNCHANGED":
-                        raise CleaningExecutionError(
-                            f"Operation variant '{user_chosen_op}' is not supported for recommendation '{rec_id}' ({base_rec.operation}). "
-                            f"Allowed variants: {list(valid_ops)}"
-                        )
+                # Validate against supported variants
+                variants = base_rec.supported_variants or get_default_supported_variants(base_rec.operation)
+                valid_ops = {v["operation"] for v in variants}
 
-                    # Security check: Review-only items cannot be turned into destructive transforms
-                    if base_rec.operation in self.REVIEW_ONLY_OPERATIONS and user_chosen_op not in ["LEAVE_UNCHANGED", base_rec.operation]:
-                        raise CleaningExecutionError(
-                            f"Review-only recommendation '{rec_id}' cannot be converted to automated transformation '{user_chosen_op}'."
-                        )
-
-                    # Clone recommendation with user selected operation
-                    customized_rec = CleaningRecommendation(
-                        recommendation_id=base_rec.recommendation_id,
-                        column_name=base_rec.column_name,
-                        operation=user_chosen_op,
-                        category=base_rec.category,
-                        evidence=list(base_rec.evidence),
-                        affected_rows=base_rec.affected_rows,
-                        affected_percentage=base_rec.affected_percentage,
-                        confidence=base_rec.confidence,
-                        confidence_level=base_rec.confidence_level,
-                        risk_level=base_rec.risk_level,
-                        default_selected=base_rec.default_selected,
-                        user_selected=base_rec.user_selected,
-                        rationale=base_rec.rationale,
-                        expected_effect=base_rec.expected_effect,
-                        requires_review=base_rec.requires_review,
-                        status=base_rec.status,
-                        user_selected_operation=user_chosen_op,
-                        supported_variants=list(variants),
-                        params=dict(base_rec.params),
+                if user_chosen_op != base_rec.operation and user_chosen_op not in valid_ops and user_chosen_op != "LEAVE_UNCHANGED":
+                    raise CleaningExecutionError(
+                        f"Operation variant '{user_chosen_op}' is not supported for recommendation '{rec_id}' ({base_rec.operation}). "
+                        f"Allowed variants: {list(valid_ops)}"
                     )
-                    resolved.append(customized_rec)
-                else:
-                    resolved.append(base_rec)
+
+                # Security check: Review-only items cannot be turned into destructive transforms
+                if base_rec.operation in self.REVIEW_ONLY_OPERATIONS and user_chosen_op not in ["LEAVE_UNCHANGED", base_rec.operation]:
+                    raise CleaningExecutionError(
+                        f"Review-only recommendation '{rec_id}' cannot be converted to automated transformation '{user_chosen_op}'."
+                    )
+
+                # Clone recommendation params
+                rec_params = dict(base_rec.params)
+
+                # Validate specific custom values if chosen
+                if user_chosen_op == "IMPUTE_SPECIFIC_VALUE":
+                    val = custom_values.get(rec_id, rec_params.get("custom_value"))
+                    if val is None or str(val).strip() == "":
+                        raise CleaningExecutionError(
+                            f"A specific numeric value must be provided for recommendation '{rec_id}' on column '{base_rec.column_name}'."
+                        )
+                    try:
+                        numeric_val = float(val)
+                        if math.isnan(numeric_val) or math.isinf(numeric_val):
+                            raise ValueError()
+                    except (ValueError, TypeError):
+                        raise CleaningExecutionError(
+                            f"Specific value for numeric column '{base_rec.column_name}' must be a valid number, got: '{val}'"
+                        )
+                    rec_params["custom_value"] = numeric_val
+
+                elif user_chosen_op == "FILL_SPECIFIC_VALUE":
+                    val = custom_values.get(rec_id, rec_params.get("custom_value"))
+                    if val is None or str(val).strip() == "":
+                        raise CleaningExecutionError(
+                            f"A specific text value must be provided for recommendation '{rec_id}' on column '{base_rec.column_name}'."
+                        )
+                    rec_params["custom_value"] = str(val).strip()
+
+                elif rec_id in custom_values:
+                    rec_params["custom_value"] = custom_values[rec_id]
+
+                # Clone recommendation with user selected operation and params
+                customized_rec = CleaningRecommendation(
+                    recommendation_id=base_rec.recommendation_id,
+                    column_name=base_rec.column_name,
+                    operation=user_chosen_op,
+                    category=base_rec.category,
+                    evidence=list(base_rec.evidence),
+                    affected_rows=base_rec.affected_rows,
+                    affected_percentage=base_rec.affected_percentage,
+                    confidence=base_rec.confidence,
+                    confidence_level=base_rec.confidence_level,
+                    risk_level=base_rec.risk_level,
+                    default_selected=base_rec.default_selected,
+                    user_selected=base_rec.user_selected,
+                    rationale=base_rec.rationale,
+                    expected_effect=base_rec.expected_effect,
+                    requires_review=base_rec.requires_review,
+                    status=base_rec.status,
+                    user_selected_operation=user_chosen_op,
+                    supported_variants=list(variants),
+                    params=rec_params,
+                )
+                resolved.append(customized_rec)
             else:
                 unknown_ids.append(rec_id)
 
@@ -148,7 +181,7 @@ class CleaningExecutor:
         """Order recommendations deterministically:
         1. Empty string normalization
         2. Type conversions (Numeric, Datetime, Boolean)
-        3. Missing value handling (Median, Mean, Mode, Unknown)
+        3. Missing value handling (Median, Mean, Specific Value, Mode, Unknown)
         4. Duplicate removal
         5. Review / Diagnostic items / Leave Unchanged (last / skipped)
         """
@@ -159,8 +192,10 @@ class CleaningExecutor:
             "NORMALIZE_BOOLEAN": 2,
             "IMPUTE_MEDIAN": 3,
             "IMPUTE_MEAN": 3,
+            "IMPUTE_SPECIFIC_VALUE": 3,
             "FILL_MODE": 3,
             "FILL_UNKNOWN": 3,
+            "FILL_SPECIFIC_VALUE": 3,
             "REMOVE_DUPLICATES": 4,
             "LEAVE_UNCHANGED": 90,
         }
@@ -843,6 +878,96 @@ class CleaningExecutor:
                 continue
 
             # -------------------------------------------------------------
+            # 6C. IMPUTE_SPECIFIC_VALUE (User-Selected Custom Numeric Value)
+            # -------------------------------------------------------------
+            if op == "IMPUTE_SPECIFIC_VALUE" and col is not None:
+                series = working_df[col]
+                null_mask = series.isna()
+                null_cnt = int(null_mask.sum())
+
+                if null_cnt == 0:
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="APPLIED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Specific numeric value",
+                            before_statistic="Missing: 0",
+                            after_statistic="Missing: 0",
+                            details={"note": "No missing values present at execution time."},
+                        )
+                    )
+                    continue
+
+                custom_val = rec.params.get("custom_value")
+                if custom_val is None:
+                    custom_val = rec.params.get("fill_value")
+                try:
+                    fill_val = float(custom_val)
+                    if math.isnan(fill_val) or math.isinf(fill_val):
+                        raise ValueError()
+                except (TypeError, ValueError):
+                    warn_msg = f"Invalid specific numeric value '{custom_val}' for column '{col}'."
+                    warnings.append(warn_msg)
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="FAILED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Specific numeric value",
+                            before_statistic=f"Missing: {null_cnt}",
+                            after_statistic=f"Missing: {null_cnt}",
+                            details={"error": warn_msg},
+                            warnings=[warn_msg],
+                        )
+                    )
+                    continue
+
+                # Preserve int if exact whole number
+                if fill_val.is_integer():
+                    fill_val = int(fill_val)
+
+                null_indices = working_df.index[null_mask].tolist()
+                for idx in null_indices[:max_sample_changes]:
+                    if len(sample_changes) < max_sample_changes:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=col,
+                                before_value=None,
+                                after_value=fill_val,
+                                operation=op,
+                            )
+                        )
+
+                working_df[col] = working_df[col].fillna(fill_val)
+                total_cells_affected += null_cnt
+                for idx in null_indices:
+                    total_rows_affected_set.add(idx)
+
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="APPLIED",
+                        rows_affected=null_cnt,
+                        cells_affected=null_cnt,
+                        method_used=f"Specific value ({fill_val})",
+                        before_statistic=f"Missing: {null_cnt} ({round((null_cnt/max(len(working_df),1))*100, 1)}%)",
+                        after_statistic="Missing: 0 (0.0%)",
+                        details={"imputed_value": fill_val, "strategy": "specific_value"},
+                    )
+                )
+                continue
+
+            # -------------------------------------------------------------
             # 7. FILL_MODE
             # -------------------------------------------------------------
             if op == "FILL_MODE" and col is not None:
@@ -1000,6 +1125,70 @@ class CleaningExecutor:
                         before_statistic=f"Missing: {null_cnt} ({round((null_cnt/max(len(working_df),1))*100, 1)}%)",
                         after_statistic="Missing: 0 (0.0%)",
                         details={"imputed_value": "Unknown", "strategy": "constant"},
+                    )
+                )
+                continue
+
+            # -------------------------------------------------------------
+            # 8B. FILL_SPECIFIC_VALUE (User-Selected Custom Text Value)
+            # -------------------------------------------------------------
+            if op == "FILL_SPECIFIC_VALUE" and col is not None:
+                series = working_df[col]
+                null_mask = series.isna()
+                null_cnt = int(null_mask.sum())
+
+                if null_cnt == 0:
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="APPLIED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Specific text value",
+                            before_statistic="Missing: 0",
+                            after_statistic="Missing: 0",
+                            details={"note": "No missing values present at execution time."},
+                        )
+                    )
+                    continue
+
+                custom_val = rec.params.get("custom_value")
+                if custom_val is None:
+                    custom_val = rec.params.get("fill_value", "Unknown")
+                fill_val = str(custom_val).strip()
+
+                null_indices = working_df.index[null_mask].tolist()
+                for idx in null_indices[:max_sample_changes]:
+                    if len(sample_changes) < max_sample_changes:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=col,
+                                before_value=None,
+                                after_value=fill_val,
+                                operation=op,
+                            )
+                        )
+
+                working_df[col] = working_df[col].fillna(fill_val)
+                total_cells_affected += null_cnt
+                for idx in null_indices:
+                    total_rows_affected_set.add(idx)
+
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="APPLIED",
+                        rows_affected=null_cnt,
+                        cells_affected=null_cnt,
+                        method_used=f"Specific value ({fill_val!r})",
+                        before_statistic=f"Missing: {null_cnt} ({round((null_cnt/max(len(working_df),1))*100, 1)}%)",
+                        after_statistic="Missing: 0 (0.0%)",
+                        details={"imputed_value": fill_val, "strategy": "specific_value"},
                     )
                 )
                 continue
@@ -1233,8 +1422,9 @@ class CleaningExecutor:
         selected_recommendation_ids: List[str],
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
+        operation_values: Optional[Dict[str, Any]] = None,
     ) -> CleaningPreviewResult:
-        """Pure non-mutating preview of selected cleaning operations with optional user overrides.
+        """Pure non-mutating preview of selected cleaning operations with optional user overrides and custom values.
         Never mutates canonical.data or session store.
         """
         raw_rows, raw_cols = len(canonical.data), len(canonical.data.columns)
@@ -1244,6 +1434,7 @@ class CleaningExecutor:
             selected_ids=selected_recommendation_ids,
             plan=plan,
             operation_overrides=operation_overrides,
+            operation_values=operation_values,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1283,9 +1474,10 @@ class CleaningExecutor:
         selected_recommendation_ids: List[str],
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
+        operation_values: Optional[Dict[str, Any]] = None,
     ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
         """Execute selected cleaning operations on an explicit copy of raw data,
-        applying any user-selected operation overrides.
+        applying any user-selected operation overrides and specific custom values.
         Returns the structured CleaningExecutionResult and the new cleaned CanonicalDataset.
         The input CanonicalDataset is guaranteed untouched.
         """
@@ -1308,6 +1500,7 @@ class CleaningExecutor:
             selected_ids=selected_recommendation_ids,
             plan=plan,
             operation_overrides=operation_overrides,
+            operation_values=operation_values,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1414,6 +1607,7 @@ def preview_cleaning_plan(
     selected_recommendation_ids: List[str],
     plan: Optional[CleaningPlan] = None,
     operation_overrides: Optional[Dict[str, str]] = None,
+    operation_values: Optional[Dict[str, Any]] = None,
 ) -> CleaningPreviewResult:
     """Convenience helper for non-mutating preview of cleaning operations."""
     executor = CleaningExecutor()
@@ -1422,6 +1616,7 @@ def preview_cleaning_plan(
         selected_recommendation_ids=selected_recommendation_ids,
         plan=plan,
         operation_overrides=operation_overrides,
+        operation_values=operation_values,
     )
 
 
@@ -1430,6 +1625,7 @@ def execute_cleaning_plan(
     selected_recommendation_ids: List[str],
     plan: Optional[CleaningPlan] = None,
     operation_overrides: Optional[Dict[str, str]] = None,
+    operation_values: Optional[Dict[str, Any]] = None,
 ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
     """Convenience helper for batch cleaning execution on CanonicalDataset copy."""
     executor = CleaningExecutor()
@@ -1438,4 +1634,5 @@ def execute_cleaning_plan(
         selected_recommendation_ids=selected_recommendation_ids,
         plan=plan,
         operation_overrides=operation_overrides,
+        operation_values=operation_values,
     )

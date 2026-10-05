@@ -662,6 +662,7 @@ def get_dataset_cleaning_plan(dataset_id: str):
 class CleaningSelectionRequest(BaseModel):
     selected_recommendation_ids: List[str] = Field(default_factory=list)
     operation_overrides: Optional[Dict[str, str]] = Field(default_factory=dict)
+    operation_values: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 @app.post("/api/datasets/{dataset_id}/cleaning/preview")
@@ -691,6 +692,7 @@ def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest)
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
             operation_overrides=request.operation_overrides,
+            operation_values=request.operation_values,
         )
         return preview_result.to_dict()
     except CleaningExecutionError as ex:
@@ -732,6 +734,7 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
             operation_overrides=request.operation_overrides,
+            operation_values=request.operation_values,
         )
 
         # Store in-memory cleaned CanonicalDataset on record for Part 6 without mutating record.dataset

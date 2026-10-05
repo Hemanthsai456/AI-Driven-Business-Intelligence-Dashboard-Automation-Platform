@@ -87,6 +87,8 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Local state for user-selected method overrides (recommendation_id -> selected_operation)
   const [methodOverrides, setMethodOverrides] = useState<Record<string, string>>({});
+  // Local state for user-specified custom values (recommendation_id -> custom_value_string)
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
 
   const [activeFilter, setActiveFilter] = useState<FilterStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -111,6 +113,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     if (!cleaningPlan) {
       setSelections({});
       setMethodOverrides({});
+      setCustomValues({});
       setPreviewResult(null);
       setExecutionResult(null);
       setExecutionState('idle');
@@ -125,6 +128,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     }
     setSelections(initial);
     setMethodOverrides({});
+    setCustomValues({});
     setPreviewResult(null);
     setExecutionResult(null);
     setExecutionState('idle');
@@ -176,9 +180,22 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   const modifiedCount = useMemo(() => {
     return allRecs.filter(
-      (r) => methodOverrides[r.recommendation_id] && methodOverrides[r.recommendation_id] !== r.operation
+      (r) =>
+        (methodOverrides[r.recommendation_id] && methodOverrides[r.recommendation_id] !== r.operation) ||
+        (customValues[r.recommendation_id] && customValues[r.recommendation_id].trim() !== '')
     ).length;
-  }, [allRecs, methodOverrides]);
+  }, [allRecs, methodOverrides, customValues]);
+
+  const isDiagnosticOnly = (op: string) => {
+    return (
+      op.startsWith('REVIEW_') ||
+      op === 'REVIEW_OUTLIERS' ||
+      op === 'REVIEW_CONSTANT_COLUMN' ||
+      op === 'REVIEW_DATETIME_MISSING' ||
+      op === 'REVIEW_IDENTIFIER_MISSING' ||
+      op === 'REVIEW_HIGH_MISSINGNESS'
+    );
+  };
 
   const filteredRecommendations = useMemo(() => {
     return allRecs.filter((rec) => {
@@ -211,7 +228,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setIsLoadingPreview(true);
     setPreviewError(null);
     try {
-      const res = await previewCleaningPlan(cleaningPlan.dataset_id, selectedIds, methodOverrides);
+      const res = await previewCleaningPlan(
+        cleaningPlan.dataset_id,
+        selectedIds,
+        methodOverrides,
+        customValues
+      );
       setPreviewResult(res);
       setIsPreviewOpen(true);
     } catch (err: any) {
@@ -238,7 +260,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         setExecutionState('validating');
       }, 400);
 
-      const res = await applyCleaningPlan(cleaningPlan.dataset_id, selectedIds, methodOverrides);
+      const res = await applyCleaningPlan(
+        cleaningPlan.dataset_id,
+        selectedIds,
+        methodOverrides,
+        customValues
+      );
       clearTimeout(timer);
       setExecutionResult(res);
       setExecutionState('complete');
@@ -752,7 +779,11 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         {filteredRecommendations.map((rec) => {
           const isSelected = !!selections[rec.recommendation_id];
           const currentOp = methodOverrides[rec.recommendation_id] || rec.user_selected_operation || rec.operation;
-          const isModified = currentOp !== rec.operation;
+          const customVal = customValues[rec.recommendation_id] ?? '';
+          const isModified = currentOp !== rec.operation || customVal.trim() !== '';
+          const isDiagnostic = isDiagnosticOnly(rec.operation);
+          const isReviewRequired = rec.requires_review && !isDiagnostic;
+          const isSpecificValue = currentOp === 'IMPUTE_SPECIFIC_VALUE' || currentOp === 'FILL_SPECIFIC_VALUE';
 
           const riskBadgeVariant: 'green' | 'amber' | 'red' =
             rec.risk_level === 'LOW'
@@ -771,6 +802,10 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
           const originalVariantLabel =
             rec.supported_variants?.find((v) => v.operation === rec.operation)?.label ||
             rec.operation.replace(/_/g, ' ');
+
+          const currentChoiceLabel =
+            rec.supported_variants?.find((v) => v.operation === currentOp)?.label ||
+            currentOp.replace(/_/g, ' ');
 
           return (
             <Card
@@ -819,7 +854,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
                         {isModified && (
                           <Badge variant="blue" size="xs">
-                            Modified (was {originalVariantLabel})
+                            Modified (System: {originalVariantLabel})
                           </Badge>
                         )}
                       </div>
@@ -844,16 +879,24 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     <Badge variant={confidenceVariant} size="xs">
                       Confidence: {Math.round(rec.confidence * 100)}% ({rec.confidence_level})
                     </Badge>
-                    {rec.requires_review && (
+                    {isDiagnostic ? (
                       <Badge variant="amber" size="xs">
                         REVIEW ONLY
+                      </Badge>
+                    ) : isReviewRequired ? (
+                      <Badge variant="amber" size="xs">
+                        REQUIRES YOUR DECISION
+                      </Badge>
+                    ) : (
+                      <Badge variant="green" size="xs">
+                        RECOMMENDED
                       </Badge>
                     )}
                   </div>
                 </div>
 
-                {/* Review-Only Guidance Banner */}
-                {rec.requires_review && (
+                {/* State Guidance Banner */}
+                {isDiagnostic && (
                   <div
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-3xs font-mono border ${
                       isSelected
@@ -870,33 +913,71 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                   </div>
                 )}
 
-                {/* Method Selector (if editable alternatives exist) */}
-                {rec.supported_variants && rec.supported_variants.length > 1 && (
-                  <div className="flex items-center gap-2 pt-2 border-t border-border/60 text-xs font-mono flex-wrap">
-                    <span className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold">
-                      Method:
+                {isReviewRequired && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-3xs font-mono border bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      The system cannot safely choose the final treatment automatically. Choose your preferred cleaning method below.
                     </span>
-                    <select
-                      value={currentOp}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setMethodOverrides((prev) => ({
-                          ...prev,
-                          [rec.recommendation_id]: val,
-                        }));
-                      }}
-                      disabled={rec.requires_review}
-                      className="text-xs bg-surface border border-border rounded px-2.5 py-1 text-foreground focus:outline-none focus:border-primary font-mono cursor-pointer"
-                    >
-                      {rec.supported_variants.map((v) => (
-                        <option key={v.operation} value={v.operation}>
-                          {v.label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-3xs text-muted-foreground font-mono">
-                      (Recommended: {originalVariantLabel})
-                    </span>
+                  </div>
+                )}
+
+                {/* Method Selector (if executable variants exist) */}
+                {!isDiagnostic && rec.supported_variants && rec.supported_variants.length > 0 && (
+                  <div className="pt-2 border-t border-border/60 space-y-2 text-xs font-mono">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold">
+                        Method:
+                      </span>
+                      <select
+                        value={currentOp}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setMethodOverrides((prev) => ({
+                            ...prev,
+                            [rec.recommendation_id]: val,
+                          }));
+                        }}
+                        className="text-xs bg-surface border border-border rounded px-2.5 py-1 text-foreground focus:outline-none focus:border-primary font-mono cursor-pointer"
+                      >
+                        {rec.supported_variants.map((v) => (
+                          <option key={v.operation} value={v.operation}>
+                            {v.label}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-3xs text-muted-foreground font-mono">
+                        (System Recommended: {originalVariantLabel})
+                      </span>
+                    </div>
+
+                    {/* Specific Value Custom Input */}
+                    {isSpecificValue && (
+                      <div className="flex items-center gap-2 pt-1.5 flex-wrap">
+                        <span className="text-3xs uppercase tracking-wider text-primary font-bold">
+                          Fill with:
+                        </span>
+                        <input
+                          type={currentOp === 'IMPUTE_SPECIFIC_VALUE' ? 'number' : 'text'}
+                          step="any"
+                          value={customVal}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomValues((prev) => ({
+                              ...prev,
+                              [rec.recommendation_id]: val,
+                            }));
+                          }}
+                          placeholder={currentOp === 'IMPUTE_SPECIFIC_VALUE' ? 'e.g. 15.0' : 'e.g. Unknown'}
+                          className="text-xs bg-surface border border-primary/40 focus:border-primary rounded px-2.5 py-1 text-foreground font-mono w-44"
+                        />
+                        <span className="text-3xs text-muted-foreground">
+                          {currentOp === 'IMPUTE_SPECIFIC_VALUE'
+                            ? 'Enter custom numeric constant'
+                            : 'Enter custom text constant'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
 

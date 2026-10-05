@@ -755,3 +755,305 @@ def test_part51_raw_dataset_remains_unchanged_with_overrides():
     assert_frame_equal(canonical.data, raw_copy)
     assert canonical.metadata.row_count == 7
 
+
+# =========================================================================
+# PART 5.2: REVIEW RESOLUTION + CUSTOM CLEANING VALUES TESTS
+# =========================================================================
+
+def _build_salary_dataset() -> CanonicalDataset:
+    """Helper dataset with 13 missing values out of ~124 rows (moderate missingness ~10.48%)."""
+    # 100 valid salary numbers, 13 missing
+    salaries = [10.0 + (i % 20) for i in range(100)] + [np.nan] * 13
+    df = pd.DataFrame({
+        "EmployeeID": list(range(1, len(salaries) + 1)),
+        "SalaryOffered_LPA": salaries,
+        "Department": ["Engineering"] * 60 + ["Marketing"] * 40 + [np.nan] * 13,
+    })
+    return _build_test_canonical(df, "ds-salary-part52")
+
+
+# 1. Review-required numeric recommendation can choose Median
+def test_part52_review_required_numeric_can_choose_median():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA" and r.operation == "IMPUTE_MEDIAN")
+    assert salary_rec.requires_review is True
+    assert salary_rec.status == "REVIEW_REQUIRED"
+    assert salary_rec.default_selected is False  # User must make explicit decision
+
+    # User explicitly selects and confirms Median
+    rec_id = salary_rec.recommendation_id
+    overrides = {rec_id: "IMPUTE_MEDIAN"}
+
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+    assert exec_res.operations_applied == 1
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 0
+    # Median of valid values (range 10 to 29) is 19.5
+    assert cleaned.data.loc[100, "SalaryOffered_LPA"] == 19.5
+
+
+# 2. Review-required numeric recommendation can choose Mean
+def test_part52_review_required_numeric_can_choose_mean():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_MEAN"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+    assert exec_res.operations_applied == 1
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 0
+    assert "Mean" in exec_res.operations[0].method_used
+    assert cleaned.data.loc[100, "SalaryOffered_LPA"] == 19.5  # Mean of 10..29 repeating evenly is 19.5
+
+
+# 3. Review-required numeric recommendation can choose Specific Value
+def test_part52_review_required_numeric_can_choose_specific_value():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    # Verify IMPUTE_SPECIFIC_VALUE is in supported_variants
+    variant_ops = [v["operation"] for v in salary_rec.supported_variants]
+    assert "IMPUTE_SPECIFIC_VALUE" in variant_ops
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: 15.0}
+
+    exec_res, cleaned = execute_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+    )
+    assert exec_res.operations_applied == 1
+    assert exec_res.operations[0].operation == "IMPUTE_SPECIFIC_VALUE"
+
+
+# 4. Specific numeric value is actually applied
+def test_part52_specific_numeric_value_is_actually_applied():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: "15.0"}  # Passed as string from input field
+
+    exec_res, cleaned = execute_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+    )
+    assert exec_res.operations_applied == 1
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 0
+    # Check that all 13 missing rows (indices 100 to 112) now contain 15.0
+    for idx in range(100, 113):
+        assert cleaned.data.loc[idx, "SalaryOffered_LPA"] == 15.0
+
+
+# 5. Review-required numeric recommendation can choose Leave Unchanged
+def test_part52_review_required_numeric_can_choose_leave_unchanged():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "LEAVE_UNCHANGED"}
+    exec_res, cleaned = execute_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides
+    )
+    assert exec_res.operations_applied == 0
+    assert exec_res.operations_skipped == 1
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 13
+
+
+# 6. Categorical Specific Value
+def test_part52_categorical_specific_value():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    dept_rec = next(r for r in plan.recommendations if r.column_name == "Department")
+    rec_id = dept_rec.recommendation_id
+
+    # Verify FILL_SPECIFIC_VALUE is in supported_variants
+    variant_ops = [v["operation"] for v in dept_rec.supported_variants]
+    assert "FILL_SPECIFIC_VALUE" in variant_ops
+
+    overrides = {rec_id: "FILL_SPECIFIC_VALUE"}
+    values = {rec_id: "Operations"}
+
+    exec_res, cleaned = execute_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+    )
+    assert exec_res.operations_applied == 1
+    assert cleaned.data["Department"].isna().sum() == 0
+    for idx in range(100, 113):
+        assert cleaned.data.loc[idx, "Department"] == "Operations"
+
+
+# 7. Invalid numeric specific value rejected
+def test_part52_invalid_numeric_specific_value_rejected():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    # Attempting to supply a non-numeric string or expression
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: "abc_invalid_number"}
+
+    with pytest.raises(CleaningExecutionError, match="must be a valid number"):
+        execute_cleaning_plan(
+            canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+        )
+
+
+# 8. Invalid operation variant rejected
+def test_part52_invalid_operation_variant_rejected():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    # Attempting to supply a text fill method for a numeric column
+    overrides = {rec_id: "FILL_UNKNOWN"}
+    with pytest.raises(CleaningExecutionError, match="is not supported"):
+        execute_cleaning_plan(
+            canonical, [rec_id], plan, operation_overrides=overrides
+        )
+
+
+# 9. Preview reflects specific user value
+def test_part52_preview_reflects_specific_user_value():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: 15.0}
+
+    preview_res = preview_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+    )
+    assert len(preview_res.operations) == 1
+    op_summary = preview_res.operations[0]
+    assert op_summary.operation == "IMPUTE_SPECIFIC_VALUE"
+    assert "15" in op_summary.method_used
+    assert "Missing: 0" in op_summary.after_statistic
+    assert len(preview_res.sample_changes) > 0
+    assert preview_res.sample_changes[0].after_value == 15
+
+
+# 10. Apply reflects specific user value
+def test_part52_apply_reflects_specific_user_value():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: 15.0}
+
+    exec_res, cleaned = execute_cleaning_plan(
+        canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values
+    )
+    assert exec_res.operations_applied == 1
+    assert exec_res.operations[0].operation == "IMPUTE_SPECIFIC_VALUE"
+    assert "15" in exec_res.operations[0].method_used
+    assert exec_res.validation is not None
+    assert exec_res.validation.overall_status in ["PASSED", "WARNING"]
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 0
+
+
+# 11. Review-only outliers remain non-transforming
+def test_part52_review_only_outliers_remain_non_transforming():
+    df = pd.DataFrame({
+        "id": list(range(1, 22)),
+        "val": [float(x) for x in range(10, 30)] + [99999.0],
+    })
+    canonical = _build_test_canonical(df, "ds-outliers-safe")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    outlier_rec = next(r for r in plan.recommendations if r.operation == "REVIEW_OUTLIERS")
+    rec_id = outlier_rec.recommendation_id
+
+    # Selected for review
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan)
+    assert exec_res.operations_skipped == 1
+    assert exec_res.operations_applied == 0
+    assert 99999.0 in cleaned.data["val"].values
+    assert len(cleaned.data) == 21
+
+
+# 12. Raw dataset remains unchanged
+def test_part52_raw_dataset_remains_unchanged():
+    canonical = _build_salary_dataset()
+    raw_copy = canonical.data.copy(deep=True)
+
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: 15.0}
+
+    # 1. Preview check
+    preview_res = preview_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values)
+    assert preview_res is not None
+    assert_frame_equal(canonical.data, raw_copy)
+
+    # 2. Apply check
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values)
+    assert exec_res is not None
+    assert_frame_equal(canonical.data, raw_copy)
+    assert canonical.data["SalaryOffered_LPA"].isna().sum() == 13  # Raw has 13 NaNs
+    assert cleaned.data["SalaryOffered_LPA"].isna().sum() == 0     # Cleaned has 0 NaNs
+
+
+# 13. Recommended vs user-selected choice is preserved for explainability
+def test_part52_recommended_vs_user_selected_preserved_for_explainability():
+    canonical = _build_salary_dataset()
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    salary_rec = next(r for r in plan.recommendations if r.column_name == "SalaryOffered_LPA")
+    rec_id = salary_rec.recommendation_id
+
+    # Original recommendation says IMPUTE_MEDIAN
+    assert salary_rec.operation == "IMPUTE_MEDIAN"
+    assert salary_rec.status == "REVIEW_REQUIRED"
+
+    overrides = {rec_id: "IMPUTE_SPECIFIC_VALUE"}
+    values = {rec_id: 15.0}
+
+    exec_res, _ = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides, operation_values=values)
+    applied_op = exec_res.operations[0]
+
+    # Preserved info: applied operation is IMPUTE_SPECIFIC_VALUE with custom value details, while plan recommendation preserves IMPUTE_MEDIAN
+    assert salary_rec.operation == "IMPUTE_MEDIAN"
+    assert applied_op.operation == "IMPUTE_SPECIFIC_VALUE"
+    assert "15" in applied_op.method_used
+    assert applied_op.details.get("strategy") == "specific_value"
+    assert applied_op.details.get("imputed_value") == 15
+
+

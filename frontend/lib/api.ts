@@ -88,7 +88,8 @@ export async function getDatasetCleaningPlan(datasetId: string): Promise<Cleanin
 export async function previewCleaningPlan(
   datasetId: string,
   selectedRecommendationIds: string[],
-  operationOverrides?: Record<string, string>
+  operationOverrides?: Record<string, string>,
+  operationValues?: Record<string, any>
 ): Promise<CleaningPreviewResult> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/preview`, {
     method: 'POST',
@@ -96,6 +97,7 @@ export async function previewCleaningPlan(
     body: JSON.stringify({
       selected_recommendation_ids: selectedRecommendationIds,
       operation_overrides: operationOverrides || {},
+      operation_values: operationValues || {},
     }),
   });
   return handleResponse<CleaningPreviewResult>(res);
@@ -104,7 +106,8 @@ export async function previewCleaningPlan(
 export async function applyCleaningPlan(
   datasetId: string,
   selectedRecommendationIds: string[],
-  operationOverrides?: Record<string, string>
+  operationOverrides?: Record<string, string>,
+  operationValues?: Record<string, any>
 ): Promise<CleaningExecutionResult> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/apply`, {
     method: 'POST',
@@ -112,6 +115,7 @@ export async function applyCleaningPlan(
     body: JSON.stringify({
       selected_recommendation_ids: selectedRecommendationIds,
       operation_overrides: operationOverrides || {},
+      operation_values: operationValues || {},
     }),
   });
   return handleResponse<CleaningExecutionResult>(res);
