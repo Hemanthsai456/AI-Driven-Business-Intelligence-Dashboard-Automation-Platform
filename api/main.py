@@ -128,7 +128,7 @@ def health_check():
     response_model=DatasetMetadataResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_dataset(file: UploadFile = File(...)):
+def upload_dataset(file: UploadFile = File(...)):
     """Upload a CSV, TSV, XLSX, or Parquet dataset, run ingestion, profiling, and semantic analysis."""
     if not file.filename:
         raise HTTPException(
@@ -145,7 +145,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         )
 
     # Read uploaded bytes and check size
-    contents = await file.read()
+    contents = file.file.read()
     if len(contents) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -660,6 +660,7 @@ def get_dataset_cleaning_plan(dataset_id: str):
 
 class CleaningSelectionRequest(BaseModel):
     selected_recommendation_ids: List[str] = Field(default_factory=list)
+    operation_overrides: Optional[Dict[str, str]] = Field(default_factory=dict)
 
 
 @app.post("/api/datasets/{dataset_id}/cleaning/preview")
@@ -688,6 +689,7 @@ def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest)
             canonical=record.dataset,
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
+            operation_overrides=request.operation_overrides,
         )
         return preview_result.to_dict()
     except CleaningExecutionError as ex:
@@ -728,6 +730,7 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
             canonical=record.dataset,
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
+            operation_overrides=request.operation_overrides,
         )
 
         # Store in-memory cleaned CanonicalDataset on record for Part 6 without mutating record.dataset

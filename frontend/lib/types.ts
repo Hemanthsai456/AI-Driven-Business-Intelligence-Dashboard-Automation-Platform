@@ -203,10 +203,18 @@ export interface QualityAssessment {
   readiness_blocking_issues: string[];
 }
 
+export interface CleaningRecommendationVariant {
+  operation: string;
+  label: string;
+  description?: string;
+}
+
 export interface CleaningRecommendation {
   recommendation_id: string;
   column_name: string | null;
   operation: string;
+  user_selected_operation?: string;
+  supported_variants?: CleaningRecommendationVariant[];
   category: string;
   evidence: string[];
   affected_rows: number;

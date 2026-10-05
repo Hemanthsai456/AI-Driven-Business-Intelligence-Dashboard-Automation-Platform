@@ -73,6 +73,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     return initial;
   });
 
+  // Local state for user-selected method overrides (recommendation_id -> selected_operation)
+  const [methodOverrides, setMethodOverrides] = useState<Record<string, string>>({});
+
   const [activeFilter, setActiveFilter] = useState<FilterStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -90,6 +93,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   React.useEffect(() => {
     if (!cleaningPlan) {
       setSelections({});
+      setMethodOverrides({});
       setPreviewResult(null);
       setExecutionResult(null);
       setExecutionState('idle');
@@ -100,6 +104,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       initial[rec.recommendation_id] = rec.default_selected;
     }
     setSelections(initial);
+    setMethodOverrides({});
     setPreviewResult(null);
     setExecutionResult(null);
     setExecutionState('idle');
@@ -146,6 +151,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   const selectedCount = selectedIds.length;
 
+  const modifiedCount = useMemo(() => {
+    return allRecs.filter(
+      (r) => methodOverrides[r.recommendation_id] && methodOverrides[r.recommendation_id] !== r.operation
+    ).length;
+  }, [allRecs, methodOverrides]);
+
   const filteredRecommendations = useMemo(() => {
     return allRecs.filter((rec) => {
       const isSelected = !!selections[rec.recommendation_id];
@@ -177,7 +188,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setIsLoadingPreview(true);
     setPreviewError(null);
     try {
-      const res = await previewCleaningPlan(cleaningPlan.dataset_id, selectedIds);
+      const res = await previewCleaningPlan(cleaningPlan.dataset_id, selectedIds, methodOverrides);
       setPreviewResult(res);
       setIsPreviewOpen(true);
     } catch (err: any) {
@@ -201,7 +212,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         setExecutionState('validating');
       }, 400);
 
-      const res = await applyCleaningPlan(cleaningPlan.dataset_id, selectedIds);
+      const res = await applyCleaningPlan(cleaningPlan.dataset_id, selectedIds, methodOverrides);
       clearTimeout(timer);
       setExecutionResult(res);
       setExecutionState('complete');
@@ -557,6 +568,8 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       <div className="space-y-4">
         {filteredRecommendations.map((rec) => {
           const isSelected = !!selections[rec.recommendation_id];
+          const currentOp = methodOverrides[rec.recommendation_id] || rec.user_selected_operation || rec.operation;
+          const isModified = currentOp !== rec.operation;
 
           const riskBadgeVariant: 'green' | 'amber' | 'red' =
             rec.risk_level === 'LOW'
@@ -571,6 +584,10 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               : rec.confidence_level === 'MEDIUM'
               ? 'amber'
               : 'slate';
+
+          const originalVariantLabel =
+            rec.supported_variants?.find((v) => v.operation === rec.operation)?.label ||
+            rec.operation.replace(/_/g, ' ');
 
           return (
             <Card
@@ -610,12 +627,18 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                         )}
 
                         <span className="text-xs font-bold font-mono text-foreground">
-                          {rec.operation.replace(/_/g, ' ')}
+                          {currentOp.replace(/_/g, ' ')}
                         </span>
 
                         <Badge variant="slate" size="xs">
                           {rec.category.replace(/_/g, ' ')}
                         </Badge>
+
+                        {isModified && (
+                          <Badge variant="blue" size="xs">
+                            Modified (was {originalVariantLabel})
+                          </Badge>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2 text-3xs font-mono text-muted-foreground">
@@ -645,6 +668,36 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Method Selector (if editable alternatives exist) */}
+                {rec.supported_variants && rec.supported_variants.length > 1 && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-border/60 text-xs font-mono flex-wrap">
+                    <span className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold">
+                      Method:
+                    </span>
+                    <select
+                      value={currentOp}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setMethodOverrides((prev) => ({
+                          ...prev,
+                          [rec.recommendation_id]: val,
+                        }));
+                      }}
+                      disabled={rec.requires_review}
+                      className="text-xs bg-surface border border-border rounded px-2.5 py-1 text-foreground focus:outline-none focus:border-primary font-mono cursor-pointer"
+                    >
+                      {rec.supported_variants.map((v) => (
+                        <option key={v.operation} value={v.operation}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-3xs text-muted-foreground font-mono">
+                      (Recommended: {originalVariantLabel})
+                    </span>
+                  </div>
+                )}
 
                 {/* Explanation & Rationale */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-border/60 text-xs">
@@ -714,6 +767,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               </h4>
               <Badge variant={selectedCount > 0 ? 'blue' : 'slate'} size="xs">
                 {selectedCount} of {cleaningPlan.total_recommendations} Operations Selected
+                {modifiedCount > 0 ? ` • ${modifiedCount} Modified` : ''}
               </Badge>
             </div>
             <p className="text-3xs text-muted-foreground mt-0.5">

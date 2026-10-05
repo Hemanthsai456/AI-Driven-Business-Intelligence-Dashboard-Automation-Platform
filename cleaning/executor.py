@@ -1,8 +1,9 @@
-"""Deterministic Cleaning Execution and Preview Engine (Data Studio Part 5).
+"""Deterministic Cleaning Execution and Preview Engine (Data Studio Part 5 & 5.1).
 
 Executes selected cleaning operations on an explicit deep copy of the raw dataset,
 guaranteeing that the original CanonicalDataset remains strictly immutable.
-Provides non-mutating previews, batch execution, and deterministic post-validation.
+Provides non-mutating previews, batch execution, deterministic post-validation,
+and user-controlled operation variant selection/overrides.
 """
 
 from copy import deepcopy
@@ -21,6 +22,7 @@ from cleaning.models import (
     CleaningValidationResult,
     OperationExecutionResult,
     SampleCellChange,
+    get_default_supported_variants,
 )
 from cleaning.planner import CleaningPlanner
 from ingestion.models import (
@@ -45,11 +47,13 @@ class CleaningExecutor:
         "REMOVE_DUPLICATES",
         "NORMALIZE_EMPTY_STRINGS",
         "IMPUTE_MEDIAN",
+        "IMPUTE_MEAN",
         "FILL_MODE",
         "FILL_UNKNOWN",
         "CONVERT_NUMERIC",
         "CONVERT_DATETIME",
         "NORMALIZE_BOOLEAN",
+        "LEAVE_UNCHANGED",
     }
 
     REVIEW_ONLY_OPERATIONS: Set[str] = {
@@ -69,18 +73,65 @@ class CleaningExecutor:
         canonical: CanonicalDataset,
         selected_ids: List[str],
         plan: Optional[CleaningPlan] = None,
+        operation_overrides: Optional[Dict[str, str]] = None,
     ) -> List[CleaningRecommendation]:
-        """Resolve recommendation IDs against the canonical dataset's deterministic plan."""
+        """Resolve recommendation IDs against the canonical dataset's deterministic plan,
+        applying and validating any user-selected operation overrides.
+        """
         if plan is None:
             plan = self.planner.generate_plan(canonical=canonical)
 
         plan_map = {r.recommendation_id: r for r in plan.recommendations}
         resolved: List[CleaningRecommendation] = []
         unknown_ids: List[str] = []
+        overrides = operation_overrides or {}
 
         for rec_id in selected_ids:
             if rec_id in plan_map:
-                resolved.append(plan_map[rec_id])
+                base_rec = plan_map[rec_id]
+                if rec_id in overrides and overrides[rec_id]:
+                    user_chosen_op = overrides[rec_id]
+                    # Validate against supported variants
+                    variants = base_rec.supported_variants or get_default_supported_variants(base_rec.operation)
+                    valid_ops = {v["operation"] for v in variants}
+
+                    if user_chosen_op not in valid_ops and user_chosen_op != "LEAVE_UNCHANGED":
+                        raise CleaningExecutionError(
+                            f"Operation variant '{user_chosen_op}' is not supported for recommendation '{rec_id}' ({base_rec.operation}). "
+                            f"Allowed variants: {list(valid_ops)}"
+                        )
+
+                    # Security check: Review-only items cannot be turned into destructive transforms
+                    if base_rec.operation in self.REVIEW_ONLY_OPERATIONS and user_chosen_op not in ["LEAVE_UNCHANGED", base_rec.operation]:
+                        raise CleaningExecutionError(
+                            f"Review-only recommendation '{rec_id}' cannot be converted to automated transformation '{user_chosen_op}'."
+                        )
+
+                    # Clone recommendation with user selected operation
+                    customized_rec = CleaningRecommendation(
+                        recommendation_id=base_rec.recommendation_id,
+                        column_name=base_rec.column_name,
+                        operation=user_chosen_op,
+                        category=base_rec.category,
+                        evidence=list(base_rec.evidence),
+                        affected_rows=base_rec.affected_rows,
+                        affected_percentage=base_rec.affected_percentage,
+                        confidence=base_rec.confidence,
+                        confidence_level=base_rec.confidence_level,
+                        risk_level=base_rec.risk_level,
+                        default_selected=base_rec.default_selected,
+                        user_selected=base_rec.user_selected,
+                        rationale=base_rec.rationale,
+                        expected_effect=base_rec.expected_effect,
+                        requires_review=base_rec.requires_review,
+                        status=base_rec.status,
+                        user_selected_operation=user_chosen_op,
+                        supported_variants=list(variants),
+                        params=dict(base_rec.params),
+                    )
+                    resolved.append(customized_rec)
+                else:
+                    resolved.append(base_rec)
             else:
                 unknown_ids.append(rec_id)
 
@@ -97,9 +148,9 @@ class CleaningExecutor:
         """Order recommendations deterministically:
         1. Empty string normalization
         2. Type conversions (Numeric, Datetime, Boolean)
-        3. Missing value handling (Median, Mode, Unknown)
+        3. Missing value handling (Median, Mean, Mode, Unknown)
         4. Duplicate removal
-        5. Review / Diagnostic items (last / skipped)
+        5. Review / Diagnostic items / Leave Unchanged (last / skipped)
         """
         phase_map = {
             "NORMALIZE_EMPTY_STRINGS": 1,
@@ -107,9 +158,11 @@ class CleaningExecutor:
             "CONVERT_DATETIME": 2,
             "NORMALIZE_BOOLEAN": 2,
             "IMPUTE_MEDIAN": 3,
+            "IMPUTE_MEAN": 3,
             "FILL_MODE": 3,
             "FILL_UNKNOWN": 3,
             "REMOVE_DUPLICATES": 4,
+            "LEAVE_UNCHANGED": 90,
         }
 
         def sort_key(rec: CleaningRecommendation) -> Tuple[int, str, str]:
@@ -145,6 +198,27 @@ class CleaningExecutor:
         for rec in ordered_recs:
             op = rec.operation
             col = rec.column_name
+
+            # -------------------------------------------------------------
+            # Leave Unchanged (User Override)
+            # -------------------------------------------------------------
+            if op == "LEAVE_UNCHANGED":
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="SKIPPED",
+                        rows_affected=0,
+                        cells_affected=0,
+                        method_used="Leave unchanged",
+                        before_statistic="Unchanged",
+                        after_statistic="Unchanged",
+                        details={"note": "User explicitly chose to leave unchanged."},
+                        warnings=[],
+                    )
+                )
+                continue
 
             # -------------------------------------------------------------
             # Review-Only / Diagnostic operations
@@ -666,6 +740,109 @@ class CleaningExecutor:
                 continue
 
             # -------------------------------------------------------------
+            # 6B. IMPUTE_MEAN (User-Selected Variant)
+            # -------------------------------------------------------------
+            if op == "IMPUTE_MEAN" and col is not None:
+                series = working_df[col]
+                null_mask = series.isna()
+                null_cnt = int(null_mask.sum())
+
+                if null_cnt == 0:
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="APPLIED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Mean imputation",
+                            before_statistic="Missing: 0",
+                            after_statistic="Missing: 0",
+                            details={"note": "No missing values present at execution time."},
+                        )
+                    )
+                    continue
+
+                numeric_non_null = pd.to_numeric(series.dropna(), errors="coerce").dropna()
+                if len(numeric_non_null) == 0:
+                    warn_msg = f"No valid numeric entries found in '{col}' to compute mean."
+                    warnings.append(warn_msg)
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="FAILED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Mean imputation",
+                            before_statistic=f"Missing: {null_cnt}",
+                            after_statistic=f"Missing: {null_cnt}",
+                            details={"error": warn_msg},
+                            warnings=[warn_msg],
+                        )
+                    )
+                    continue
+
+                mean_val = float(numeric_non_null.mean())
+                if math.isnan(mean_val):
+                    warn_msg = f"Computed mean for '{col}' is NaN."
+                    warnings.append(warn_msg)
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="FAILED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Mean imputation",
+                            before_statistic=f"Missing: {null_cnt}",
+                            after_statistic=f"Missing: {null_cnt}",
+                            details={"error": warn_msg},
+                            warnings=[warn_msg],
+                        )
+                    )
+                    continue
+
+                fill_val = round(mean_val, 2)
+                null_indices = working_df.index[null_mask].tolist()
+
+                for idx in null_indices[:max_sample_changes]:
+                    if len(sample_changes) < max_sample_changes:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=col,
+                                before_value=None,
+                                after_value=fill_val,
+                                operation=op,
+                            )
+                        )
+
+                working_df[col] = working_df[col].fillna(fill_val)
+                total_cells_affected += null_cnt
+                for idx in null_indices:
+                    total_rows_affected_set.add(idx)
+
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="APPLIED",
+                        rows_affected=null_cnt,
+                        cells_affected=null_cnt,
+                        method_used=f"Mean imputation ({fill_val})",
+                        before_statistic=f"Missing: {null_cnt} ({round((null_cnt/max(len(working_df),1))*100, 1)}%)",
+                        after_statistic="Missing: 0 (0.0%)",
+                        details={"imputed_value": fill_val, "strategy": "mean"},
+                    )
+                )
+                continue
+
+            # -------------------------------------------------------------
             # 7. FILL_MODE
             # -------------------------------------------------------------
             if op == "FILL_MODE" and col is not None:
@@ -925,7 +1102,7 @@ class CleaningExecutor:
             op = rec.operation
             col = rec.column_name
 
-            if op in ["IMPUTE_MEDIAN", "FILL_MODE", "FILL_UNKNOWN"] and col in cleaned_df.columns:
+            if op in ["IMPUTE_MEDIAN", "IMPUTE_MEAN", "FILL_MODE", "FILL_UNKNOWN"] and col in cleaned_df.columns:
                 cleaned_nulls = int(cleaned_df[col].isna().sum())
                 raw_nulls = int(raw_df[col].isna().sum())
                 if cleaned_nulls == 0:
@@ -933,9 +1110,9 @@ class CleaningExecutor:
                         CleaningValidationCheck(
                             check_name=f"MISSINGNESS_RESOLVED_{col}",
                             status="PASSED",
-                            message=f"Missing values in column '{col}' successfully resolved (from {raw_nulls} to 0).",
+                            message=f"Missing values in column '{col}' successfully resolved (from {raw_nulls} to 0 via {op}).",
                             column_name=col,
-                            details={"initial_missing": raw_nulls, "cleaned_missing": 0},
+                            details={"initial_missing": raw_nulls, "cleaned_missing": 0, "operation": op},
                         )
                     )
                 elif cleaned_nulls < raw_nulls:
@@ -945,7 +1122,7 @@ class CleaningExecutor:
                             status="WARNING",
                             message=f"Missing values in column '{col}' reduced from {raw_nulls} to {cleaned_nulls}.",
                             column_name=col,
-                            details={"initial_missing": raw_nulls, "cleaned_missing": cleaned_nulls},
+                            details={"initial_missing": raw_nulls, "cleaned_missing": cleaned_nulls, "operation": op},
                         )
                     )
                 else:
@@ -955,7 +1132,7 @@ class CleaningExecutor:
                             status="FAILED",
                             message=f"Missing values in column '{col}' did not decrease ({cleaned_nulls} missing).",
                             column_name=col,
-                            details={"initial_missing": raw_nulls, "cleaned_missing": cleaned_nulls},
+                            details={"initial_missing": raw_nulls, "cleaned_missing": cleaned_nulls, "operation": op},
                         )
                     )
 
@@ -1055,17 +1232,18 @@ class CleaningExecutor:
         canonical: CanonicalDataset,
         selected_recommendation_ids: List[str],
         plan: Optional[CleaningPlan] = None,
+        operation_overrides: Optional[Dict[str, str]] = None,
     ) -> CleaningPreviewResult:
-        """Pure non-mutating preview of selected cleaning operations.
+        """Pure non-mutating preview of selected cleaning operations with optional user overrides.
         Never mutates canonical.data or session store.
         """
-        # Save snapshot verification
         raw_rows, raw_cols = len(canonical.data), len(canonical.data.columns)
 
         resolved_recs = self._resolve_and_validate_recommendations(
             canonical=canonical,
             selected_ids=selected_recommendation_ids,
             plan=plan,
+            operation_overrides=operation_overrides,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1104,8 +1282,10 @@ class CleaningExecutor:
         canonical: CanonicalDataset,
         selected_recommendation_ids: List[str],
         plan: Optional[CleaningPlan] = None,
+        operation_overrides: Optional[Dict[str, str]] = None,
     ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
-        """Execute selected cleaning operations on an explicit copy of raw data.
+        """Execute selected cleaning operations on an explicit copy of raw data,
+        applying any user-selected operation overrides.
         Returns the structured CleaningExecutionResult and the new cleaned CanonicalDataset.
         The input CanonicalDataset is guaranteed untouched.
         """
@@ -1127,6 +1307,7 @@ class CleaningExecutor:
             canonical=canonical,
             selected_ids=selected_recommendation_ids,
             plan=plan,
+            operation_overrides=operation_overrides,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1232,6 +1413,7 @@ def preview_cleaning_plan(
     canonical: CanonicalDataset,
     selected_recommendation_ids: List[str],
     plan: Optional[CleaningPlan] = None,
+    operation_overrides: Optional[Dict[str, str]] = None,
 ) -> CleaningPreviewResult:
     """Convenience helper for non-mutating preview of cleaning operations."""
     executor = CleaningExecutor()
@@ -1239,6 +1421,7 @@ def preview_cleaning_plan(
         canonical=canonical,
         selected_recommendation_ids=selected_recommendation_ids,
         plan=plan,
+        operation_overrides=operation_overrides,
     )
 
 
@@ -1246,6 +1429,7 @@ def execute_cleaning_plan(
     canonical: CanonicalDataset,
     selected_recommendation_ids: List[str],
     plan: Optional[CleaningPlan] = None,
+    operation_overrides: Optional[Dict[str, str]] = None,
 ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
     """Convenience helper for batch cleaning execution on CanonicalDataset copy."""
     executor = CleaningExecutor()
@@ -1253,4 +1437,5 @@ def execute_cleaning_plan(
         canonical=canonical,
         selected_recommendation_ids=selected_recommendation_ids,
         plan=plan,
+        operation_overrides=operation_overrides,
     )

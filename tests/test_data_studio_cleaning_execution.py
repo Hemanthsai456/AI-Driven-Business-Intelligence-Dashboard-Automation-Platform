@@ -512,3 +512,246 @@ def test_raw_dataset_byte_value_equivalent_after_execution():
     assert_frame_equal(canonical.data, raw_copy)
     assert canonical.metadata.row_count == 6
     assert canonical.metadata.dataset_id == "ds-immutability-proof"
+
+
+# =========================================================================
+# PART 5.1: CLEANING PLAN EDITABILITY & USER MODIFICATION TESTS
+# =========================================================================
+
+# 1. Median -> Mean modification
+def test_part51_median_to_mean_modification():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+    })
+    # Non-nulls: [10, 20, 30, 40, 100]. Median = 30.0, Mean = 40.0
+    canonical = _build_test_canonical(df, "ds-med-to-mean")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    rec_id = med_rec.recommendation_id
+
+    # Verify supported variants include IMPUTE_MEAN
+    variant_ops = [v["operation"] for v in med_rec.supported_variants]
+    assert "IMPUTE_MEDIAN" in variant_ops
+    assert "IMPUTE_MEAN" in variant_ops
+    assert "LEAVE_UNCHANGED" in variant_ops
+
+    # Execute with override: IMPUTE_MEAN
+    overrides = {rec_id: "IMPUTE_MEAN"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 1
+    assert cleaned.data.loc[5, "val"] == 40.0  # Mean used, not Median (30.0)
+    assert cleaned.data["val"].isna().sum() == 0
+
+
+# 2. Median -> Leave Unchanged
+def test_part51_median_to_leave_unchanged():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-med-to-unchanged")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    rec_id = med_rec.recommendation_id
+
+    overrides = {rec_id: "LEAVE_UNCHANGED"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 0
+    assert exec_res.operations_skipped == 1
+    assert pd.isna(cleaned.data.loc[5, "val"])  # Remains unchanged (NaN)
+
+
+# 3. Mode -> Unknown
+def test_part51_mode_to_unknown_modification():
+    df = pd.DataFrame({
+        "id": list(range(1, 12)),
+        "dept": ["Cardiology"] * 8 + ["Neurology"] * 2 + [np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-mode-to-unknown")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    mode_rec = next(r for r in plan.recommendations if r.operation == "FILL_MODE")
+    rec_id = mode_rec.recommendation_id
+
+    overrides = {rec_id: "FILL_UNKNOWN"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 1
+    assert cleaned.data.loc[10, "dept"] == "Unknown"  # Unknown used, not mode Cardiology
+
+
+# 4. Mode -> Leave Unchanged
+def test_part51_mode_to_leave_unchanged():
+    df = pd.DataFrame({
+        "id": list(range(1, 12)),
+        "dept": ["Cardiology"] * 8 + ["Neurology"] * 2 + [np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-mode-to-unchanged")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    mode_rec = next(r for r in plan.recommendations if r.operation == "FILL_MODE")
+    rec_id = mode_rec.recommendation_id
+
+    overrides = {rec_id: "LEAVE_UNCHANGED"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 0
+    assert exec_res.operations_skipped == 1
+    assert pd.isna(cleaned.data.loc[10, "dept"])
+
+
+# 5. Duplicate remove -> Keep (Leave Unchanged)
+def test_part51_duplicate_remove_to_keep():
+    df = pd.DataFrame({
+        "id": [1, 2, 2, 3],
+        "val": ["A", "B", "B", "C"],
+    })
+    canonical = _build_test_canonical(df, "ds-dup-to-keep")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    dup_rec = next(r for r in plan.recommendations if r.operation == "REMOVE_DUPLICATES")
+    rec_id = dup_rec.recommendation_id
+
+    overrides = {rec_id: "LEAVE_UNCHANGED"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 0
+    assert exec_res.operations_skipped == 1
+    assert len(cleaned.data) == 4  # All rows kept
+
+
+# 6. Preview reflects user-selected method and calculated statistics
+def test_part51_preview_reflects_user_selected_method():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-prev-override")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    rec_id = med_rec.recommendation_id
+
+    # Preview with override: IMPUTE_MEAN
+    overrides = {rec_id: "IMPUTE_MEAN"}
+    preview_res = preview_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert len(preview_res.operations) == 1
+    op_summary = preview_res.operations[0]
+    assert op_summary.operation == "IMPUTE_MEAN"
+    assert "Mean" in op_summary.method_used
+    assert "40.0" in op_summary.method_used  # Actually calculated mean 40.0 shown!
+    assert len(preview_res.sample_changes) == 1
+    assert preview_res.sample_changes[0].after_value == 40.0
+
+
+# 7. Apply reflects user-selected method
+def test_part51_apply_reflects_user_selected_method():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-apply-override")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    rec_id = med_rec.recommendation_id
+
+    overrides = {rec_id: "IMPUTE_MEAN"}
+    exec_res, cleaned = execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+    assert exec_res.operations_applied == 1
+    applied_op = exec_res.operations[0]
+    assert applied_op.operation == "IMPUTE_MEAN"
+    assert "Mean" in applied_op.method_used
+    assert cleaned.data.loc[5, "val"] == 40.0
+
+
+# 8. Invalid operation variant rejected
+def test_part51_invalid_operation_variant_rejected():
+    df = pd.DataFrame({
+        "id": [1, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-invalid-variant")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    rec_id = med_rec.recommendation_id
+
+    # Try invalid/unsupported operation variant
+    overrides = {rec_id: "DROP_DATABASE_TABLE"}
+    with pytest.raises(CleaningExecutionError, match="is not supported"):
+        execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+
+# 9. Review-only operation cannot become destructive
+def test_part51_review_only_operation_cannot_become_destructive():
+    df = pd.DataFrame({
+        "id": list(range(1, 22)),
+        "value": [float(x) for x in range(10, 30)] + [10000.0],
+    })
+    canonical = _build_test_canonical(df, "ds-review-cannot-transform")
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    outlier_rec = next(r for r in plan.recommendations if r.operation == "REVIEW_OUTLIERS")
+    rec_id = outlier_rec.recommendation_id
+
+    # Attempting to override a review-only operation with a destructive one is rejected
+    overrides = {rec_id: "DROP_OUTLIER_ROWS"}
+    with pytest.raises(CleaningExecutionError, match="is not supported"):
+        execute_cleaning_plan(canonical, [rec_id], plan, operation_overrides=overrides)
+
+
+# 10. Raw dataset remains unchanged after preview and apply with overrides
+def test_part51_raw_dataset_remains_unchanged_with_overrides():
+    df = pd.DataFrame({
+        "id": [1, 2, 2, 3, 4, 5, 6],
+        "val": [10.0, 20.0, 20.0, 30.0, 40.0, 100.0, np.nan],
+        "dept": ["Cardiology"] * 6 + [np.nan],
+    })
+    canonical = _build_test_canonical(df, "ds-immutability-overrides")
+    raw_copy = df.copy(deep=True)
+
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(canonical)
+
+    med_rec = next(r for r in plan.recommendations if r.operation == "IMPUTE_MEDIAN")
+    mode_rec = next(r for r in plan.recommendations if r.operation == "FILL_MODE")
+    dup_rec = next(r for r in plan.recommendations if r.operation == "REMOVE_DUPLICATES")
+
+    selected_ids = [med_rec.recommendation_id, mode_rec.recommendation_id, dup_rec.recommendation_id]
+    overrides = {
+        med_rec.recommendation_id: "IMPUTE_MEAN",
+        mode_rec.recommendation_id: "FILL_UNKNOWN",
+        dup_rec.recommendation_id: "LEAVE_UNCHANGED",
+    }
+
+    # 1. Preview
+    preview_res = preview_cleaning_plan(canonical, selected_ids, plan, operation_overrides=overrides)
+    assert preview_res is not None
+    assert_frame_equal(canonical.data, raw_copy)
+
+    # 2. Apply
+    exec_res, cleaned = execute_cleaning_plan(canonical, selected_ids, plan, operation_overrides=overrides)
+    assert exec_res.operations_applied == 2  # Mean and Unknown applied, duplicate removal skipped
+    assert exec_res.operations_skipped == 1
+
+    # Raw dataset MUST be 100% untouched
+    assert_frame_equal(canonical.data, raw_copy)
+    assert canonical.metadata.row_count == 7
+

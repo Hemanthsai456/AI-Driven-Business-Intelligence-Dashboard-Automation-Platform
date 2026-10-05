@@ -152,6 +152,56 @@ class CleaningResult:
 # =========================================================================
 
 
+def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
+    """Determine the deterministic set of allowed user-selectable operation variants."""
+    if operation == "IMPUTE_MEDIAN":
+        return [
+            {"operation": "IMPUTE_MEDIAN", "label": "Median", "description": "Fill missing values with dynamically computed median"},
+            {"operation": "IMPUTE_MEAN", "label": "Mean", "description": "Fill missing values with dynamically computed mean"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "FILL_MODE":
+        return [
+            {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
+            {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "FILL_UNKNOWN":
+        return [
+            {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
+            {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "REMOVE_DUPLICATES":
+        return [
+            {"operation": "REMOVE_DUPLICATES", "label": "Remove Duplicates", "description": "Drop exact duplicate rows"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Keep Duplicates", "description": "Keep all duplicate rows"},
+        ]
+    elif operation == "NORMALIZE_EMPTY_STRINGS":
+        return [
+            {"operation": "NORMALIZE_EMPTY_STRINGS", "label": "Normalize to Null", "description": "Convert empty/whitespace strings to null"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Keep whitespace strings as-is"},
+        ]
+    elif operation == "CONVERT_NUMERIC":
+        return [
+            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation == "CONVERT_DATETIME":
+        return [
+            {"operation": "CONVERT_DATETIME", "label": "Convert to Datetime", "description": "Parse timestamps into datetime"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation == "NORMALIZE_BOOLEAN":
+        return [
+            {"operation": "NORMALIZE_BOOLEAN", "label": "Normalize Boolean", "description": "Standardize yes/no/true/false to bool"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text representations"},
+        ]
+    return [
+        {"operation": "LEAVE_UNCHANGED", "label": "Review Only", "description": "Diagnostic review only; no automated change applied"},
+    ]
+
+
 @dataclass
 class CleaningRecommendation:
     """Structured deterministic cleaning proposal for a dataset column or whole dataset.
@@ -159,7 +209,9 @@ class CleaningRecommendation:
     Attributes:
         recommendation_id: Unique deterministic identifier for the recommendation.
         column_name: Name of the target column, or None for whole-dataset operations (e.g. deduplication).
-        operation: Standardized operation name (e.g. 'REMOVE_DUPLICATES', 'IMPUTE_MEDIAN', 'FILL_MODE').
+        operation: Standardized recommended operation name (e.g. 'REMOVE_DUPLICATES', 'IMPUTE_MEDIAN', 'FILL_MODE').
+        user_selected_operation: User-chosen operation variant (e.g. 'IMPUTE_MEAN', 'FILL_UNKNOWN', 'LEAVE_UNCHANGED').
+        supported_variants: List of valid alternate operation choices available to the user.
         category: Broad category ('duplicates', 'missing_values', 'empty_values', 'type_conversion',
                   'datetime_conversion', 'boolean_normalization', 'invalid_values', 'outliers').
         evidence: Deterministic evidence statements backing the recommendation.
@@ -193,7 +245,15 @@ class CleaningRecommendation:
     expected_effect: str
     requires_review: bool
     status: str
+    user_selected_operation: Optional[str] = None
+    supported_variants: List[Dict[str, str]] = field(default_factory=list)
     params: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.user_selected_operation is None:
+            self.user_selected_operation = self.operation
+        if not self.supported_variants:
+            self.supported_variants = get_default_supported_variants(self.operation)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert cleaning recommendation to a JSON-serializable dictionary."""
@@ -201,6 +261,8 @@ class CleaningRecommendation:
             "recommendation_id": self.recommendation_id,
             "column_name": self.column_name,
             "operation": self.operation,
+            "user_selected_operation": self.user_selected_operation or self.operation,
+            "supported_variants": self.supported_variants,
             "category": self.category,
             "evidence": self.evidence,
             "affected_rows": int(self.affected_rows),

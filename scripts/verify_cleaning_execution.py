@@ -102,5 +102,49 @@ def validate_real_datasets():
     print("=" * 70)
 
 
+def validate_part51_user_modifications():
+    print("\n" + "=" * 70)
+    print("STARTING PART 5.1 USER MODIFICATION / METHOD OVERRIDE VALIDATION")
+    print("=" * 70)
+
+    loader = CSVLoader()
+    planner = CleaningPlanner()
+
+    # Test Healthcare with Median -> Mean modification
+    healthcare_path = "tests/real_data/healthcare.csv"
+    if os.path.exists(healthcare_path):
+        print("\n>> Validating Healthcare User Override (Median -> Mean for length_of_stay)")
+        canonical = loader.load(healthcare_path)
+        raw_snapshot = canonical.data.copy(deep=True)
+        plan = planner.generate_plan(canonical)
+
+        med_rec = next((r for r in plan.recommendations if r.column_name == "length_of_stay" and r.operation == "IMPUTE_MEDIAN"), None)
+        if med_rec:
+            print(f"   Found recommendation: {med_rec.recommendation_id} on length_of_stay (original: {med_rec.operation})")
+            print(f"   Supported variants: {[v['label'] for v in med_rec.supported_variants]}")
+
+            overrides = {med_rec.recommendation_id: "IMPUTE_MEAN"}
+
+            # Preview
+            preview_res = preview_cleaning_plan(canonical, [med_rec.recommendation_id], plan, operation_overrides=overrides)
+            print(f"   Preview method used: {preview_res.operations[0].method_used}")
+            assert "Mean" in preview_res.operations[0].method_used
+            assert preview_res.operations[0].operation == "IMPUTE_MEAN"
+            assert_frame_equal(canonical.data, raw_snapshot)
+
+            # Apply
+            exec_res, cleaned = execute_cleaning_plan(canonical, [med_rec.recommendation_id], plan, operation_overrides=overrides)
+            print(f"   Applied operation: {exec_res.operations[0].operation} ({exec_res.operations[0].method_used})")
+            assert exec_res.operations[0].operation == "IMPUTE_MEAN"
+            assert cleaned.data["length_of_stay"].isna().sum() == 0
+            assert_frame_equal(canonical.data, raw_snapshot)
+            print("   [PASSED] Healthcare length_of_stay Median -> Mean override validated.")
+
+    print("\n" + "=" * 70)
+    print("PART 5.1 REAL DATASET VALIDATION COMPLETED SUCCESSFULLY")
+    print("=" * 70)
+
+
 if __name__ == "__main__":
     validate_real_datasets()
+    validate_part51_user_modifications()
