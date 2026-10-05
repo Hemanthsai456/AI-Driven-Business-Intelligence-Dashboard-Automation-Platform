@@ -201,3 +201,16 @@ export async function queryTile(
   return handleResponse<any>(res);
 }
 
+export async function generateOverviewDashboard(
+  datasetId: string,
+  useLlm: boolean = true
+): Promise<import('./types').OrchestratorPipelineResponse> {
+  const res = await fetch(`${API_BASE}/overview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dataset_id: datasetId, use_llm: useLlm }),
+  });
+  return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
+}
+
+

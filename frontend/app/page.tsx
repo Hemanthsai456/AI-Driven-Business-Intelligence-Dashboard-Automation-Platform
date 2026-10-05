@@ -29,6 +29,7 @@ import {
   getDatasetReadiness,
   getDatasetSemanticAnalysis,
   getProvidersStatus,
+  generateOverviewDashboard,
   listDatasets,
   resolvePipeline,
   runPipeline,
@@ -237,14 +238,28 @@ export default function HomePage() {
         setPipelineStep((prev) => (prev === 'understand' ? 'propose' : prev));
       }, 750);
 
-      const res = await runPipeline(
-        selectedDatasetId,
-        intent,
-        'both',
-        3,
-        true, // require_clarification
-        chosenPlanId
-      );
+      let res;
+      if (chosenPlanId) {
+        res = await runPipeline(
+          selectedDatasetId,
+          intent,
+          'both',
+          3,
+          true,
+          chosenPlanId
+        );
+      } else if (!intent || intent.trim() === '') {
+        res = await generateOverviewDashboard(selectedDatasetId, true);
+      } else {
+        res = await runPipeline(
+          selectedDatasetId,
+          intent,
+          'both',
+          3,
+          true,
+          chosenPlanId
+        );
+      }
 
       if (t1) clearTimeout(t1);
       if (t2) clearTimeout(t2);
@@ -650,6 +665,30 @@ export default function HomePage() {
               Cancel
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setIntent('');
+              abortControllerRef.current = new AbortController();
+              setPipelineError(null);
+              setPipelineStep('propose');
+              try {
+                const res = await generateOverviewDashboard(selectedDatasetId, true);
+                setPipelineResult(res);
+                setPipelineStep('done');
+              } catch (err: any) {
+                setPipelineStep('error');
+                setPipelineError(err.message || 'Overview dashboard generation failed.');
+              }
+            }}
+            disabled={!selectedDatasetId || isPipelineRunning}
+            isLoading={isPipelineRunning}
+            leftIcon={<Sparkles className="w-3.5 h-3.5 text-primary" />}
+          >
+            Autonomous Overview
+          </Button>
 
           <Button
             variant="primary"
