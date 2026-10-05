@@ -64,6 +64,10 @@ from orchestrator.insights import (
     InsightValidator,
     generate_grounded_insights,
 )
+from orchestrator.overview import (
+    OverviewDashboardPlanner,
+    generate_overview_dashboard,
+)
 from orchestrator.query_engine import (
     AnalyticalQueryEngine,
     default_query_engine,
@@ -267,4 +271,7 @@ __all__ = [
     "InsightRanker",
     "InsightEngine",
     "generate_grounded_insights",
+    # Step 7: Autonomous Overview Dashboard
+    "OverviewDashboardPlanner",
+    "generate_overview_dashboard",
 ]

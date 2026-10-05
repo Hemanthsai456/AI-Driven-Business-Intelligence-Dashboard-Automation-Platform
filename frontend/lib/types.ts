@@ -402,3 +402,45 @@ export interface OrchestratorPipelineResponse {
   rejected_insights?: any[];
 }
 
+export interface ChatMessageUI {
+  message_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  intent_type?: string;
+  query_plan?: any;
+  compiled_sql?: string;
+  data?: Record<string, any>[];
+  columns?: string[];
+  row_count?: number;
+  evidence?: any;
+  confidence?: number;
+  warnings?: string[];
+  clarification_needed?: boolean;
+  clarification_options?: string[];
+  provenance?: any;
+}
+
+export interface ChatResponseUI {
+  conversation_id: string;
+  message_id: string;
+  dataset_id: string;
+  question: string;
+  answer: string;
+  intent_type: string;
+  query_plan?: any;
+  compiled_sql?: string;
+  data?: Record<string, any>[];
+  columns?: string[];
+  row_count: number;
+  evidence?: any;
+  confidence: number;
+  warnings: string[];
+  ambiguity_status: string;
+  clarification_needed: boolean;
+  clarification_options?: string[];
+  provenance?: any;
+  runtime_seconds: number;
+  error?: string;
+}
+

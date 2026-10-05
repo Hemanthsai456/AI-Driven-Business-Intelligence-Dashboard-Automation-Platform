@@ -816,6 +816,10 @@ class DashboardSpec(BaseModel):
         default=None,
         description="Headline insight sentence generated from spec (metric, dimension, top group, robustness).",
     )
+    executive_summary: Optional[str] = Field(
+        default=None,
+        description="Executive narrative summary of dataset-wide findings.",
+    )
     winner: RankedCandidate
     panels: List[DashboardPanel] = Field(
         default_factory=list,

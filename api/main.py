@@ -1135,8 +1135,8 @@ class AnalyticalQueryResponse(BaseModel):
 )
 def handle_analytical_query(req: AnalyticalQueryRequest):
     """Execute arbitrary natural-language analytical query with SQL provenance."""
-    dataset = dataset_store.get(req.dataset_id)
-    if not dataset:
+    record = session_store.get(req.dataset_id)
+    if not record or not record.dataset:
         raise HTTPException(
             status_code=404,
             detail={
@@ -1146,11 +1146,12 @@ def handle_analytical_query(req: AnalyticalQueryRequest):
                 "status_code": 404,
             },
         )
-    semantic_profile = semantic_profile_store.get(req.dataset_id)
+    dataset = record.dataset
+    semantic_profile = record.semantic_profile
     if not semantic_profile:
         from intelligence.semantic_analyzer import analyze_semantics
-        semantic_profile = analyze_semantics(dataset)
-        semantic_profile_store[req.dataset_id] = semantic_profile
+        semantic_profile = analyze_semantics(dataset, record.profile)
+        record.semantic_profile = semantic_profile
 
     from orchestrator.query_engine import execute_analytical_query
     from orchestrator.schemas import AmbiguityStatus
@@ -1218,8 +1219,8 @@ class DiscoverInsightsResponse(BaseModel):
 )
 def handle_discover_insights(req: DiscoverInsightsRequest):
     """Generate deterministic, evidence-grounded insights with full DuckDB provenance."""
-    dataset = dataset_store.get(req.dataset_id)
-    if not dataset:
+    record = session_store.get(req.dataset_id)
+    if not record or not record.dataset:
         raise HTTPException(
             status_code=404,
             detail={
@@ -1229,11 +1230,12 @@ def handle_discover_insights(req: DiscoverInsightsRequest):
                 "status_code": 404,
             },
         )
-    semantic_profile = semantic_profile_store.get(req.dataset_id)
+    dataset = record.dataset
+    semantic_profile = record.semantic_profile
     if not semantic_profile:
         from intelligence.semantic_analyzer import analyze_semantics
-        semantic_profile = analyze_semantics(dataset)
-        semantic_profile_store[req.dataset_id] = semantic_profile
+        semantic_profile = analyze_semantics(dataset, record.profile)
+        record.semantic_profile = semantic_profile
 
     from orchestrator.insights import generate_grounded_insights
 
@@ -1256,6 +1258,188 @@ def handle_discover_insights(req: DiscoverInsightsRequest):
         runtime_seconds=res.runtime_seconds,
         summary_notice=res.summary_notice,
     )
+
+
+class OverviewDashboardRequest(BaseModel):
+    """Payload for autonomous whole-dataset overview dashboard generation."""
+
+    dataset_id: str
+    use_llm: Optional[bool] = True
+
+
+@app.post(
+    "/api/overview",
+    response_model=OrchestratorPipelineResponse,
+    summary="Generate autonomous whole-dataset overview dashboard",
+)
+@app.post(
+    "/api/overview-dashboard",
+    response_model=OrchestratorPipelineResponse,
+    summary="Generate autonomous whole-dataset overview dashboard (alias)",
+)
+def handle_overview_dashboard(req: OverviewDashboardRequest):
+    """Generate autonomous whole-dataset overview dashboard backed by DuckDB and Evidence-Grounded Insights."""
+    record = session_store.get(req.dataset_id)
+    if not record or not record.dataset:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{req.dataset_id}' not found in active session",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+    dataset = record.dataset
+    semantic_profile = record.semantic_profile
+    if not semantic_profile:
+        from intelligence.semantic_analyzer import analyze_semantics
+        semantic_profile = analyze_semantics(dataset, record.profile)
+        record.semantic_profile = semantic_profile
+
+    from orchestrator.overview import generate_overview_dashboard
+
+    spec = generate_overview_dashboard(
+        dataset=dataset,
+        semantic_profile=semantic_profile,
+        readiness=record.readiness,
+        data_profile=record.profile,
+        use_llm=req.use_llm if req.use_llm is not None else True,
+    )
+
+    dashboard_specs_store[spec.spec_id] = spec
+
+    ranked_list = []
+    if spec.winner:
+        ranked_list.append({
+            "rank": 1,
+            "plan_id": spec.winner.plan.plan_id,
+            "generator": spec.winner.plan.generator,
+            "visualization": spec.winner.plan.visualization.value,
+            "metric": f"{spec.winner.plan.metric.aggregation.value}({spec.winner.plan.metric.column})",
+            "dimensions": [
+                f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+                for d in spec.winner.plan.dimensions
+            ],
+            "score": round(spec.winner.score_breakdown.total, 4) if spec.winner.score_breakdown else 0.9,
+            "score_breakdown": spec.winner.score_breakdown.model_dump() if spec.winner.score_breakdown else {},
+            "is_winner": True,
+        })
+
+    winner_dict = {
+        "plan_id": spec.winner.plan.plan_id,
+        "generator": spec.winner.plan.generator,
+        "visualization": spec.winner.plan.visualization.value,
+        "score": round(spec.winner.score_breakdown.total, 4) if spec.winner.score_breakdown else 0.9,
+        "score_breakdown": spec.winner.score_breakdown.model_dump() if spec.winner.score_breakdown else {},
+        "metric": f"{spec.winner.plan.metric.aggregation.value}({spec.winner.plan.metric.column})",
+        "dimensions": [
+            f"{d.column}{' (' + d.granularity.value + ')' if d.granularity else ''}"
+            for d in spec.winner.plan.dimensions
+        ],
+        "reasoning": spec.winner.plan.reasoning.model_dump() if spec.winner.plan.reasoning else {},
+        "pass2_passed": True,
+        "pass2_issues": [],
+        "execution": spec.winner.execution_result.model_dump() if spec.winner.execution_result else {},
+    }
+
+    return OrchestratorPipelineResponse(
+        status="SUCCESS",
+        message="Overview dashboard generated successfully.",
+        spec_id=spec.spec_id,
+        headline=spec.headline,
+        panels=[p.model_dump() for p in spec.panels],
+        dashboard_spec=spec.model_dump(),
+        ranked_candidates=ranked_list,
+        winner=winner_dict,
+        is_tie=False,
+        cascade_depth=0,
+        ambiguity_status="CLEAR",
+        ambiguity_message=None,
+        clarification_needed=False,
+        clarification_options=None,
+        options=None,
+        cached_candidates=None,
+        run_id=None,
+        resolved_by="system",
+        mode="overview",
+        rejected_insights=spec.rejected_insights,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 8 / Roadmap #7 — Evidence-Grounded Dataset Interaction / Chat
+# ---------------------------------------------------------------------------
+
+from orchestrator.chat import (
+    ChatRequest,
+    ChatResponse,
+    execute_chat_turn,
+)
+
+
+@app.post(
+    "/api/chat",
+    response_model=ChatResponse,
+    summary="Evidence-Grounded Dataset Chat / Conversational Interaction",
+)
+@app.post(
+    "/api/dataset-chat",
+    response_model=ChatResponse,
+    summary="Evidence-Grounded Dataset Chat / Conversational Interaction (alias)",
+)
+def handle_dataset_chat(req: ChatRequest):
+    """Process natural language conversational interaction grounded in dataset evidence."""
+    record = session_store.get(req.dataset_id)
+    if not record or not record.dataset:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{req.dataset_id}' not found in active session",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+    dataset = record.dataset
+    semantic_profile = record.semantic_profile
+    if not semantic_profile:
+        from intelligence.semantic_analyzer import analyze_semantics
+        semantic_profile = analyze_semantics(dataset, record.profile)
+        record.semantic_profile = semantic_profile
+
+    context = record.get_or_create_conversation(req.conversation_id)
+
+    res = execute_chat_turn(
+        dataset=dataset,
+        semantic_profile=semantic_profile,
+        message=req.message,
+        context=context,
+        readiness=record.readiness,
+        data_profile=record.profile,
+        use_llm=req.use_llm if req.use_llm is not None else True,
+    )
+    return res
+
+
+@app.post(
+    "/api/chat/conversation/{dataset_id}/{conversation_id}/clear",
+    summary="Clear conversation history for a dataset session",
+)
+def clear_chat_conversation(dataset_id: str, conversation_id: str):
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{dataset_id}' not found in active session",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+    cleared = record.clear_conversation(conversation_id)
+    return {"status": "SUCCESS", "cleared": cleared, "conversation_id": conversation_id}
 
 
 @app.exception_handler(HTTPException)
