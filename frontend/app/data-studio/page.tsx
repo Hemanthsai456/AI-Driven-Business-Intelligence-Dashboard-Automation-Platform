@@ -41,6 +41,7 @@ import {
 } from '../../lib/types';
 import { OverviewTab } from '../../components/data_studio/OverviewTab';
 import { QualityTab } from '../../components/data_studio/QualityTab';
+import { ProfilingTab } from '../../components/data_studio/ProfilingTab';
 
 type DataStudioTab = 'overview' | 'quality' | 'profiling' | 'cleaning' | 'eda';
 type AnalysisState = 'idle' | 'analyzing' | 'ready' | 'error';
@@ -494,22 +495,14 @@ function DataStudioContent() {
               />
             )}
 
-            {/* Tab 3: Profiling Placeholder (Part 3) */}
+            {/* Tab 3: Profiling */}
             {activeTab === 'profiling' && (
-              <Card className="p-10 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-primary-soft border border-primary/20 flex items-center justify-center mx-auto text-primary">
-                  <Activity className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-center gap-2">
-                    <h3 className="text-sm font-bold text-foreground">Advanced Statistical Profiling</h3>
-                    <Badge variant="blue" size="xs">Coming in Part 3</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-                    Comprehensive statistical metrics including mean, median, standard deviation, quartiles, zero/negative counts, categorical frequency rankings, and temporal coverage.
-                  </p>
-                </div>
-              </Card>
+              <ProfilingTab
+                metadata={metadata}
+                profile={profile}
+                semanticProfile={semanticProfile}
+                qualityAssessment={qualityAssessment}
+              />
             )}
 
             {/* Tab 4: Cleaning Placeholder (Parts 4–6) */}

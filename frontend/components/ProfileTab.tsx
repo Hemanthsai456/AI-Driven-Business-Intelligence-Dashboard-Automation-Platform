@@ -96,7 +96,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({ profile }) => {
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-muted-foreground truncate max-w-xs">
-                        {col.mean !== undefined ? (
+                        {col.mean !== undefined && col.mean !== null ? (
                           <span>Mean: {col.mean.toFixed(2)}</span>
                         ) : col.most_frequent_values && col.most_frequent_values.length > 0 ? (
                           <span>Top: {String(col.most_frequent_values[0].value)}</span>

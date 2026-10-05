@@ -32,6 +32,12 @@ export interface DataPreviewResponse {
   is_preview: boolean;
 }
 
+export interface HistogramBin {
+  bin_start: number;
+  bin_end: number;
+  count: number;
+}
+
 export interface ColumnStatistics {
   column_name: string;
   detected_datatype: string;
@@ -40,18 +46,30 @@ export interface ColumnStatistics {
   null_count: number;
   null_percentage: number;
   distinct_count: number;
+  uniqueness_percentage?: number;
   is_unique: boolean;
   is_constant: boolean;
   is_all_null: boolean;
   observations: string[];
-  min?: number;
-  max?: number;
-  mean?: number;
-  median?: number;
-  std?: number;
-  q25?: number;
-  q75?: number;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  median?: number | null;
+  std?: number | null;
+  q25?: number | null;
+  q75?: number | null;
+  zero_count?: number;
+  negative_count?: number;
+  infinite_count?: number;
+  histogram?: HistogramBin[];
   most_frequent_values?: { value: any; count: number }[];
+  min_datetime?: string | null;
+  max_datetime?: string | null;
+  distinct_dates_count?: number;
+  temporal_span_days?: number | null;
+  true_count?: number;
+  false_count?: number;
+  empty_string_count?: number;
   [key: string]: any;
 }
 
