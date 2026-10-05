@@ -6,13 +6,25 @@ CleaningReport.
 """
 
 from cleaning.cleaner import DataCleaner, clean_dataset
+from cleaning.executor import (
+    CleaningExecutionError,
+    CleaningExecutor,
+    execute_cleaning_plan,
+    preview_cleaning_plan,
+)
 from cleaning.models import (
     CleaningChange,
     CleaningConfig,
+    CleaningExecutionResult,
     CleaningPlan,
+    CleaningPreviewResult,
     CleaningRecommendation,
     CleaningReport,
     CleaningResult,
+    CleaningValidationCheck,
+    CleaningValidationResult,
+    OperationExecutionResult,
+    SampleCellChange,
 )
 from cleaning.planner import CleaningPlanner, generate_cleaning_plan
 
@@ -27,4 +39,15 @@ __all__ = [
     "CleaningRecommendation",
     "CleaningPlanner",
     "generate_cleaning_plan",
+    "CleaningExecutionError",
+    "CleaningExecutor",
+    "execute_cleaning_plan",
+    "preview_cleaning_plan",
+    "CleaningExecutionResult",
+    "CleaningPreviewResult",
+    "CleaningValidationCheck",
+    "CleaningValidationResult",
+    "OperationExecutionResult",
+    "SampleCellChange",
 ]
+

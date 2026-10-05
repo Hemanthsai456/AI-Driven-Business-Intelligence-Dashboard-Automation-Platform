@@ -257,3 +257,193 @@ class CleaningPlan:
             "generated_at": sanitize_json_value(self.generated_at),
         }
 
+
+# =========================================================================
+# Part 5 — Data Studio: Cleaning Preview & Batch Execution Models
+# =========================================================================
+
+
+@dataclass
+class SampleCellChange:
+    """Sample record of a single cell value modified during cleaning preview/execution."""
+
+    row_index: int
+    column_name: str
+    before_value: Any
+    after_value: Any
+    operation: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "row_index": int(self.row_index),
+            "column_name": self.column_name,
+            "before_value": sanitize_json_value(self.before_value),
+            "after_value": sanitize_json_value(self.after_value),
+            "operation": self.operation,
+        }
+
+
+@dataclass
+class OperationExecutionResult:
+    """Detailed audit of a single executed or skipped cleaning recommendation."""
+
+    recommendation_id: str
+    operation: str
+    column_name: Optional[str]
+    status: str  # 'APPLIED', 'SKIPPED', 'WARNING', 'FAILED'
+    rows_affected: int
+    cells_affected: int
+    method_used: str
+    before_statistic: str
+    after_statistic: str
+    details: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "recommendation_id": self.recommendation_id,
+            "operation": self.operation,
+            "column_name": self.column_name,
+            "status": self.status,
+            "rows_affected": int(self.rows_affected),
+            "cells_affected": int(self.cells_affected),
+            "method_used": self.method_used,
+            "before_statistic": self.before_statistic,
+            "after_statistic": self.after_statistic,
+            "details": sanitize_json_value(self.details),
+            "warnings": self.warnings,
+        }
+
+
+@dataclass
+class CleaningValidationCheck:
+    """A deterministic invariant check performed on post-cleaning data."""
+
+    check_name: str
+    status: str  # 'PASSED', 'FAILED', 'WARNING'
+    message: str
+    column_name: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "check_name": self.check_name,
+            "status": self.status,
+            "message": self.message,
+            "column_name": self.column_name,
+            "details": sanitize_json_value(self.details),
+        }
+
+
+@dataclass
+class CleaningValidationResult:
+    """Comprehensive validation outcomes across all post-cleaning invariant checks."""
+
+    overall_status: str  # 'PASSED', 'WARNING', 'FAILED'
+    total_checks: int
+    passed_checks: int
+    failed_checks: int
+    warning_checks: int
+    checks: List[CleaningValidationCheck] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "overall_status": self.overall_status,
+            "total_checks": int(self.total_checks),
+            "passed_checks": int(self.passed_checks),
+            "failed_checks": int(self.failed_checks),
+            "warning_checks": int(self.warning_checks),
+            "checks": [c.to_dict() for c in self.checks],
+        }
+
+
+@dataclass
+class CleaningPreviewResult:
+    """Non-mutating preview of the selected cleaning operations."""
+
+    dataset_id: str
+    original_row_count: int
+    preview_row_count: int
+    row_count_change: int
+    original_column_count: int
+    preview_column_count: int
+    operations_requested: int
+    operations_applicable: int
+    operations_skipped: int
+    total_cells_affected: int
+    operations: List[OperationExecutionResult] = field(default_factory=list)
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    generated_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "dataset_id": self.dataset_id,
+            "original_row_count": int(self.original_row_count),
+            "preview_row_count": int(self.preview_row_count),
+            "row_count_change": int(self.row_count_change),
+            "original_column_count": int(self.original_column_count),
+            "preview_column_count": int(self.preview_column_count),
+            "operations_requested": int(self.operations_requested),
+            "operations_applicable": int(self.operations_applicable),
+            "operations_skipped": int(self.operations_skipped),
+            "total_cells_affected": int(self.total_cells_affected),
+            "operations": [op.to_dict() for op in self.operations],
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
+            "warnings": self.warnings,
+            "generated_at": sanitize_json_value(self.generated_at),
+        }
+
+
+@dataclass
+class CleaningExecutionResult:
+    """Audit-grade summary of applied batch cleaning transformations and validation."""
+
+    dataset_id: str
+    original_row_count: int
+    cleaned_row_count: int
+    row_count_change: int
+    original_column_count: int
+    cleaned_column_count: int
+    operations_requested: int
+    operations_applied: int
+    operations_skipped: int
+    operations_failed: int
+    total_rows_affected: int
+    total_cells_affected: int
+    operations: List[OperationExecutionResult] = field(default_factory=list)
+    validation: Optional[CleaningValidationResult] = None
+    before_summary: Dict[str, Any] = field(default_factory=dict)
+    after_summary: Dict[str, Any] = field(default_factory=dict)
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    executed_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "dataset_id": self.dataset_id,
+            "original_row_count": int(self.original_row_count),
+            "cleaned_row_count": int(self.cleaned_row_count),
+            "row_count_change": int(self.row_count_change),
+            "original_column_count": int(self.original_column_count),
+            "cleaned_column_count": int(self.cleaned_column_count),
+            "operations_requested": int(self.operations_requested),
+            "operations_applied": int(self.operations_applied),
+            "operations_skipped": int(self.operations_skipped),
+            "operations_failed": int(self.operations_failed),
+            "total_rows_affected": int(self.total_rows_affected),
+            "total_cells_affected": int(self.total_cells_affected),
+            "operations": [op.to_dict() for op in self.operations],
+            "validation": self.validation.to_dict() if self.validation else None,
+            "before_summary": sanitize_json_value(self.before_summary),
+            "after_summary": sanitize_json_value(self.after_summary),
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
+            "warnings": self.warnings,
+            "executed_at": sanitize_json_value(self.executed_at),
+        }
+
+

@@ -1,6 +1,8 @@
 import {
   AnalysisReadiness,
+  CleaningExecutionResult,
   CleaningPlan,
+  CleaningPreviewResult,
   DataPreviewResponse,
   DataProfile,
   DatasetListItem,
@@ -81,6 +83,31 @@ export async function getDatasetCleaningPlan(datasetId: string): Promise<Cleanin
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning-plan`);
   return handleResponse<CleaningPlan>(res);
 }
+
+export async function previewCleaningPlan(
+  datasetId: string,
+  selectedRecommendationIds: string[]
+): Promise<CleaningPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected_recommendation_ids: selectedRecommendationIds }),
+  });
+  return handleResponse<CleaningPreviewResult>(res);
+}
+
+export async function applyCleaningPlan(
+  datasetId: string,
+  selectedRecommendationIds: string[]
+): Promise<CleaningExecutionResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ selected_recommendation_ids: selectedRecommendationIds }),
+  });
+  return handleResponse<CleaningExecutionResult>(res);
+}
+
 
 export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {
   const res = await fetch(`${API_BASE}/orchestrator/validate-plan`, {

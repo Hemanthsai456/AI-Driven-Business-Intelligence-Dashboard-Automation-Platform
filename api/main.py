@@ -658,6 +658,96 @@ def get_dataset_cleaning_plan(dataset_id: str):
     return plan.to_dict()
 
 
+class CleaningSelectionRequest(BaseModel):
+    selected_recommendation_ids: List[str] = Field(default_factory=list)
+
+
+@app.post("/api/datasets/{dataset_id}/cleaning/preview")
+def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
+    """Generate a non-mutating preview of selected cleaning operations against raw dataset."""
+    from cleaning.executor import CleaningExecutionError, CleaningExecutor
+    from cleaning.planner import CleaningPlanner
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        planner = CleaningPlanner()
+        plan = planner.generate_plan(
+            canonical=record.dataset,
+            profile=record.profile,
+            semantic_profile=record.semantic_profile,
+            quality_assessment=getattr(record, "quality_assessment", None),
+        )
+        executor = CleaningExecutor(planner=planner)
+        preview_result = executor.preview(
+            canonical=record.dataset,
+            selected_recommendation_ids=request.selected_recommendation_ids,
+            plan=plan,
+        )
+        return preview_result.to_dict()
+    except CleaningExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate cleaning preview: {str(ex)}",
+        )
+
+
+@app.post("/api/datasets/{dataset_id}/cleaning/apply")
+def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
+    """Execute selected cleaning operations on a copy of raw dataset, validating results."""
+    from cleaning.executor import CleaningExecutionError, CleaningExecutor
+    from cleaning.planner import CleaningPlanner
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        planner = CleaningPlanner()
+        plan = planner.generate_plan(
+            canonical=record.dataset,
+            profile=record.profile,
+            semantic_profile=record.semantic_profile,
+            quality_assessment=getattr(record, "quality_assessment", None),
+        )
+        executor = CleaningExecutor(planner=planner)
+        exec_result, cleaned_canonical = executor.execute(
+            canonical=record.dataset,
+            selected_recommendation_ids=request.selected_recommendation_ids,
+            plan=plan,
+        )
+
+        # Store in-memory cleaned CanonicalDataset on record for Part 6 without mutating record.dataset
+        record.cleaned_dataset = cleaned_canonical
+        record.last_cleaning_result = exec_result.to_dict()
+
+        return exec_result.to_dict()
+    except CleaningExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute cleaning plan: {str(ex)}",
+        )
+
+
+
 @app.get("/api/providers/status")
 def get_providers_status():
     """Retrieve live availability and diagnostic status for configured LLM providers."""

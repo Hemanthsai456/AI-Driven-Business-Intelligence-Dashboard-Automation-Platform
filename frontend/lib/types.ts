@@ -234,6 +234,85 @@ export interface CleaningPlan {
   generated_at: string;
 }
 
+export interface SampleCellChange {
+  row_index: number;
+  column_name: string;
+  before_value: any;
+  after_value: any;
+  operation: string;
+}
+
+export interface OperationExecutionResult {
+  recommendation_id: string;
+  operation: string;
+  column_name: string | null;
+  status: 'APPLIED' | 'SKIPPED' | 'WARNING' | 'FAILED';
+  rows_affected: number;
+  cells_affected: number;
+  method_used: string;
+  before_statistic: string;
+  after_statistic: string;
+  details: Record<string, any>;
+  warnings: string[];
+}
+
+export interface CleaningValidationCheck {
+  check_name: string;
+  status: 'PASSED' | 'FAILED' | 'WARNING';
+  message: string;
+  column_name?: string | null;
+  details: Record<string, any>;
+}
+
+export interface CleaningValidationResult {
+  overall_status: 'PASSED' | 'WARNING' | 'FAILED';
+  total_checks: number;
+  passed_checks: number;
+  failed_checks: number;
+  warning_checks: number;
+  checks: CleaningValidationCheck[];
+}
+
+export interface CleaningPreviewResult {
+  dataset_id: string;
+  original_row_count: number;
+  preview_row_count: number;
+  row_count_change: number;
+  original_column_count: number;
+  preview_column_count: number;
+  operations_requested: number;
+  operations_applicable: number;
+  operations_skipped: number;
+  total_cells_affected: number;
+  operations: OperationExecutionResult[];
+  sample_changes: SampleCellChange[];
+  warnings: string[];
+  generated_at: string;
+}
+
+export interface CleaningExecutionResult {
+  dataset_id: string;
+  original_row_count: number;
+  cleaned_row_count: number;
+  row_count_change: number;
+  original_column_count: number;
+  cleaned_column_count: number;
+  operations_requested: number;
+  operations_applied: number;
+  operations_skipped: number;
+  operations_failed: number;
+  total_rows_affected: number;
+  total_cells_affected: number;
+  operations: OperationExecutionResult[];
+  validation: CleaningValidationResult | null;
+  before_summary: Record<string, any>;
+  after_summary: Record<string, any>;
+  sample_changes: SampleCellChange[];
+  warnings: string[];
+  executed_at: string;
+}
+
+
 
 export interface DatasetListItem {
   dataset_id: string;
