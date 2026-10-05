@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 print(f"[STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
 
+import io
 import pandas as pd
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional, Tuple
-from fastapi import FastAPI, File, HTTPException, UploadFile, status
+from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -747,6 +748,145 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to execute cleaning plan: {str(ex)}",
+        )
+
+
+@app.post("/api/datasets/{dataset_id}/cleaned/register")
+def register_cleaned_dataset(dataset_id: str):
+    """Register the successfully validated in-memory cleaned dataset as a distinct first-class dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    if record.cleaned_dataset is None or not record.last_cleaning_result:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No validated cleaned result is available. Apply cleaning first.",
+        )
+
+    # Check for duplicate registration - return existing registered cleaned dataset
+    if record.registered_cleaned_dataset_id:
+        existing_cleaned = session_store.get(record.registered_cleaned_dataset_id)
+        if existing_cleaned:
+            return {
+                "status": "SUCCESS",
+                "message": "Cleaned dataset already registered.",
+                "dataset_id": existing_cleaned.dataset.metadata.dataset_id,
+                "filename": existing_cleaned.dataset.metadata.name,
+                "row_count": existing_cleaned.dataset.metadata.row_count,
+                "column_count": existing_cleaned.dataset.metadata.column_count,
+                "source_dataset_id": dataset_id,
+                "already_registered": True,
+                "metadata": existing_cleaned.to_metadata_dict(),
+            }
+
+    # Generate distinct, collision-safe cleaned dataset ID
+    base_stem = "".join(
+        c if c.isalnum() else "_" for c in os.path.splitext(record.dataset.metadata.name)[0].lower()
+    ).strip("_")
+    cleaned_dataset_id = f"ds_{base_stem}_cleaned_{uuid.uuid4().hex[:6]}"
+
+    # Determine filename
+    orig_name = record.dataset.metadata.name
+    root, ext = os.path.splitext(orig_name)
+    cleaned_name = f"{root}_cleaned{ext if ext else '.csv'}"
+
+    # Extract schema from cleaned data
+    from ingestion.loaders import CSVLoader
+    loader = CSVLoader()
+    schema = loader.extract_column_metadata(record.cleaned_dataset.data)
+
+    from ingestion.models import CanonicalDataset, DatasetMetadata
+    cleaned_meta = DatasetMetadata(
+        dataset_id=cleaned_dataset_id,
+        name=cleaned_name,
+        source_type=record.dataset.metadata.source_type,
+        row_count=len(record.cleaned_dataset.data),
+        column_count=len(record.cleaned_dataset.data.columns),
+        schema=schema,
+        custom_metadata={
+            "source_dataset_id": dataset_id,
+            "source_dataset_name": record.dataset.metadata.name,
+            "derivation": "cleaning",
+            "derived_from_cleaning": True,
+            "operations_applied": record.last_cleaning_result.get("operations_applied", 0),
+        },
+    )
+    cleaned_canonical = CanonicalDataset(
+        metadata=cleaned_meta,
+        data=record.cleaned_dataset.data.copy(deep=True),
+    )
+
+    # Run profiler, semantic analyzer, readiness validator
+    profile = profile_dataset(cleaned_canonical)
+    semantic_profile = analyze_semantics(cleaned_canonical, profile=profile)
+    readiness = assess_readiness(cleaned_canonical, profile=profile, semantic_profile=semantic_profile)
+
+    # Save to session store as independent DatasetSessionRecord
+    cleaned_record = DatasetSessionRecord(
+        dataset=cleaned_canonical,
+        profile=profile,
+        semantic_profile=semantic_profile,
+        readiness=readiness,
+        cleaning_report=None,
+    )
+    session_store.save(cleaned_record)
+    record.registered_cleaned_dataset_id = cleaned_dataset_id
+
+    return {
+        "status": "SUCCESS",
+        "message": "Cleaned dataset registered successfully.",
+        "dataset_id": cleaned_dataset_id,
+        "filename": cleaned_name,
+        "row_count": cleaned_canonical.metadata.row_count,
+        "column_count": cleaned_canonical.metadata.column_count,
+        "source_dataset_id": dataset_id,
+        "already_registered": False,
+        "metadata": cleaned_record.to_metadata_dict(),
+    }
+
+
+@app.get("/api/datasets/{dataset_id}/download")
+def download_dataset(dataset_id: str, format: str = "csv"):
+    """Download registered dataset in CSV or XLSX format."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    norm_format = format.lower().strip()
+    if norm_format not in ["csv", "xlsx"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported download format '{format}'. Supported formats: csv, xlsx.",
+        )
+
+    base_name = os.path.splitext(record.dataset.metadata.name)[0]
+    safe_base = "".join(c if (c.isalnum() or c in "._- ") else "_" for c in base_name).strip() or "dataset"
+
+    if norm_format == "csv":
+        csv_bytes = record.dataset.data.to_csv(index=False).encode("utf-8")
+        filename = f"{safe_base}.csv"
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    elif norm_format == "xlsx":
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            record.dataset.data.to_excel(writer, index=False, sheet_name="Sheet1")
+        xlsx_bytes = output.getvalue()
+        filename = f"{safe_base}.xlsx"
+        return Response(
+            content=xlsx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
 

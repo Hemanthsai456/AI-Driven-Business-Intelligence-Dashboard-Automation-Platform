@@ -145,6 +145,101 @@ def validate_part51_user_modifications():
     print("=" * 70)
 
 
+def validate_part6_registration_and_download():
+    print("\n" + "=" * 70)
+    print("STARTING PART 6 REAL DATASET REGISTRATION & DOWNLOAD VALIDATION")
+    print("=" * 70)
+
+    import io
+    from fastapi.testclient import TestClient
+    from api.main import app
+    from api.store import session_store, DatasetSessionRecord
+    from intelligence.profiler import profile_dataset
+    from intelligence.semantic_analyzer import analyze_semantics
+    from intelligence.schema_validator import assess_readiness
+
+    client = TestClient(app)
+    loader = CSVLoader()
+    planner = CleaningPlanner()
+
+    for ds_name, file_path in [("Healthcare", "tests/real_data/healthcare.csv"), ("Education", "tests/real_data/education.csv")]:
+        print(f"\n>> Validating Part 6 for {ds_name} ({file_path})")
+        session_store.clear()
+
+        # 1. Load raw dataset
+        canonical = loader.load(file_path)
+        raw_id = canonical.metadata.dataset_id
+        raw_snapshot = canonical.data.copy(deep=True)
+
+        profile = profile_dataset(canonical)
+        semantic = analyze_semantics(canonical, profile=profile)
+        readiness = assess_readiness(canonical, profile=profile, semantic_profile=semantic)
+        raw_record = DatasetSessionRecord(
+            dataset=canonical,
+            profile=profile,
+            semantic_profile=semantic,
+            readiness=readiness,
+        )
+        session_store.save(raw_record)
+
+        # 2. Generate plan & apply safe cleaning
+        plan = planner.generate_plan(canonical)
+        safe_ids = [r.recommendation_id for r in plan.recommendations if r.default_selected]
+        apply_res = client.post(f"/api/datasets/{raw_id}/cleaning/apply", json={"selected_recommendation_ids": safe_ids})
+        assert apply_res.status_code == 200, f"Apply failed: {apply_res.text}"
+
+        # 3. Register cleaned dataset
+        reg_res = client.post(f"/api/datasets/{raw_id}/cleaned/register")
+        assert reg_res.status_code == 200, f"Registration failed: {reg_res.text}"
+        reg_data = reg_res.json()
+        cleaned_id = reg_data["dataset_id"]
+
+        print(f"   Original Dataset ID: {raw_id} ({raw_record.dataset.metadata.row_count} rows)")
+        print(f"   Cleaned Dataset ID:  {cleaned_id} ({reg_data['row_count']} rows)")
+        print(f"   Cleaned Filename:    {reg_data['filename']}")
+
+        # Verify IDs differ
+        assert cleaned_id != raw_id
+        assert "cleaned" in cleaned_id
+        assert reg_data["source_dataset_id"] == raw_id
+
+        # Verify both coexist in session store
+        assert session_store.get(raw_id) is not None
+        assert session_store.get(cleaned_id) is not None
+        assert len(session_store.list_all()) == 2
+
+        # Verify cleaned record has full intelligence
+        cleaned_rec = session_store.get(cleaned_id)
+        assert cleaned_rec.profile is not None
+        assert cleaned_rec.semantic_profile is not None
+        assert cleaned_rec.readiness is not None
+        print(f"   Cleaned Profile & Semantics: {len(cleaned_rec.semantic_profile.column_evidences)} columns classified")
+
+        # 4. Download CSV
+        csv_res = client.get(f"/api/datasets/{cleaned_id}/download?format=csv")
+        assert csv_res.status_code == 200
+        df_csv = pd.read_csv(io.BytesIO(csv_res.content))
+        assert len(df_csv) == reg_data["row_count"]
+        print(f"   [PASSED] Downloaded CSV verified ({len(df_csv)} rows)")
+
+        # 5. Download XLSX
+        xlsx_res = client.get(f"/api/datasets/{cleaned_id}/download?format=xlsx")
+        assert xlsx_res.status_code == 200
+        df_xlsx = pd.read_excel(io.BytesIO(xlsx_res.content))
+        assert len(df_xlsx) == reg_data["row_count"]
+        print(f"   [PASSED] Downloaded XLSX verified ({len(df_xlsx)} rows)")
+
+        # 6. Verify raw dataset is 100% untouched
+        assert_frame_equal(raw_record.dataset.data, raw_snapshot)
+        print(f"   [PASSED] Raw dataset 100% immutable throughout registration & downloads.")
+
+    print("\n" + "=" * 70)
+    print("PART 6 REAL DATASET VALIDATION COMPLETED SUCCESSFULLY")
+    print("=" * 70)
+
+
 if __name__ == "__main__":
     validate_real_datasets()
     validate_part51_user_modifications()
+    validate_part6_registration_and_download()
+

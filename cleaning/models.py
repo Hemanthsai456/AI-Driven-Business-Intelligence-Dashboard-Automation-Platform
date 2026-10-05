@@ -154,22 +154,25 @@ class CleaningResult:
 
 def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
     """Determine the deterministic set of allowed user-selectable operation variants."""
-    if operation == "IMPUTE_MEDIAN":
+    if operation in ["IMPUTE_MEDIAN", "IMPUTE_MEAN"]:
         return [
             {"operation": "IMPUTE_MEDIAN", "label": "Median", "description": "Fill missing values with dynamically computed median"},
             {"operation": "IMPUTE_MEAN", "label": "Mean", "description": "Fill missing values with dynamically computed mean"},
+            {"operation": "IMPUTE_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified numeric constant"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
         ]
     elif operation == "FILL_MODE":
         return [
             {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
             {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
+            {"operation": "FILL_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified text constant"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
         ]
     elif operation == "FILL_UNKNOWN":
         return [
             {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
             {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
+            {"operation": "FILL_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified text constant"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
         ]
     elif operation == "REMOVE_DUPLICATES":
@@ -197,9 +200,7 @@ def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
             {"operation": "NORMALIZE_BOOLEAN", "label": "Normalize Boolean", "description": "Standardize yes/no/true/false to bool"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text representations"},
         ]
-    return [
-        {"operation": "LEAVE_UNCHANGED", "label": "Review Only", "description": "Diagnostic review only; no automated change applied"},
-    ]
+    return []
 
 
 @dataclass

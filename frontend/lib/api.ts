@@ -8,6 +8,7 @@ import {
   DatasetListItem,
   DatasetMetadata,
   QualityAssessment,
+  RegisterCleanedDatasetResponse,
   SemanticProfile,
 } from './types';
 
@@ -114,6 +115,17 @@ export async function applyCleaningPlan(
     }),
   });
   return handleResponse<CleaningExecutionResult>(res);
+}
+
+export async function registerCleanedDataset(datasetId: string): Promise<RegisterCleanedDatasetResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaned/register`, {
+    method: 'POST',
+  });
+  return handleResponse<RegisterCleanedDatasetResponse>(res);
+}
+
+export function getDatasetDownloadUrl(datasetId: string, format: 'csv' | 'xlsx'): string {
+  return `${API_BASE}/datasets/${datasetId}/download?format=${format}`;
 }
 
 

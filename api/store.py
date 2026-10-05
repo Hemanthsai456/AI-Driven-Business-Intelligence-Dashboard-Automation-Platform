@@ -32,6 +32,7 @@ class DatasetSessionRecord:
         self.cleaning_report = cleaning_report
         self.cleaned_dataset: Optional[CanonicalDataset] = None
         self.last_cleaning_result: Optional[Dict[str, Any]] = None
+        self.registered_cleaned_dataset_id: Optional[str] = None
         self.cached_candidates: Dict[str, List[Any]] = {}
         self.conversations: Dict[str, ConversationContext] = {}
         self.created_at = datetime.now(timezone.utc).isoformat()

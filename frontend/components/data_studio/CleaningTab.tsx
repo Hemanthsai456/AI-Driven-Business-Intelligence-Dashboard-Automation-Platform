@@ -24,6 +24,7 @@ import {
   FileCheck2,
   Table,
   Zap,
+  Download,
 } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
@@ -36,10 +37,16 @@ import {
   DatasetMetadata,
   OperationExecutionResult,
   QualityAssessment,
+  RegisterCleanedDatasetResponse,
   SampleCellChange,
   SemanticProfile,
 } from '../../lib/types';
-import { applyCleaningPlan, previewCleaningPlan } from '../../lib/api';
+import {
+  applyCleaningPlan,
+  getDatasetDownloadUrl,
+  previewCleaningPlan,
+  registerCleanedDataset,
+} from '../../lib/api';
 
 interface CleaningTabProps {
   metadata: DatasetMetadata;
@@ -49,10 +56,13 @@ interface CleaningTabProps {
   isLoadingPlan?: boolean;
   planError?: string | null;
   onRetryPlan?: () => void;
+  onSelectDataset?: (datasetId: string) => void;
+  onDatasetRegistered?: (newDatasetId: string) => void;
 }
 
 type FilterStatus = 'ALL' | 'RECOMMENDED' | 'REVIEW_REQUIRED' | 'SELECTED';
 type ExecutionState = 'idle' | 'applying' | 'validating' | 'complete' | 'error';
+type RegistrationState = 'idle' | 'registering' | 'registered' | 'error';
 
 export const CleaningTab: React.FC<CleaningTabProps> = ({
   metadata,
@@ -62,6 +72,8 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   isLoadingPlan = false,
   planError = null,
   onRetryPlan,
+  onSelectDataset,
+  onDatasetRegistered,
 }) => {
   // Local state for user-controlled selection overrides
   const [selections, setSelections] = useState<Record<string, boolean>>(() => {
@@ -89,6 +101,11 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [executionResult, setExecutionResult] = useState<CleaningExecutionResult | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
 
+  // Registration & Download State (Part 6)
+  const [registrationState, setRegistrationState] = useState<RegistrationState>('idle');
+  const [registeredData, setRegisteredData] = useState<RegisterCleanedDatasetResponse | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+
   // Update selections when cleaningPlan changes (e.g. switching datasets)
   React.useEffect(() => {
     if (!cleaningPlan) {
@@ -97,6 +114,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       setPreviewResult(null);
       setExecutionResult(null);
       setExecutionState('idle');
+      setRegistrationState('idle');
+      setRegisteredData(null);
+      setRegistrationError(null);
       return;
     }
     const initial: Record<string, boolean> = {};
@@ -108,6 +128,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setPreviewResult(null);
     setExecutionResult(null);
     setExecutionState('idle');
+    setRegistrationState('idle');
+    setRegisteredData(null);
+    setRegistrationError(null);
   }, [cleaningPlan?.dataset_id]);
 
   const toggleSelection = (recId: string) => {
@@ -205,6 +228,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setIsPreviewOpen(false);
     setExecutionState('applying');
     setExecutionError(null);
+    setRegistrationState('idle');
+    setRegisteredData(null);
+    setRegistrationError(null);
 
     try {
       // Simulate quick visual step transition to 'validating'
@@ -222,10 +248,40 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     }
   };
 
+  // Register Cleaned Dataset Action (Part 6)
+  const handleRegisterCleaned = async () => {
+    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    if (!targetDatasetId) {
+      setRegistrationError('No active dataset found for registration.');
+      setRegistrationState('error');
+      return;
+    }
+    setRegistrationState('registering');
+    setRegistrationError(null);
+    try {
+      const res = await registerCleanedDataset(targetDatasetId);
+      setRegisteredData(res);
+      setRegistrationState('registered');
+      if (onDatasetRegistered) {
+        onDatasetRegistered(res.dataset_id);
+      }
+    } catch (err: any) {
+      let msg = err.message || 'Failed to register cleaned dataset.';
+      if (msg.includes('Not Found') || msg.includes('404')) {
+        msg = `${msg} (Ensure the backend server has reloaded latest API routes).`;
+      }
+      setRegistrationError(msg);
+      setRegistrationState('error');
+    }
+  };
+
   const handleResetExecution = () => {
     setExecutionState('idle');
     setExecutionResult(null);
     setExecutionError(null);
+    setRegistrationState('idle');
+    setRegisteredData(null);
+    setRegistrationError(null);
   };
 
   // 1. Loading State
@@ -431,6 +487,133 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               </div>
             </div>
           )}
+
+          {/* Registration and Download Section (Part 6) */}
+          <div className="pt-4 border-t border-border space-y-4 font-mono">
+            {registrationState === 'idle' && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-surface rounded-lg border border-border">
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-foreground">
+                    Register Cleaned Dataset
+                  </h4>
+                  <p className="text-3xs text-muted-foreground">
+                    Register this validated in-memory DataFrame as a distinct first-class dataset in Data Studio.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRegisterCleaned}
+                  leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+                  className="font-mono text-xs shrink-0"
+                >
+                  Register Cleaned Dataset
+                </Button>
+              </div>
+            )}
+
+            {registrationState === 'registering' && (
+              <div className="p-4 bg-surface rounded-lg border border-primary/30 flex items-center gap-3 animate-pulse">
+                <div className="w-5 h-5 text-primary">
+                  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-foreground">Registering Cleaned Dataset...</span>
+                  <p className="text-3xs text-muted-foreground">
+                    Generating schema, statistical profile, semantic intelligence, and readiness assessment.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {registrationState === 'error' && (
+              <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start justify-between gap-3 text-xs">
+                <div className="space-y-1">
+                  <span className="font-bold text-rose-600 dark:text-rose-400">Registration Failed</span>
+                  <p className="text-muted-foreground text-3xs">{registrationError}</p>
+                </div>
+                <Button variant="secondary" size="xs" onClick={handleRegisterCleaned}>
+                  Retry Registration
+                </Button>
+              </div>
+            )}
+
+            {registrationState === 'registered' && registeredData && (
+              <div className="p-4 bg-surface rounded-lg border border-emerald-500/30 space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                      <Check className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-foreground">Cleaned Dataset Registered</span>
+                        <Badge variant="green" size="xs">Ready in Selector</Badge>
+                      </div>
+                      <p className="text-3xs text-muted-foreground mt-0.5">
+                        Available as an independent dataset with complete profiling and semantic intelligence.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {onSelectDataset && (
+                      <Button
+                        variant="primary"
+                        size="xs"
+                        onClick={() => onSelectDataset(registeredData.dataset_id)}
+                        leftIcon={<ArrowRight className="w-3.5 h-3.5" />}
+                        className="font-mono text-xs"
+                      >
+                        Use Cleaned Dataset
+                      </Button>
+                    )}
+
+                    <a
+                      href={getDatasetDownloadUrl(registeredData.dataset_id, 'csv')}
+                      download={`${registeredData.filename}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5 text-primary" />
+                      <span>Download CSV</span>
+                    </a>
+
+                    <a
+                      href={getDatasetDownloadUrl(registeredData.dataset_id, 'xlsx')}
+                      download={`${registeredData.filename.replace(/\.csv$/, '')}.xlsx`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Download XLSX</span>
+                    </a>
+                  </div>
+                </div>
+
+                {/* Dataset Details Badge Summary */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/60 text-3xs">
+                  <div>
+                    <span className="text-muted-foreground block">Cleaned Dataset Name:</span>
+                    <span className="text-foreground font-bold truncate block">{registeredData.filename}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">New Dataset ID:</span>
+                    <span className="text-foreground font-bold truncate block">{registeredData.dataset_id}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Dimensions:</span>
+                    <span className="text-foreground font-bold block">{registeredData.row_count.toLocaleString()} rows × {registeredData.column_count} cols</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Source Dataset:</span>
+                    <span className="text-foreground font-bold truncate block">{registeredData.source_dataset_id}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
@@ -663,11 +846,29 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     </Badge>
                     {rec.requires_review && (
                       <Badge variant="amber" size="xs">
-                        Review Required
+                        REVIEW ONLY
                       </Badge>
                     )}
                   </div>
                 </div>
+
+                {/* Review-Only Guidance Banner */}
+                {rec.requires_review && (
+                  <div
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-3xs font-mono border ${
+                      isSelected
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                        : 'bg-surface-muted/80 border-border text-muted-foreground'
+                    }`}
+                  >
+                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {isSelected
+                        ? 'Selected for review — no automatic transformation will be applied. Data remains unchanged.'
+                        : 'Review only — select to include in cleaning report. Data remains unchanged.'}
+                    </span>
+                  </div>
+                )}
 
                 {/* Method Selector (if editable alternatives exist) */}
                 {rec.supported_variants && rec.supported_variants.length > 1 && (
@@ -902,24 +1103,30 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                               variant={
                                 op.status === 'APPLIED'
                                   ? 'green'
+                                  : op.status === 'REVIEW_ONLY'
+                                  ? 'amber'
                                   : op.status === 'WARNING'
                                   ? 'amber'
                                   : 'slate'
                               }
                               size="xs"
                             >
-                              {op.status}
+                              {op.status === 'REVIEW_ONLY' ? 'REVIEW ONLY' : op.status}
                             </Badge>
                           </div>
 
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/60 text-3xs">
                             <div>
                               <span className="text-muted-foreground block">Before:</span>
-                              <span className="text-rose-500 font-bold">{op.before_statistic}</span>
+                              <span className={op.status === 'REVIEW_ONLY' ? 'text-muted-foreground font-bold' : 'text-rose-500 font-bold'}>
+                                {op.before_statistic}
+                              </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block">After:</span>
-                              <span className="text-emerald-500 font-bold">{op.after_statistic}</span>
+                              <span className={op.status === 'REVIEW_ONLY' ? 'text-blue-500 dark:text-blue-400 font-bold' : 'text-emerald-500 font-bold'}>
+                                {op.after_statistic}
+                              </span>
                             </div>
                             <div className="col-span-2 sm:col-span-1">
                               <span className="text-muted-foreground block">Method:</span>

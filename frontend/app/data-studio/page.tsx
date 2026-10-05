@@ -549,6 +549,10 @@ function DataStudioContent() {
                 isLoadingPlan={loadingPlan}
                 planError={planError}
                 onRetryPlan={() => fetchCleaningPlan(selectedDatasetId)}
+                onSelectDataset={handleDatasetChange}
+                onDatasetRegistered={(newId) => {
+                  listDatasets().then(setAllDatasets).catch(console.error);
+                }}
               />
             )}
 

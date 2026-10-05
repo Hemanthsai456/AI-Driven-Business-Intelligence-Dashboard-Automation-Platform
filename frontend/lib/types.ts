@@ -254,7 +254,7 @@ export interface OperationExecutionResult {
   recommendation_id: string;
   operation: string;
   column_name: string | null;
-  status: 'APPLIED' | 'SKIPPED' | 'WARNING' | 'FAILED';
+  status: 'APPLIED' | 'SKIPPED' | 'WARNING' | 'FAILED' | 'REVIEW_ONLY';
   rows_affected: number;
   cells_affected: number;
   method_used: string;
@@ -645,11 +645,22 @@ export interface ChatResponseUI {
   evidence?: any;
   confidence: number;
   warnings: string[];
-  ambiguity_status: string;
   clarification_needed: boolean;
   clarification_options?: string[];
   provenance?: any;
   runtime_seconds: number;
   error?: string;
+}
+
+export interface RegisterCleanedDatasetResponse {
+  status: string;
+  message: string;
+  dataset_id: string;
+  filename: string;
+  row_count: number;
+  column_count: number;
+  source_dataset_id: string;
+  already_registered?: boolean;
+  metadata: DatasetMetadata;
 }
 

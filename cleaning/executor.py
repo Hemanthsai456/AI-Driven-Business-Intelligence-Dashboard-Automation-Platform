@@ -229,14 +229,14 @@ class CleaningExecutor:
                         recommendation_id=rec.recommendation_id,
                         operation=op,
                         column_name=col,
-                        status="SKIPPED",
+                        status="REVIEW_ONLY",
                         rows_affected=0,
                         cells_affected=0,
-                        method_used="Diagnostic review only",
-                        before_statistic="Review required",
-                        after_statistic="Unchanged",
-                        details={"note": "Review-only diagnostic item; automated transformation disabled."},
-                        warnings=["Operation flagged as review-only; no automated data changes applied."],
+                        method_used="Selected for review — no automatic transformation applied",
+                        before_statistic="Review requested",
+                        after_statistic="Data unchanged",
+                        details={"note": "Review-only diagnostic item; data remains unchanged."},
+                        warnings=[],
                     )
                 )
                 continue
@@ -1259,7 +1259,7 @@ class CleaningExecutor:
         )
 
         app_cnt = sum(1 for r in op_results if r.status == "APPLIED")
-        skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING"])
+        skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING", "REVIEW_ONLY"])
 
         return CleaningPreviewResult(
             dataset_id=canonical.metadata.dataset_id,
@@ -1382,7 +1382,7 @@ class CleaningExecutor:
         cleaned_canonical.profile = self.profiler.profile(cleaned_canonical, attach=True)
 
         app_cnt = sum(1 for r in op_results if r.status == "APPLIED")
-        skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING"])
+        skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING", "REVIEW_ONLY"])
         fail_cnt = sum(1 for r in op_results if r.status == "FAILED")
 
         execution_result = CleaningExecutionResult(
