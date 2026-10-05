@@ -508,7 +508,7 @@ def run_orchestration_pipeline(
 
         is_tie = score_gap_tie or robustness_tie or coverage_tie
 
-        if is_tie:
+        if is_tie and require_clarification:
             # Determine tied candidates to present as clarification options
             if score_gap_tie:
                 tied_tuples = [t for t in ranked if abs(top_score - t[2].total) < rank_tie_epsilon]

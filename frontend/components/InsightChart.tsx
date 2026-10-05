@@ -167,6 +167,12 @@ export const InsightChart: React.FC<InsightChartProps> = ({
     });
   }, [rawRows, metricKey]);
 
+  // Detect long labels -> force horizontal layout for readability (unconditionally declared hook)
+  const maxLabelLen = React.useMemo(() => {
+    if (!normalizedRows || normalizedRows.length === 0) return 0;
+    return Math.max(...normalizedRows.map((r) => String(r[dimKey] ?? '').length), 0);
+  }, [normalizedRows, dimKey]);
+
   // Loading State
   if (isLoading) {
     return (
@@ -211,11 +217,6 @@ export const InsightChart: React.FC<InsightChartProps> = ({
       </div>
     );
   }
-
-  // Detect long labels -> force horizontal layout for readability
-  const maxLabelLen = React.useMemo(() => {
-    return Math.max(...normalizedRows.map((r) => String(r[dimKey] ?? '').length), 0);
-  }, [normalizedRows, dimKey]);
 
   let vizType = (visualization || 'bar').toLowerCase();
   if (vizType === 'bar' && maxLabelLen > 12) {

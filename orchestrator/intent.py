@@ -76,6 +76,18 @@ def interpret_user_request(
         elif ev.candidate_role == ColumnRole.IDENTIFIER:
             identifiers[col] = ev
 
+    def _stem_word(w: str) -> Set[str]:
+        res = {w}
+        if w.endswith("ies") and len(w) > 4:
+            res.add(w[:-3] + "y")
+        if w.endswith("es") and len(w) > 3:
+            res.add(w[:-2])
+        if w.endswith("s") and len(w) > 3:
+            res.add(w[:-1])
+        if w.endswith("y") and len(w) > 3:
+            res.add(w[:-1] + "ies")
+        return res
+
     def _col_matches(col_name: str) -> bool:
         col_norm = _normalize_name(col_name)
         col_toks = set(re.findall(r"\b[a-z0-9]+\b", col_norm))
@@ -84,26 +96,19 @@ def interpret_user_request(
         if col_toks and col_toks.issubset(tokens):
             return True
 
-        agg_words = {"total", "sum", "avg", "average", "count", "min", "max"}
-        id_words = {"id", "code", "key", "number"}
+        agg_words = {"total", "sum", "avg", "average", "count", "min", "max", "mean"}
+        id_words = {"id", "code", "key", "number", "name", "desc", "description", "val", "value", "amt", "amount", "lpa", "usd", "inr"}
         substantive = {t for t in col_toks if t not in agg_words}
         if not substantive:
             return False
 
-        # If substantive consists only of id_words plus a stem (e.g., CustomerID -> customer, id)
-        # matching the core entity word is sufficient
-        matched_sub = 0
         for stok in substantive:
-            stok_stem = stok.rstrip("s")
-            if any(qtok == stok or (len(qtok) > 3 and qtok.rstrip("s") == stok_stem) for qtok in tokens):
-                matched_sub += 1
-            elif stok in id_words:
-                # Optional modifier when entity is already named
-                pass
-            else:
-                return False
+            stok_stems = _stem_word(stok)
+            for qtok in tokens:
+                if qtok == stok or _stem_word(qtok) & stok_stems:
+                    return True
 
-        return matched_sub > 0
+        return False
 
     # 1. Match requested metrics
     matched_metrics: List[str] = []
@@ -199,26 +204,30 @@ def interpret_user_request(
         comparison_req = "month_over_month"
 
     # 8. Unresolved terms
-    all_known_columns = set(c.lower() for c in semantic_profile.column_evidences.keys())
+    all_known_columns = set()
     for c in semantic_profile.column_evidences.keys():
+        all_known_columns.update(_stem_word(c.lower()))
         for sub in re.findall(r"\b[a-z0-9]+\b", _normalize_name(c)):
-            all_known_columns.add(sub)
+            all_known_columns.update(_stem_word(sub))
 
     stopwords = {
         "show", "me", "the", "a", "an", "of", "for", "by", "in", "and", "or", "to",
         "give", "get", "what", "is", "are", "total", "average", "avg", "sum", "count",
         "all", "top", "per", "data", "report", "with", "over", "time", "numbers", "stats",
         "calculate", "calc", "find", "compute", "display", "plot", "list", "across", "between",
-        "analyze", "analysis"
+        "analyze", "analysis", "each", "every", "group", "grouped", "grouping", "compare",
+        "comparison", "versus", "vs", "breakdown", "split", "looks", "look", "like", "tell",
+        "explain", "describe", "see", "view", "chart", "graph"
     }
     unresolved: List[str] = []
     for tok in tokens:
+        tok_stems = _stem_word(tok)
         if (
             tok not in stopwords
             and tok not in granularity_keywords
             and tok not in vis_keywords
             and tok not in trend_kws
-            and not any(tok == c or tok.rstrip("s") == c.rstrip("s") for c in all_known_columns)
+            and not (tok_stems & all_known_columns)
         ):
             unresolved.append(tok)
 

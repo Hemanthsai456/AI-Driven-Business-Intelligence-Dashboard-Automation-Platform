@@ -316,3 +316,118 @@ def test_real_data_logistics_focused_delivery_time_by_destination():
     assert "destination" in hero_tile.dimensions
     assert "delivery_time" in hero_tile.metrics
     assert hero_tile.plan.metric.aggregation == AggregationType.AVG
+
+
+# ---------------------------------------------------------------------------
+# Pre-Step-4 Correction Pass Regression Tests (Issue 1 & Issue 2)
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_student_salary_offered_across_company_intent_preserved():
+    """Verify 'SalaryOffered_LPA across company' generates plan for SalaryOffered_LPA by Company,
+
+    and does NOT substitute unrelated fields like GraduationYear or EngineeringStream.
+    """
+    df = pd.DataFrame({
+        "Company": ["Google", "Meta", "Amazon", "Apple", "Netflix", "Microsoft"],
+        "SalaryOffered_LPA": [32.0, 35.0, 28.0, 30.0, 42.0, 31.0],
+        "Department": ["Eng", "Eng", "Product", "Design", "Eng", "Sales"],
+        "GraduationYear": [2022, 2023, 2021, 2020, 2023, 2022],
+        "EngineeringStream": ["CS", "CS", "EE", "ME", "CS", "IT"],
+    })
+    cols = [ColumnMetadata(c, c, str(df[c].dtype)) for c in df.columns]
+    meta = DatasetMetadata("ds-student", "Student_Placement.csv", "csv", len(df), len(cols), cols)
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+    sem_profile = analyze_semantics(canonical, profile)
+    readiness = assess_readiness(canonical, profile, sem_profile)
+
+    res = run_orchestration_pipeline(
+        intent="SalaryOffered_LPA across company",
+        dataset=canonical,
+        semantic_profile=sem_profile,
+        readiness=readiness,
+        data_profile=profile,
+        require_clarification=False,
+    )
+
+    assert res.status == "SUCCESS", f"Expected SUCCESS, got {res.status}: {res.message}"
+    assert res.dashboard_spec is not None
+    spec = res.dashboard_spec
+
+    # 1. Primary Hero Tile must preserve requested measure and dimension
+    hero_tile = next((t for t in spec.tiles if t.chart_type in ("bar", "horizontal_bar", "line")), None)
+    assert hero_tile is not None, "Missing primary Hero tile"
+    assert "SalaryOffered_LPA" in hero_tile.metrics, f"Hero tile must use SalaryOffered_LPA, got {hero_tile.metrics}"
+    assert "Company" in hero_tile.dimensions, f"Hero tile must group by Company, got {hero_tile.dimensions}"
+
+    # Explicitly ensure unrelated fields were NOT chosen
+    assert "GraduationYear" not in hero_tile.metrics
+    assert "GraduationYear" not in hero_tile.dimensions
+    assert "EngineeringStream" not in hero_tile.metrics
+    assert "EngineeringStream" not in hero_tile.dimensions
+
+    # 2. Contextual KPI tile must use SalaryOffered_LPA with AVG
+    kpi_tile = next((t for t in spec.tiles if t.chart_type == "kpi"), None)
+    assert kpi_tile is not None, "Missing contextual KPI tile"
+    assert "SalaryOffered_LPA" in kpi_tile.metrics
+    assert kpi_tile.plan.metric.aggregation == AggregationType.AVG
+
+
+@pytest.mark.parametrize(
+    "query,exp_metric,exp_dim",
+    [
+        ("salary by company", "Salary", "Company"),
+        ("revenue by region", "Revenue", "Region"),
+        ("marks by subject", "Marks", "Subject"),
+        ("temperature by device", "Temperature", "DeviceID"),
+        ("sales across departments", "Sales", "Department"),
+        ("average salary for each company", "Salary", "Company"),
+        ("compare salary across companies", "Salary", "Company"),
+        ("Show total revenue by region", "Revenue", "Region"),
+        ("sales grouped by department", "Sales", "Department"),
+    ],
+)
+def test_synthetic_group_by_phrasing_variations(query: str, exp_metric: str, exp_dim: str):
+    """Verify diverse natural language phrasing patterns converge to structured MEASURE BY DIMENSION."""
+    df = pd.DataFrame({
+        "Company": ["Google", "Meta", "Amazon", "Google", "Meta", "Amazon"],
+        "Department": ["Eng", "Sales", "Eng", "Sales", "Eng", "Sales"],
+        "Region": ["North", "South", "East", "West", "North", "South"],
+        "Subject": ["Math", "Physics", "Chem", "Math", "Physics", "Chem"],
+        "DeviceID": ["D1", "D2", "D3", "D1", "D2", "D3"],
+        "Salary": [120000.0, 130000.0, 110000.0, 125000.0, 135000.0, 115000.0],
+        "Revenue": [50000.0, 70000.0, 45000.0, 60000.0, 75000.0, 50000.0],
+        "Marks": [85.0, 90.0, 78.0, 88.0, 92.0, 80.0],
+        "Temperature": [22.4, 25.1, 19.8, 23.0, 24.5, 20.2],
+        "Sales": [15000.0, 8000.0, 12000.0, 16000.0, 8500.0, 12500.0],
+    })
+    cols = [ColumnMetadata(c, c, str(df[c].dtype)) for c in df.columns]
+    meta = DatasetMetadata("ds-phrasing", "phrasing.csv", "csv", len(df), len(cols), cols)
+    canonical = CanonicalDataset(meta, df)
+    profile = profile_dataset(canonical)
+    sem_profile = analyze_semantics(canonical, profile)
+    readiness = assess_readiness(canonical, profile, sem_profile)
+
+    res = run_orchestration_pipeline(
+        intent=query,
+        dataset=canonical,
+        semantic_profile=sem_profile,
+        readiness=readiness,
+        data_profile=profile,
+        require_clarification=False,
+    )
+
+    assert res.status == "SUCCESS", f"Failed on '{query}': {res.message}"
+    assert res.dashboard_spec is not None
+    spec = res.dashboard_spec
+
+    hero_tile = next((t for t in spec.tiles if t.chart_type in ("bar", "horizontal_bar", "line")), None)
+    assert hero_tile is not None, f"Missing hero tile for '{query}'"
+    assert exp_metric.lower() in [m.lower() for m in hero_tile.metrics], (
+        f"Wrong metric for '{query}': expected {exp_metric}, got {hero_tile.metrics}"
+    )
+    assert exp_dim.lower() in [d.lower() for d in hero_tile.dimensions], (
+        f"Wrong dimension for '{query}': expected {exp_dim}, got {hero_tile.dimensions}"
+    )
+

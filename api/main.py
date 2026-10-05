@@ -949,6 +949,7 @@ def query_dashboard_tile(
             status=cached_resp.status,
             row_count=cached_resp.row_count,
             data=cached_resp.data,
+            compiled_sql=cached_resp.compiled_sql,
             cached=True,
             message=cached_resp.message,
         )
@@ -980,7 +981,7 @@ def query_dashboard_tile(
         valid_columns = set(dataset.data.columns)
 
     # 5. Validate filters
-    ALLOWED_OPERATORS = {"=", "!=", "<>", "<", "<=", ">", ">=", "IN", "NOT IN", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"}
+    ALLOWED_OPERATORS = {"=", "!=", "<>", "<", "<=", ">", ">=", "BETWEEN", "IN", "NOT IN", "LIKE", "ILIKE", "IS NULL", "IS NOT NULL"}
     INJECTION_TOKENS = ["'", '"', ";", "--", "/*", "xp_", "exec ", "union ", "drop ", "delete "]
 
     for flt in req.filters:
@@ -1028,11 +1029,22 @@ def query_dashboard_tile(
     from engine.duckdb_executor import DuckDBExecutor
 
     base_plan = tile.plan or spec.winner.plan
-    new_filters = list(base_plan.filters or [])
+    # Replace any pre-existing base_plan filters on the same columns that client is filtering
+    req_filter_cols = {f.column.lower() for f in req.filters}
+    new_filters = [f for f in (base_plan.filters or []) if f.column.lower() not in req_filter_cols]
+
+    # Deduplicate client filters by column (keep latest if duplicate)
+    client_filters_by_col = {}
     for flt in req.filters:
+        client_filters_by_col[flt.column.lower()] = flt
+
+    for flt in client_filters_by_col.values():
+        op = flt.operator.strip().upper()
         val = flt.values if flt.values is not None else flt.value
-        if flt.operator.strip().upper() in ("=", "!=", "<>", "<", "<=", ">", ">=") and isinstance(val, (list, tuple)) and len(val) == 1:
+        if op in ("=", "!=", "<>", "<", "<=", ">", ">=") and isinstance(val, (list, tuple)) and len(val) == 1:
             val = val[0]
+        elif op == "BETWEEN" and isinstance(val, (list, tuple)) and len(val) >= 2:
+            val = [val[0], val[1]]
         new_filters.append(
             FilterSpec(
                 column=flt.column,
@@ -1052,12 +1064,18 @@ def query_dashboard_tile(
     result = executor.execute_plan(modified_plan, dataset, semantic_profile)
 
     rows = result.rows or []
-    if len(rows) < 1:
+    is_empty = len(rows) < 1 or (
+        len(rows) == 1
+        and not getattr(tile, "dimensions", None)
+        and all(v is None for v in rows[0].values())
+    )
+    if is_empty:
         resp = TileQueryResponse(
             tile_id=tile_id,
             status="INSUFFICIENT_DATA",
-            row_count=len(rows),
-            data=rows,
+            row_count=0,
+            data=[],
+            compiled_sql=result.compiled_sql,
             cached=False,
             message="Insufficient data after filtering (0 rows returned)",
         )   
@@ -1067,6 +1085,7 @@ def query_dashboard_tile(
             status="SUCCESS",
             row_count=len(rows),
             data=rows,
+            compiled_sql=result.compiled_sql,
             cached=False,
         )
 

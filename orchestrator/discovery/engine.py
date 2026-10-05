@@ -177,7 +177,28 @@ def classify_intent_mode(
             return "discovery", None
 
     # --- Structural signal detection ---
-    has_aggregation = any(sig in cleaned or sig in cleaned_no_punct for sig in _AGGREGATION_SIGNALS)
+    has_measure = False
+    tokens_set = set(re.findall(r"\b[a-z0-9_]+\b", cleaned.lower()))
+    if semantic_profile and hasattr(semantic_profile, "column_evidences"):
+        for col, ev in semantic_profile.column_evidences.items():
+            if ev.candidate_role == ColumnRole.MEASURE:
+                col_norm = col.lower().replace("_", " ").replace("-", " ")
+                col_words = set(re.findall(r"\b[a-z0-9]+\b", col_norm))
+                if (
+                    col.lower() in cleaned_no_punct
+                    or col_norm in cleaned_no_punct
+                    or (col_words and col_words.issubset(tokens_set))
+                ):
+                    has_measure = True
+                    break
+                for cw in col_words:
+                    if len(cw) >= 4 and cw in tokens_set:
+                        has_measure = True
+                        break
+                if has_measure:
+                    break
+
+    has_aggregation = any(sig in cleaned or sig in cleaned_no_punct for sig in _AGGREGATION_SIGNALS) or has_measure
     has_grouping = any(sig in cleaned for sig in _GROUPING_SIGNALS)
     has_filter = any(sig in cleaned for sig in _FILTER_SIGNALS)
     has_slice = has_grouping or has_filter

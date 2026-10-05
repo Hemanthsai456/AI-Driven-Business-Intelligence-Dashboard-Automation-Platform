@@ -129,6 +129,11 @@ def _compile_filter(filter_spec: Any) -> str:
     if op in ("LIKE", "ILIKE"):
         return f"{col} {op} {format_sql_literal(val)}"
 
+    if op == "BETWEEN":
+        if isinstance(val, (list, tuple)) and len(val) >= 2:
+            return f"{col} BETWEEN {format_sql_literal(val[0])} AND {format_sql_literal(val[1])}"
+        raise QueryCompilationError(f"BETWEEN filter requires a list/tuple of at least 2 values, got: {val}")
+
     raise QueryCompilationError(f"Unsupported or unsafe filter operator: {filter_spec.operator}")
 
 

@@ -190,7 +190,8 @@ export async function queryTile(
   data: Record<string, any>[];
   row_count: number;
   status: 'SUCCESS' | 'INSUFFICIENT_DATA';
-  filters_applied: any[];
+  compiled_sql?: string;
+  filters_applied?: any[];
 }> {
   const res = await fetch(`${API_BASE}/dashboard/${specId}/tile/${tileId}/query`, {
     method: 'POST',

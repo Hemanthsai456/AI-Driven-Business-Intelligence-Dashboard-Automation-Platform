@@ -251,7 +251,9 @@ class TileQueryResponse(BaseModel):
     status: str = "SUCCESS"  # "SUCCESS" | "INSUFFICIENT_DATA"
     row_count: int
     data: List[Dict[str, Any]]
+    compiled_sql: Optional[str] = None
     cached: bool = False
     message: Optional[str] = None
+
 
 
