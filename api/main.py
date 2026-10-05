@@ -9,6 +9,7 @@ load_dotenv()
 print(f"[STARTUP] Environment loaded. GEMINI_API_KEY present: {'GEMINI_API_KEY' in os.environ}, GROQ_API_KEY present: {'GROQ_API_KEY' in os.environ}")
 
 import pandas as pd
+from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -1091,6 +1092,170 @@ def query_dashboard_tile(
 
     tile_query_cache[cache_key] = resp
     return resp
+
+
+class AnalyticalQueryRequest(BaseModel):
+    """Payload for natural language analytical query execution."""
+
+    dataset_id: str
+    question: str
+    row_limit: Optional[int] = None
+
+
+class AnalyticalQueryResponse(BaseModel):
+    """Structured response for natural language analytical query."""
+
+    status: str
+    question: str
+    compiled_sql: Optional[str] = None
+    data: List[Dict[str, Any]] = Field(default_factory=list)
+    columns: List[str] = Field(default_factory=list)
+    row_count: int = 0
+    validation_status: str = "PASSED"
+    validation_issues: List[Dict[str, Any]] = Field(default_factory=list)
+    ambiguity_status: str = "CLEAR"
+    ambiguity_details: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: float = 1.0
+    evidence: List[str] = Field(default_factory=list)
+    plan: Optional[Dict[str, Any]] = None
+    structured_intent: Optional[Dict[str, Any]] = None
+    runtime_seconds: float = 0.0
+    message: Optional[str] = None
+
+
+@app.post(
+    "/api/query",
+    response_model=AnalyticalQueryResponse,
+    summary="Execute a generalized natural-language analytical query",
+)
+@app.post(
+    "/api/analytical-query",
+    response_model=AnalyticalQueryResponse,
+    summary="Execute a generalized natural-language analytical query (alias)",
+)
+def handle_analytical_query(req: AnalyticalQueryRequest):
+    """Execute arbitrary natural-language analytical query with SQL provenance."""
+    dataset = dataset_store.get(req.dataset_id)
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{req.dataset_id}' not found in active session",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+    semantic_profile = semantic_profile_store.get(req.dataset_id)
+    if not semantic_profile:
+        from intelligence.semantic_analyzer import analyze_semantics
+        semantic_profile = analyze_semantics(dataset)
+        semantic_profile_store[req.dataset_id] = semantic_profile
+
+    from orchestrator.query_engine import execute_analytical_query
+    from orchestrator.schemas import AmbiguityStatus
+
+    res = execute_analytical_query(
+        question=req.question,
+        dataset=dataset,
+        semantic_profile=semantic_profile,
+        row_limit=req.row_limit,
+    )
+
+    is_success = res.validation_status in ("PASSED", "WARNING") and res.ambiguity_status == AmbiguityStatus.CLEAR
+    return AnalyticalQueryResponse(
+        status="SUCCESS" if is_success else "FAILED",
+        question=res.question,
+        compiled_sql=res.compiled_sql,
+        data=res.rows,
+        columns=res.columns,
+        row_count=res.row_count,
+        validation_status=res.validation_status,
+        validation_issues=[i.model_dump() for i in res.validation_issues],
+        ambiguity_status=res.ambiguity_status.value if hasattr(res.ambiguity_status, "value") else str(res.ambiguity_status),
+        ambiguity_details=[a.model_dump() for a in res.ambiguity_details],
+        confidence=res.confidence,
+        evidence=res.evidence,
+        plan=res.plan.model_dump() if res.plan else None,
+        structured_intent=res.structured_intent.model_dump() if res.structured_intent else None,
+        runtime_seconds=res.runtime_seconds,
+        message=res.error_message,
+    )
+
+
+class DiscoverInsightsRequest(BaseModel):
+    """Payload for evidence-grounded insight generation."""
+
+    dataset_id: str
+    max_insights: Optional[int] = 8
+    use_llm: Optional[bool] = True
+
+
+class DiscoverInsightsResponse(BaseModel):
+    """Structured response for evidence-grounded insights."""
+
+    status: str
+    dataset_id: str
+    insights: List[Dict[str, Any]] = Field(default_factory=list)
+    rejections: List[Dict[str, Any]] = Field(default_factory=list)
+    total_candidates_generated: int = 0
+    total_candidates_executed: int = 0
+    total_insights_validated: int = 0
+    total_insights_selected: int = 0
+    runtime_seconds: float = 0.0
+    summary_notice: Optional[str] = None
+
+
+@app.post(
+    "/api/insights",
+    response_model=DiscoverInsightsResponse,
+    summary="Generate evidence-grounded AI insights for a dataset",
+)
+@app.post(
+    "/api/discover-insights",
+    response_model=DiscoverInsightsResponse,
+    summary="Generate evidence-grounded AI insights for a dataset (alias)",
+)
+def handle_discover_insights(req: DiscoverInsightsRequest):
+    """Generate deterministic, evidence-grounded insights with full DuckDB provenance."""
+    dataset = dataset_store.get(req.dataset_id)
+    if not dataset:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{req.dataset_id}' not found in active session",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+    semantic_profile = semantic_profile_store.get(req.dataset_id)
+    if not semantic_profile:
+        from intelligence.semantic_analyzer import analyze_semantics
+        semantic_profile = analyze_semantics(dataset)
+        semantic_profile_store[req.dataset_id] = semantic_profile
+
+    from orchestrator.insights import generate_grounded_insights
+
+    res = generate_grounded_insights(
+        dataset=dataset,
+        semantic_profile=semantic_profile,
+        max_insights=req.max_insights or 8,
+        use_llm=req.use_llm if req.use_llm is not None else True,
+    )
+
+    return DiscoverInsightsResponse(
+        status="SUCCESS",
+        dataset_id=res.dataset_id,
+        insights=[i.model_dump() for i in res.insights],
+        rejections=[r.model_dump() for r in res.rejections],
+        total_candidates_generated=res.total_candidates_generated,
+        total_candidates_executed=res.total_candidates_executed,
+        total_insights_validated=res.total_insights_validated,
+        total_insights_selected=res.total_insights_selected,
+        runtime_seconds=res.runtime_seconds,
+        summary_notice=res.summary_notice,
+    )
 
 
 @app.exception_handler(HTTPException)

@@ -116,15 +116,16 @@ def assess_ambiguity(
                 )
             )
         elif (tokens & {"top", "best", "worst", "highest", "lowest"}) and not any(re.search(r"\b\d+\b", raw_intent) for _ in [0]):
-            ambiguities.append(
-                AmbiguityDetail(
-                    type=AmbiguityType.SCOPE,
-                    field="ranking_scope",
-                    alternatives=measures if measures else dimensions,
-                    is_blocking=True,
-                    category="scope",
+            if not structured.requested_metrics and not structured.requested_dimensions:
+                ambiguities.append(
+                    AmbiguityDetail(
+                        type=AmbiguityType.SCOPE,
+                        field="ranking_scope",
+                        alternatives=measures if measures else dimensions,
+                        is_blocking=True,
+                        category="scope",
+                    )
                 )
-            )
 
     # Check 4: Granularity Ambiguity (trend or time-series requested without explicit frequency)
     if (tokens & {"trend", "timeline", "history"}) or ("over" in tokens and "time" in tokens):

@@ -72,6 +72,7 @@ _AGGREGATION_SIGNALS: Set[str] = {
     "sum", "total", "count", "number of", "average", "avg", "mean", "median",
     "max", "maximum", "min", "minimum", "calculate", "compute", "how much",
     "how many", "percentage", "percent", "ratio", "rate", "proportion",
+    "kpi", "kpis", "metric", "metrics", "measure", "measures", "numbers",
     # Analytical dimensional nouns that imply a grouped computation
     "distribution", "trend", "trends", "breakdown", "correlation", "variance",
     # Implicit measure-retrieval phrases: "show me what X is by Y" = "retrieve X by Y"
@@ -109,7 +110,7 @@ _FILTER_SIGNALS: Set[str] = {
 
 _STRONG_DISCOVERY_ANCHORS: Set[str] = {
     # Overview / summary vocabulary -- cannot precede a slice operation
-    "overview", "summarize", "summary", "exploration",
+    "overview", "summarize", "data summary", "dataset summary", "overall summary", "exploration",
     "key insight", "important insight", "useful trend",
     "what should i know", "should i know", "what matters",
     "most important things", "most important",

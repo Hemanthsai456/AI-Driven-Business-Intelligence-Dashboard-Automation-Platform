@@ -184,11 +184,26 @@ def compile_plan_to_sql(
 
     # ORDER BY
     order_clause = ""
-    if group_indices:
-        order_clause = f"\nORDER BY 1 ASC"
+    order_dir = (getattr(plan, "order_direction", None) or "ASC").strip().upper()
+    if order_dir not in ("ASC", "DESC"):
+        order_dir = "ASC"
+
+    order_target = getattr(plan, "order_by", None)
+    metric_idx = len(plan.dimensions) + 1
+
+    if order_target == "metric" or (getattr(plan, "order_direction", None) and order_target != "dimension"):
+        order_clause = f"\nORDER BY {metric_idx} {order_dir}"
+    elif group_indices:
+        order_clause = f"\nORDER BY 1 {order_dir}"
 
     # LIMIT
-    effective_limit = row_limit if row_limit is not None else (DEFAULT_ROW_LIMIT + 1)
+    plan_limit = getattr(plan, "limit", None)
+    if plan_limit is not None and plan_limit > 0:
+        effective_limit = plan_limit
+    elif row_limit is not None:
+        effective_limit = row_limit
+    else:
+        effective_limit = DEFAULT_ROW_LIMIT + 1
     limit_clause = f"\nLIMIT {int(effective_limit)}"
 
     sql = f"{select_clause}\n{from_clause}{where_clause}{group_clause}{order_clause}{limit_clause};"
