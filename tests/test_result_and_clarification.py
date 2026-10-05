@@ -3,9 +3,10 @@ import sys
 sys.stdout.reconfigure(line_buffering=True)
 import json
 from playwright.sync_api import sync_playwright
+from pathlib import Path
 
-ARTIFACT_DIR = r"C:\Users\GANDL\.gemini\antigravity-ide\brain\5a549c02-a7be-4339-8e22-e1de197d3206"
-os.makedirs(ARTIFACT_DIR, exist_ok=True)
+ARTIFACT_DIR = Path(__file__).resolve().parent.parent / "artifacts"
+ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 MOCK_HEADERS = {
     "Access-Control-Allow-Origin": "*",

@@ -37,7 +37,8 @@ class GeminiClient(LLMClient):
 
         try:
             from google import genai
-            self._client = genai.Client(api_key=self.api_key)
+            from google.genai import types
+            self._client = genai.Client(api_key=self.api_key, http_options=types.HttpOptions(timeout=10000))
         except Exception as e:
             raise LLMClientError(f"Failed to initialize google-genai Client: {str(e)}")
 

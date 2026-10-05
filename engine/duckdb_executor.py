@@ -94,7 +94,7 @@ class DuckDBExecutor:
 
                 # Check if classified as DATETIME and stored as string/object in pandas
                 is_datetime_role = ev is not None and ev.candidate_role == ColumnRole.DATETIME
-                is_string_dtype = not pd.api.types.is_datetime64_any_dtype(df[col])
+                is_string_dtype = pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])
 
                 if is_datetime_role and is_string_dtype:
                     # TRY_CAST in view

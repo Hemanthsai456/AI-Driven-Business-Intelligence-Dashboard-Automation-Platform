@@ -215,6 +215,18 @@ class CandidatePlan(BaseModel):
     )
     supporting_count: int = Field(default=1)
     providers_responded: int = Field(default=1)
+    order_by: Optional[str] = Field(
+        default=None,
+        description="Optional ordering column or 'metric' / 'dimension'.",
+    )
+    order_direction: Optional[str] = Field(
+        default=None,
+        description="Optional ordering direction ('ASC' or 'DESC').",
+    )
+    limit: Optional[int] = Field(
+        default=None,
+        description="Optional row limit (e.g. for Top-N or Bottom-N queries).",
+    )
     reasoning: PlanReasoning = Field(description="LLM interpretation and evidence.")
 
     model_config = {"frozen": True}
@@ -312,7 +324,7 @@ class StructuredIntent(BaseModel):
     original_request: str
     analytical_goal: Optional[str] = Field(
         default=None,
-        description="High-level analytical goal (e.g. 'aggregation', 'trend', 'distribution', 'comparison').",
+        description="High-level analytical goal (e.g. 'aggregation', 'trend', 'distribution', 'comparison', 'ranking').",
     )
     requested_metrics: List[str] = Field(
         default_factory=list,
@@ -342,6 +354,22 @@ class StructuredIntent(BaseModel):
         default_factory=list,
         description="Filter constraints identified from intent.",
     )
+    detected_filter_specs: List[FilterSpec] = Field(
+        default_factory=list,
+        description="Validated FilterSpec objects parsed from intent.",
+    )
+    order_by: Optional[str] = Field(
+        default=None,
+        description="Ordering target ('metric' or column name).",
+    )
+    order_direction: Optional[str] = Field(
+        default=None,
+        description="Ordering direction ('ASC' or 'DESC').",
+    )
+    limit: Optional[int] = Field(
+        default=None,
+        description="Row limit for Top-N or ranking queries.",
+    )
     unresolved_terms: List[str] = Field(
         default_factory=list,
         description="Terms from request that could not be mapped to semantic columns.",
@@ -367,6 +395,9 @@ class SemanticInterpretation(BaseModel):
     dimension_columns: List[str] = Field(default_factory=list)
     granularity: Optional[Granularity] = Field(default=None)
     filter_specs: List[FilterSpec] = Field(default_factory=list)
+    order_by: Optional[str] = Field(default=None)
+    order_direction: Optional[str] = Field(default=None)
+    limit: Optional[int] = Field(default=None)
     visualization: VisualizationType = Field(default=VisualizationType.TABLE)
     resolved_intent_elements: Dict[str, Any] = Field(default_factory=dict)
     referenced_columns: List[str] = Field(default_factory=list)
@@ -374,6 +405,28 @@ class SemanticInterpretation(BaseModel):
     unresolved_elements: List[str] = Field(default_factory=list)
     evidence: List[str] = Field(default_factory=list)
     confidence: float = Field(default=1.0)
+
+    model_config = {"frozen": True}
+
+
+class AnalyticalQueryResult(BaseModel):
+    """Complete execution result contract for arbitrary natural language analytical queries."""
+
+    question: str
+    plan: Optional[CandidatePlan] = None
+    structured_intent: Optional[StructuredIntent] = None
+    compiled_sql: Optional[str] = None
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+    columns: List[str] = Field(default_factory=list)
+    row_count: int = Field(default=0)
+    validation_status: str = Field(default="PASSED")
+    validation_issues: List[ValidationIssue] = Field(default_factory=list)
+    ambiguity_status: AmbiguityStatus = Field(default=AmbiguityStatus.CLEAR)
+    ambiguity_details: List[AmbiguityDetail] = Field(default_factory=list)
+    confidence: float = Field(default=1.0)
+    evidence: List[str] = Field(default_factory=list)
+    runtime_seconds: float = Field(default=0.0)
+    error_message: Optional[str] = None
 
     model_config = {"frozen": True}
 

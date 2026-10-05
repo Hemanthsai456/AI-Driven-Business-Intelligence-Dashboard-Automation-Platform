@@ -179,11 +179,16 @@ def enumerate_candidate_insights(
             params=params or {},
         )
 
-    # 1. TOTAL_KPI (chosen by measure semantics: AVG for rates/prices/ratios, SUM for amounts/totals)
-    avg_tokens = {"price", "unitprice", "rate", "pct", "percentage", "ratio", "score", "margin", "discount", "rating", "age"}
+    # Helper to determine preferred aggregation from semantic evidence
+    def _get_preferred_measure_agg(measure_col: str) -> AggregationType:
+        ev = semantic_profile.get_evidence(measure_col) if semantic_profile else None
+        if ev and ev.aggregation_default == "AVG":
+            return AggregationType.AVG
+        return AggregationType.SUM
+
+    # 1. TOTAL_KPI (chosen by measure semantics: AVG for intensive/rates/durations/scores, SUM for additive amounts)
     for m in eligible_measures:
-        m_lower = m.lower().replace("_", "")
-        preferred_agg = AggregationType.AVG if any(t in m_lower for t in avg_tokens) else AggregationType.SUM
+        preferred_agg = _get_preferred_measure_agg(m)
         candidates_by_type[InsightType.TOTAL_KPI].append(
             _create_candidate(
                 InsightType.TOTAL_KPI,
@@ -195,6 +200,7 @@ def enumerate_candidate_insights(
 
     # 2. RANKING (Top and Bottom groups: k >= 3)
     for m in eligible_measures:
+        preferred_agg = _get_preferred_measure_agg(m)
         for d in eligible_dimensions:
             d_card = df[d].nunique(dropna=True)
             if d_card >= 3:
@@ -203,7 +209,7 @@ def enumerate_candidate_insights(
                         InsightType.RANKING,
                         measure=m,
                         dim=d,
-                        agg=AggregationType.SUM,
+                        agg=preferred_agg,
                         vis=VisualizationType.BAR,
                         params={"ranking_mode": "top_bottom"},
                     )
@@ -260,12 +266,13 @@ def enumerate_candidate_insights(
         for dt_col in eligible_datetimes:
             gran = _infer_granularity(df[dt_col])
             for m in eligible_measures:
+                preferred_agg = _get_preferred_measure_agg(m)
                 candidates_by_type[InsightType.TREND].append(
                     _create_candidate(
                         InsightType.TREND,
                         measure=m,
                         dim=dt_col,
-                        agg=AggregationType.SUM,
+                        agg=preferred_agg,
                         granularity=gran,
                         vis=VisualizationType.LINE,
                         params={"time_column": dt_col, "granularity": gran.value},
@@ -277,12 +284,13 @@ def enumerate_candidate_insights(
         for dt_col in eligible_datetimes:
             gran = _infer_granularity(df[dt_col])
             for m in eligible_measures:
+                preferred_agg = _get_preferred_measure_agg(m)
                 candidates_by_type[InsightType.PERIOD_CHANGE].append(
                     _create_candidate(
                         InsightType.PERIOD_CHANGE,
                         measure=m,
                         dim=dt_col,
-                        agg=AggregationType.SUM,
+                        agg=preferred_agg,
                         granularity=gran,
                         vis=VisualizationType.LINE,
                         params={"time_column": dt_col, "granularity": gran.value, "comparison": "period_over_period"},

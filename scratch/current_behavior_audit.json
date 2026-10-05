@@ -1,0 +1,986 @@
+{
+  "upload_metadata": {
+    "healthcare": {
+      "dataset_id": "ds_tmpol9q0yri_519a45_cleaned",
+      "filename": "healthcare.csv",
+      "source_type": "csv",
+      "row_count": 1000,
+      "column_count": 5,
+      "columns": [
+        {
+          "original_name": "admission_date",
+          "normalized_name": "admission_date",
+          "detected_datatype": "datetime64[ns]",
+          "semantic_role": "DATETIME",
+          "null_count": 1,
+          "null_percentage": 0.1,
+          "distinct_count": 547,
+          "is_unique": false,
+          "sample_values": [
+            "2024-01-12T00:00:00",
+            "2025-05-13T00:00:00",
+            "2025-03-09T00:00:00",
+            "2024-02-09T00:00:00",
+            "2025-10-26T00:00:00"
+          ]
+        },
+        {
+          "original_name": "hospital",
+          "normalized_name": "hospital",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 7,
+          "is_unique": false,
+          "sample_values": [
+            "KIMS",
+            "Aig",
+            "Aig",
+            "Apollo",
+            "Apollo"
+          ]
+        },
+        {
+          "original_name": "diagnosis",
+          "normalized_name": "diagnosis",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 11,
+          "is_unique": false,
+          "sample_values": [
+            "Hypertension",
+            "Cardiac Disease",
+            "Appendicitis",
+            "Hypertension",
+            "Stroke"
+          ]
+        },
+        {
+          "original_name": "severity",
+          "normalized_name": "severity",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 5,
+          "is_unique": false,
+          "sample_values": [
+            "Medium",
+            "Medium",
+            "Medium",
+            "Medium",
+            "Medium"
+          ]
+        },
+        {
+          "original_name": "length_of_stay",
+          "normalized_name": "length_of_stay",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 25,
+          "is_unique": false,
+          "sample_values": [
+            12.0,
+            2.0,
+            6.0,
+            7.0,
+            8.0
+          ]
+        }
+      ],
+      "dtypes": {
+        "admission_date": "datetime64[ns]",
+        "hospital": "object",
+        "diagnosis": "object",
+        "severity": "object",
+        "length_of_stay": "float64"
+      },
+      "ingestion_status": "SUCCESS",
+      "ingestion_errors": []
+    },
+    "education": {
+      "dataset_id": "ds_tmpdr94u2h2_2274ed_cleaned",
+      "filename": "education.csv",
+      "source_type": "csv",
+      "row_count": 1200,
+      "column_count": 5,
+      "columns": [
+        {
+          "original_name": "student_id",
+          "normalized_name": "student_id",
+          "detected_datatype": "object",
+          "semantic_role": "IDENTIFIER",
+          "null_count": 1,
+          "null_percentage": 0.0833,
+          "distinct_count": 451,
+          "is_unique": false,
+          "sample_values": [
+            "STU10231",
+            "STU10426",
+            "STU10156",
+            "STU10062",
+            "STU10014"
+          ]
+        },
+        {
+          "original_name": "department",
+          "normalized_name": "department",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 7,
+          "is_unique": false,
+          "sample_values": [
+            "MECH",
+            "Ece",
+            "Ece",
+            "Aids",
+            "Civil"
+          ]
+        },
+        {
+          "original_name": "subject",
+          "normalized_name": "subject",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 8,
+          "is_unique": false,
+          "sample_values": [
+            "Python",
+            "Mathematics",
+            "Computer Networks",
+            "Statistics",
+            "Computer Networks"
+          ]
+        },
+        {
+          "original_name": "marks",
+          "normalized_name": "marks",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 71,
+          "is_unique": false,
+          "sample_values": [
+            84.0,
+            98.0,
+            52.0,
+            63.0,
+            95.0
+          ]
+        },
+        {
+          "original_name": "exam_date",
+          "normalized_name": "exam_date",
+          "detected_datatype": "datetime64[ns]",
+          "semantic_role": "DATETIME",
+          "null_count": 4,
+          "null_percentage": 0.3333,
+          "distinct_count": 578,
+          "is_unique": false,
+          "sample_values": [
+            "2024-09-08T00:00:00",
+            "2025-10-08T00:00:00",
+            "2024-09-27T00:00:00",
+            "2024-09-01T00:00:00",
+            "2024-02-24T00:00:00"
+          ]
+        }
+      ],
+      "dtypes": {
+        "student_id": "object",
+        "department": "object",
+        "subject": "object",
+        "marks": "float64",
+        "exam_date": "datetime64[ns]"
+      },
+      "ingestion_status": "SUCCESS",
+      "ingestion_errors": []
+    },
+    "iot": {
+      "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+      "filename": "iot.csv",
+      "source_type": "csv",
+      "row_count": 2000,
+      "column_count": 5,
+      "columns": [
+        {
+          "original_name": "timestamp",
+          "normalized_name": "timestamp",
+          "detected_datatype": "datetime64[ns]",
+          "semantic_role": "DATETIME",
+          "null_count": 3,
+          "null_percentage": 0.15,
+          "distinct_count": 1996,
+          "is_unique": false,
+          "sample_values": [
+            "2025-01-01T00:00:00",
+            "2025-01-01T00:15:00",
+            "2025-01-01T00:30:00",
+            "2025-01-01T00:45:00",
+            "2025-01-01T01:00:00"
+          ]
+        },
+        {
+          "original_name": "device",
+          "normalized_name": "device",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 6,
+          "is_unique": false,
+          "sample_values": [
+            "Sensor-B",
+            "Sensor-A",
+            "Sensor-A",
+            "Sensor-A",
+            "Sensor-D"
+          ]
+        },
+        {
+          "original_name": "temperature",
+          "normalized_name": "temperature",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 1106,
+          "is_unique": false,
+          "sample_values": [
+            23.53,
+            27.83,
+            27.79,
+            24.0,
+            25.86
+          ]
+        },
+        {
+          "original_name": "pressure",
+          "normalized_name": "pressure",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 1729,
+          "is_unique": false,
+          "sample_values": [
+            1013.11,
+            1026.89,
+            1012.35,
+            1036.64,
+            1019.68
+          ]
+        },
+        {
+          "original_name": "status",
+          "normalized_name": "status",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 4,
+          "is_unique": false,
+          "sample_values": [
+            "Normal",
+            "Normal",
+            "Normal",
+            "Normal",
+            "Normal"
+          ]
+        }
+      ],
+      "dtypes": {
+        "timestamp": "datetime64[ns]",
+        "device": "object",
+        "temperature": "float64",
+        "pressure": "float64",
+        "status": "object"
+      },
+      "ingestion_status": "SUCCESS",
+      "ingestion_errors": []
+    },
+    "hr": {
+      "dataset_id": "ds_tmpxgb5aosk_85d984_cleaned",
+      "filename": "hr.csv",
+      "source_type": "csv",
+      "row_count": 1000,
+      "column_count": 5,
+      "columns": [
+        {
+          "original_name": "employee_id",
+          "normalized_name": "employee_id",
+          "detected_datatype": "object",
+          "semantic_role": "IDENTIFIER",
+          "null_count": 1,
+          "null_percentage": 0.1,
+          "distinct_count": 999,
+          "is_unique": true,
+          "sample_values": [
+            "EMP10001",
+            "EMP10002",
+            "EMP10003",
+            "EMP10004",
+            "EMP10005"
+          ]
+        },
+        {
+          "original_name": "department",
+          "normalized_name": "department",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 9,
+          "is_unique": false,
+          "sample_values": [
+            "HR",
+            "Engineering",
+            "Marketing",
+            "HR",
+            "HR"
+          ]
+        },
+        {
+          "original_name": "salary",
+          "normalized_name": "salary",
+          "detected_datatype": "float64",
+          "semantic_role": "IDENTIFIER",
+          "null_count": 3,
+          "null_percentage": 0.3,
+          "distinct_count": 991,
+          "is_unique": false,
+          "sample_values": [
+            127640.0,
+            178613.0,
+            201270.0,
+            44920.0,
+            101537.0
+          ]
+        },
+        {
+          "original_name": "joining_date",
+          "normalized_name": "joining_date",
+          "detected_datatype": "object",
+          "semantic_role": "DATETIME",
+          "null_count": 3,
+          "null_percentage": 0.3,
+          "distinct_count": 837,
+          "is_unique": false,
+          "sample_values": [
+            "2024-08-12",
+            "2025-11-06",
+            "2019-02-17",
+            "2024-09-24",
+            "2023-09-17"
+          ]
+        },
+        {
+          "original_name": "performance_score",
+          "normalized_name": "performance_score",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 448,
+          "is_unique": false,
+          "sample_values": [
+            5.23,
+            6.82,
+            7.48,
+            7.08,
+            5.98
+          ]
+        }
+      ],
+      "dtypes": {
+        "employee_id": "object",
+        "department": "object",
+        "salary": "float64",
+        "joining_date": "object",
+        "performance_score": "float64"
+      },
+      "ingestion_status": "SUCCESS",
+      "ingestion_errors": []
+    },
+    "logistics": {
+      "dataset_id": "ds_tmp3q1mq4ut_8c2729_cleaned",
+      "filename": "logistics.csv",
+      "source_type": "csv",
+      "row_count": 1001,
+      "column_count": 5,
+      "columns": [
+        {
+          "original_name": "shipment_id",
+          "normalized_name": "shipment_id",
+          "detected_datatype": "object",
+          "semantic_role": "IDENTIFIER",
+          "null_count": 1,
+          "null_percentage": 0.0999,
+          "distinct_count": 999,
+          "is_unique": false,
+          "sample_values": [
+            "SHP10001",
+            "SHP10002",
+            "SHP10003",
+            "SHP10004",
+            "SHP10005"
+          ]
+        },
+        {
+          "original_name": "destination",
+          "normalized_name": "destination",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 11,
+          "is_unique": false,
+          "sample_values": [
+            "Delhi",
+            "Hyderabad",
+            "Ahmedabad",
+            "Mumbai",
+            "Delhi"
+          ]
+        },
+        {
+          "original_name": "delivery_time",
+          "normalized_name": "delivery_time",
+          "detected_datatype": "float64",
+          "semantic_role": "MEASURE",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 92,
+          "is_unique": false,
+          "sample_values": [
+            3.4,
+            2.0,
+            2.1,
+            0.5,
+            0.8
+          ]
+        },
+        {
+          "original_name": "shipment_date",
+          "normalized_name": "shipment_date",
+          "detected_datatype": "datetime64[ns]",
+          "semantic_role": "DATETIME",
+          "null_count": 3,
+          "null_percentage": 0.2997,
+          "distinct_count": 336,
+          "is_unique": false,
+          "sample_values": [
+            "2025-07-21T00:00:00",
+            "2025-06-13T00:00:00",
+            "2025-10-21T00:00:00",
+            "2025-07-21T00:00:00",
+            "2025-02-27T00:00:00"
+          ]
+        },
+        {
+          "original_name": "status",
+          "normalized_name": "status",
+          "detected_datatype": "object",
+          "semantic_role": "DIMENSION",
+          "null_count": 0,
+          "null_percentage": 0.0,
+          "distinct_count": 5,
+          "is_unique": false,
+          "sample_values": [
+            "Delivered",
+            "Delivered",
+            "Delivered",
+            "Delivered",
+            "Delivered"
+          ]
+        }
+      ],
+      "dtypes": {
+        "shipment_id": "object",
+        "destination": "object",
+        "delivery_time": "float64",
+        "shipment_date": "datetime64[ns]",
+        "status": "object"
+      },
+      "ingestion_status": "SUCCESS",
+      "ingestion_errors": []
+    }
+  },
+  "semantic_profiles": {
+    "healthcare": {
+      "dataset_id": "ds_tmpol9q0yri_519a45_cleaned",
+      "generated_at": "2026-10-04T12:48:11.991336+00:00",
+      "column_evidences": {
+        "admission_date": {
+          "column_name": "admission_date",
+          "candidate_role": "DATETIME",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 547/999 (54.75%)",
+            "uniqueness: non-unique (547 distinct)",
+            "null ratio: 0.1% (1/1000 missing values)",
+            "native pandas datetime dtype (datetime64[ns])",
+            "column name contains date token: 'admission_date'"
+          ]
+        },
+        "hospital": {
+          "column_name": "hospital",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 7/1000 (0.70%)",
+            "uniqueness: non-unique (7 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 7 out of 1000 rows"
+          ]
+        },
+        "diagnosis": {
+          "column_name": "diagnosis",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 11/1000 (1.10%)",
+            "uniqueness: non-unique (11 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 11 out of 1000 rows"
+          ]
+        },
+        "severity": {
+          "column_name": "severity",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 5/1000 (0.50%)",
+            "uniqueness: non-unique (5 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 5 out of 1000 rows"
+          ]
+        },
+        "length_of_stay": {
+          "column_name": "length_of_stay",
+          "candidate_role": "MEASURE",
+          "confidence": 0.92,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 25/1000 (2.50%)",
+            "uniqueness: non-unique (25 distinct)",
+            "numeric datatype (float64)",
+            "distinct count: 25",
+            "non-unique numeric distribution",
+            "measure naming indicator: 'length_of_stay'"
+          ]
+        }
+      }
+    },
+    "education": {
+      "dataset_id": "ds_tmpdr94u2h2_2274ed_cleaned",
+      "generated_at": "2026-10-04T12:48:14.156696+00:00",
+      "column_evidences": {
+        "student_id": {
+          "column_name": "student_id",
+          "candidate_role": "IDENTIFIER",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 451/1199 (37.61%)",
+            "uniqueness: non-unique (451 distinct)",
+            "null ratio: 0.1% (1/1200 missing values)",
+            "identifier naming pattern ('student_id')",
+            "distinct count: 451",
+            "foreign key sub-role: repeated identifier values (cardinality ratio 37.61% < 90%)"
+          ]
+        },
+        "department": {
+          "column_name": "department",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 7/1200 (0.58%)",
+            "uniqueness: non-unique (7 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 7 out of 1200 rows",
+            "dimension naming pattern ('department')"
+          ]
+        },
+        "subject": {
+          "column_name": "subject",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 8/1200 (0.67%)",
+            "uniqueness: non-unique (8 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 8 out of 1200 rows"
+          ]
+        },
+        "marks": {
+          "column_name": "marks",
+          "candidate_role": "MEASURE",
+          "confidence": 0.82,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 71/1200 (5.92%)",
+            "uniqueness: non-unique (71 distinct)",
+            "numeric datatype (float64)",
+            "distinct count: 71",
+            "non-unique numeric distribution"
+          ]
+        },
+        "exam_date": {
+          "column_name": "exam_date",
+          "candidate_role": "DATETIME",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 578/1196 (48.33%)",
+            "uniqueness: non-unique (578 distinct)",
+            "null ratio: 0.3% (4/1200 missing values)",
+            "native pandas datetime dtype (datetime64[ns])",
+            "column name contains date token: 'exam_date'"
+          ]
+        }
+      }
+    },
+    "iot": {
+      "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+      "generated_at": "2026-10-04T12:48:16.283229+00:00",
+      "column_evidences": {
+        "timestamp": {
+          "column_name": "timestamp",
+          "candidate_role": "DATETIME",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 1996/1997 (99.95%)",
+            "uniqueness: non-unique (1996 distinct)",
+            "null ratio: 0.1% (3/2000 missing values)",
+            "native pandas datetime dtype (datetime64[ns])",
+            "column name contains date token: 'timestamp'"
+          ]
+        },
+        "device": {
+          "column_name": "device",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 6/2000 (0.30%)",
+            "uniqueness: non-unique (6 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 6 out of 2000 rows"
+          ]
+        },
+        "temperature": {
+          "column_name": "temperature",
+          "candidate_role": "MEASURE",
+          "confidence": 0.85,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 1106/2000 (55.30%)",
+            "uniqueness: non-unique (1106 distinct)",
+            "continuous floating-point numeric distribution (distinct: 1106, min: -20.0, max: 75.0)"
+          ]
+        },
+        "pressure": {
+          "column_name": "pressure",
+          "candidate_role": "MEASURE",
+          "confidence": 0.85,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 1729/2000 (86.45%)",
+            "uniqueness: non-unique (1729 distinct)",
+            "continuous floating-point numeric distribution (distinct: 1729, min: 850.0, max: 1069.1)"
+          ]
+        },
+        "status": {
+          "column_name": "status",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 4/2000 (0.20%)",
+            "uniqueness: non-unique (4 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 4 out of 2000 rows",
+            "dimension naming pattern ('status')"
+          ]
+        }
+      }
+    },
+    "hr": {
+      "dataset_id": "ds_tmpxgb5aosk_85d984_cleaned",
+      "generated_at": "2026-10-04T12:48:18.442949+00:00",
+      "column_evidences": {
+        "employee_id": {
+          "column_name": "employee_id",
+          "candidate_role": "IDENTIFIER",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 999/999 (100.00%)",
+            "uniqueness: unique (100%)",
+            "null ratio: 0.1% (1/1000 missing values)",
+            "high uniqueness ratio (999/999 = 1.00)",
+            "identifier naming pattern ('employee_id')"
+          ]
+        },
+        "department": {
+          "column_name": "department",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 9/1000 (0.90%)",
+            "uniqueness: non-unique (9 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 9 out of 1000 rows",
+            "dimension naming pattern ('department')"
+          ]
+        },
+        "salary": {
+          "column_name": "salary",
+          "candidate_role": "IDENTIFIER",
+          "confidence": 0.75,
+          "confidence_level": "MEDIUM",
+          "evidence": [
+            "cardinality ratio: 991/997 (99.40%)",
+            "uniqueness: non-unique (991 distinct)",
+            "null ratio: 0.3% (3/1000 missing values)",
+            "high uniqueness ratio (991/997 = 0.99)",
+            "numeric identifier disambiguation (unique key overrides numeric dtype)"
+          ]
+        },
+        "joining_date": {
+          "column_name": "joining_date",
+          "candidate_role": "DATETIME",
+          "confidence": 0.92,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 837/997 (83.95%)",
+            "uniqueness: non-unique (837 distinct)",
+            "null ratio: 0.3% (3/1000 missing values)",
+            "string/object datatype (object) with content-based datetime pattern",
+            "high sample datetime parse success ratio (1.00)",
+            "column name contains date token: 'joining_date'",
+            "candidate datetime (read-only: no aggressive type conversion applied)"
+          ]
+        },
+        "performance_score": {
+          "column_name": "performance_score",
+          "candidate_role": "MEASURE",
+          "confidence": 0.92,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 448/1000 (44.80%)",
+            "uniqueness: non-unique (448 distinct)",
+            "continuous floating-point numeric distribution (distinct: 448, min: 2.66, max: 11.5)",
+            "measure naming indicator: 'performance_score'"
+          ]
+        }
+      }
+    },
+    "logistics": {
+      "dataset_id": "ds_tmp3q1mq4ut_8c2729_cleaned",
+      "generated_at": "2026-10-04T12:48:20.564293+00:00",
+      "column_evidences": {
+        "shipment_id": {
+          "column_name": "shipment_id",
+          "candidate_role": "IDENTIFIER",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 999/1000 (99.90%)",
+            "uniqueness: non-unique (999 distinct)",
+            "null ratio: 0.1% (1/1001 missing values)",
+            "high uniqueness ratio (999/1000 = 1.00)",
+            "identifier naming pattern ('shipment_id')"
+          ]
+        },
+        "destination": {
+          "column_name": "destination",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 11/1001 (1.10%)",
+            "uniqueness: non-unique (11 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 11 out of 1001 rows"
+          ]
+        },
+        "delivery_time": {
+          "column_name": "delivery_time",
+          "candidate_role": "MEASURE",
+          "confidence": 0.85,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 92/1001 (9.19%)",
+            "uniqueness: non-unique (92 distinct)",
+            "continuous floating-point numeric distribution (distinct: 92, min: -2.0, max: 48.0)"
+          ]
+        },
+        "shipment_date": {
+          "column_name": "shipment_date",
+          "candidate_role": "DATETIME",
+          "confidence": 0.95,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 336/998 (33.67%)",
+            "uniqueness: non-unique (336 distinct)",
+            "null ratio: 0.3% (3/1001 missing values)",
+            "native pandas datetime dtype (datetime64[ns])",
+            "column name contains date token: 'shipment_date'"
+          ]
+        },
+        "status": {
+          "column_name": "status",
+          "candidate_role": "DIMENSION",
+          "confidence": 0.88,
+          "confidence_level": "HIGH",
+          "evidence": [
+            "cardinality ratio: 5/1001 (0.50%)",
+            "uniqueness: non-unique (5 distinct)",
+            "text/categorical datatype (object)",
+            "distinct count: 5 out of 1001 rows",
+            "dimension naming pattern ('status')"
+          ]
+        }
+      }
+    }
+  },
+  "test_results": [
+    {
+      "dataset": "healthcare",
+      "prompt": "Give me an overview of this dataset.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.07,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "healthcare",
+      "prompt": "What are the most important things I should know from this data?",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.07,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "healthcare",
+      "prompt": "Show me the most useful trends and comparisons.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.05,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "education",
+      "prompt": "Give me an overview of this dataset.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.04,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "education",
+      "prompt": "What are the most important things I should know from this data?",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.07,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "education",
+      "prompt": "Show me the most useful trends and comparisons.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.07,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "iot",
+      "prompt": "Give me an overview of this dataset.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.05,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "iot",
+      "prompt": "What are the most important things I should know from this data?",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.05,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    },
+    {
+      "dataset": "iot",
+      "prompt": "Show me the most useful trends and comparisons.",
+      "status": "UNANSWERABLE",
+      "duration_s": 2.06,
+      "mode": "none",
+      "headline": "",
+      "panels": [],
+      "tiles": [],
+      "slicers": [],
+      "winner_metric": "None of None",
+      "winner_dimensions": []
+    }
+  ]
+}

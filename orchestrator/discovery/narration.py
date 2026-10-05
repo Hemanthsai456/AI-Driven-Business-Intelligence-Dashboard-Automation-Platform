@@ -174,13 +174,19 @@ def generate_panel_narration(
     if itype == InsightType.TOTAL_KPI:
         val_str = _format_val(details.get("value"))
         n_samples = details.get("n_samples", res.row_count)
-        raw_sentence = f"Total {cand.aggregation.value} of {m} is {val_str} across {n_samples} records."
+        if cand.aggregation.value == "AVG":
+            raw_sentence = f"Average of {m} is {val_str} across {n_samples} records."
+        else:
+            raw_sentence = f"Total {m} is {val_str} across {n_samples} records."
 
     elif itype == InsightType.RANKING:
         top_g = details.get("top_group", "Top category")
         top_v = _format_val(details.get("top_val"))
         top_share = round(float(details.get("top_share", 0.0)) * 100, 1)
-        raw_sentence = f"Top category {top_g} leads with {top_v} in {cand.aggregation.value} of {m}, accounting for {top_share}% of total."
+        if cand.aggregation.value == "AVG":
+            raw_sentence = f"Top category {top_g} leads with an average {top_v} in {m}, accounting for {top_share}% of total."
+        else:
+            raw_sentence = f"Top category {top_g} leads with {top_v} in {cand.aggregation.value} of {m}, accounting for {top_share}% of total."
 
     elif itype == InsightType.TREND:
         direction = details.get("direction", "upward")

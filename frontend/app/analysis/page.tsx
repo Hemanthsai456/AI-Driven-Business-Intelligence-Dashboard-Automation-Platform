@@ -184,9 +184,9 @@ function AnalysisContent() {
             </select>
           )}
 
-          <Link href={`/ask?dataset=${metadata.dataset_id}`}>
-            <Button variant="primary" size="sm" leftIcon={<Sparkles className="w-3.5 h-3.5" />}>
-              Ask (NL Query)
+          <Link href={`/?dataset=${metadata.dataset_id}`}>
+            <Button variant="primary" size="sm" leftIcon={<BarChart3 className="w-3.5 h-3.5" />}>
+              Generate Dashboard
             </Button>
           </Link>
         </div>

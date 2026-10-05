@@ -1,0 +1,1011 @@
+admission_date,hospital,diagnosis,severity,length_of_stay
+2024-01-12,KIMS,Hypertension,Medium,12.0
+2025-05-13,AIG,Cardiac Disease,Medium,2.0
+2025-03-09,AIG,Appendicitis,Medium,6.0
+2024-02-09,Apollo,Hypertension,Medium,7.0
+2025-10-26,Apollo,Stroke,Medium,8.0
+04/17/2025,Continental,Asthma,High,4.0
+2024-07-05,Continental,Pneumonia,Low,10.0
+2024-05-14,AIG,Infection,Medium,1.0
+2024-08-31,Care,Hypertension,Medium,2.0
+2024-05-08,Care,Pneumonia,High,12.0
+2024-09-11,AIG,Kidney Disease,Medium,1.0
+2025-08-16,AIG,Cardiac Disease,Medium,4.0
+2024-11-25,KIMS,Cardiac Disease,Medium,8.0
+2025-11-05,Yashoda,Diabetes,High,6.0
+2024-11-24,Continental,Hypertension,Medium,9.0
+2024-07-21,Apollo,Diabetes,Medium,3.0
+2025-07-30,KIMS,Diabetes,Low,10.0
+2025-08-22,Yashoda,Hypertension,Critical,2.0
+2025-09-22,AIG,Appendicitis,Medium,5.0
+2025/08/03,AIG,Kidney Disease,Medium,3.0
+2024-01-19,Yashoda,Diabetes,Medium,3.0
+2025-01-09,Apollo,Pneumonia,Low,3.0
+2024-07-15,AIG,Infection,Medium,2.0
+2024-06-28,Continental,Infection,Low,8.0
+2024-06-25,Care,Appendicitis,Low,4.0
+2025-08-25,Apollo,Cardiac Disease,High,8.0
+2025-08-02,Yashoda,Appendicitis,Low,
+2024-06-05,Continental,Kidney Disease,Low,10.0
+2024-10-26,Care,Cardiac Disease,High,1.0
+2025-06-26,Apollo,Asthma,Low,10.0
+2024-04-18,Yashoda,Cardiac Disease,Low,2.0
+2025-04-05,AIG,Cardiac Disease,Medium,11.0
+2024-11-16,Care,Hypertension,Medium,2.0
+2025-11-08,AIG,Fracture,Low,9.0
+2025-06-24,Yashoda,Asthma,Low,6.0
+2024-06-18,AIG,Cardiac Disease,High,5.0
+2025-09-02,AIG,Pneumonia,Medium,6.0
+2025-08-07,AIG,Infection,Low,4.0
+2024-06-04,Apollo,Fracture,Low,4.0
+2025-01-13,Yashoda,Diabetes,High,4.0
+2025-08-03,Continental,Cardiac Disease,High,3.0
+2024-06-18,Yashoda,Infection,Medium,6.0
+2024-06-27,KIMS,Kidney Disease,Low,3.0
+2024-05-01,Care,Pneumonia,Low,3.0
+2024-01-06,KIMS,Infection,Low,3.0
+2024-12-29,Yashoda,Appendicitis,High,4.0
+2024-01-12,AIG,Infection,High,1.0
+2025-03-01,Care,Pneumonia,Low,4.0
+2024-10-30,Care,Cardiac Disease,Medium,9.0
+2024-05-14,AIG,Fracture,Low,2.0
+2024-09-21,KIMS,Infection,Low,3.0
+2024-01-11,Yashoda,Appendicitis,Low,3.0
+2024-04-14,Apollo,Pneumonia,Medium,1.0
+2024-12-10,Yashoda,Infection,High,4.0
+2024-02-26,Continental,Fracture,Low,6.0
+2025-06-16,AIG,Cardiac Disease,Medium,11.0
+2024-07-06,Apollo,Fracture,Medium,5.0
+2025-11-02,Yashoda,Kidney Disease,Medium,3.0
+2024-05-04,Apollo,Hypertension,Low,6.0
+2025-04-02,Yashoda,Fracture,Medium,5.0
+2025-01-11,Apollo,Infection,Medium,4.0
+2025-11-01,KIMS,Pneumonia,Low,17.0
+2025-03-27,Yashoda,Fracture,Medium,3.0
+2025-09-24,Continental,Infection,Medium,5.0
+2024-12-05,Apollo,Cardiac Disease,Medium,2.0
+2024-06-08,Yashoda,Infection,Medium,7.0
+2024-05-18,Continental,Kidney Disease,Low,10.0
+2025-09-25,Care,Infection,Critical,3.0
+2024-05-28,Care,Stroke,Medium,12.0
+2025-06-18,KIMS,Infection,Low,10.0
+2025-01-20,Continental,Kidney Disease,Medium,4.0
+2024-07-22,Care,Infection,Low,5.0
+2024-10-27,Yashoda,Appendicitis,Medium,4.0
+2025-08-05,KIMS,Asthma,Medium,4.0
+2024-11-27,AIG,Diabetes,Medium,6.0
+2025-09-24,KIMS,Fracture,High,1.0
+2025-11-22,KIMS,Cardiac Disease,High,2.0
+2024-08-06,KIMS,Fracture,Low,2.0
+2025-01-19,Apollo,Appendicitis,Low,10.0
+2025-01-20,Yashoda,Pneumonia,Critical,3.0
+2025-01-31,KIMS,Stroke,High,1.0
+2024-02-22,Yashoda,Fracture,Low,4.0
+2024-09-27,Apollo,Asthma,Medium,7.0
+2025-03-02,Care,Appendicitis,Low,9.0
+2025-11-02,Apollo,Pneumonia,Critical,1.0
+2024-06-22,Continental,Infection,Low,6.0
+2025-04-15,KIMS,Asthma,Low,1.0
+2025-07-13,Continental,Asthma,Low,11.0
+2025-11-06,KIMS,Fracture,Low,3.0
+2024-05-06,Continental,Appendicitis,High,2.0
+2025-05-07,KIMS,Pneumonia,Low,7.0
+2024-08-16,AIG,Pneumonia,Medium,8.0
+2024-11-17,Care,Hypertension,Medium,4.0
+2024-01-11,AIG,Stroke,High,3.0
+2025-06-11,Apollo,Pneumonia,Critical,11.0
+2024-01-24,Yashoda,Asthma,High,6.0
+2024-09-30,AIG,Kidney Disease,Medium,4.0
+2024-12-29,Continental,Kidney Disease,High,5.0
+2025-05-04,KIMS,Asthma,Low,1.0
+2024-12-08,KIMS,Stroke,Medium,4.0
+2025-09-05,Continental,Pneumonia,Low,9.0
+2024-04-03,KIMS,Fracture,Low,4.0
+2024-07-10,Continental,Asthma,Low,9.0
+2024-07-07,Apollo,Hypertension,High,6.0
+2024-10-04,Continental,Stroke,Medium,4.0
+2024-01-03,Yashoda,Asthma,Critical,6.0
+2024-11-09,Continental,Stroke,High,3.0
+2024-10-05,Care,Stroke,Medium,8.0
+2025-03-03,Apollo,Kidney Disease,Medium,4.0
+2025-02-24,Continental,Stroke,Medium,13.0
+2024-07-24,Apollo,Fracture,High,3.0
+2024-11-08,Continental,Diabetes,Medium,8.0
+2025-01-02,Care,Fracture,Medium,8.0
+2025-09-02,Care,Appendicitis,Medium,10.0
+2024-02-26,Yashoda,Stroke,High,2.0
+2025-03-26,Apollo,Pneumonia,Medium,5.0
+2024-02-28,Continental,Kidney Disease,High,10.0
+2024-07-13,Apollo,Hypertension,Medium,7.0
+2024-11-20,Continental,Kidney Disease,High,3.0
+2025-08-15,Continental,Pneumonia,Medium,4.0
+2024-09-03,Yashoda,Cardiac Disease,Medium,3.0
+2024-12-31,AIG,Hypertension,Medium,23.0
+2025-02-27,AIG,Pneumonia,Low,3.0
+2025-07-08,Care,Fracture,Low,7.0
+2024-10-16,AIG,Pneumonia,High,1.0
+2025-02-17,Apollo,Cardiac Disease,High,6.0
+2025-09-05,AIG,Stroke,High,8.0
+2024-11-15,Continental,Infection,Medium,9.0
+2025-11-16,Care,Infection,Medium,6.0
+2024-10-16,KIMS,Stroke,Low,1.0
+2024-11-12,Care,Appendicitis,Low,2.0
+2024-01-17,KIMS,Appendicitis,Low,4.0
+2025-01-24,Apollo,Diabetes,High,11.0
+2024-12-09,KIMS,Diabetes,Low,5.0
+2024-10-30,Continental,Cardiac Disease,Low,4.0
+2025-03-31,Continental,Cardiac Disease,Critical,5.0
+2025-02-04,Apollo,Fracture,Low,5.0
+2025-11-22,KIMS,Fracture,Low,6.0
+2024-10-24,Continental,Fracture,High,2.0
+2024-11-14,Continental,Infection,High,1.0
+2025-08-16,AIG,Fracture,Medium,1.0
+2024-12-21,KIMS,Infection,Medium,8.0
+2024-07-01,Yashoda,Hypertension,Low,5.0
+2025-01-14,Continental,Infection,Low,4.0
+2025-01-05,Care,Kidney Disease,Low,2.0
+2024-10-25,Continental,Stroke,High,6.0
+2025-01-23,Care,Pneumonia,Medium,2.0
+2025-02-27,KIMS,Appendicitis,High,3.0
+2025-12-10,Yashoda,Appendicitis,Medium,3.0
+2024-02-21,Yashoda,Appendicitis,Low,3.0
+2025-10-29,AIG,Kidney Disease,Medium,3.0
+2024-12-23,Yashoda,Asthma,Low,2.0
+2024-10-04,KIMS,Stroke,Low,2.0
+2025-03-22,Apollo,Asthma,High,1.0
+2024-03-25,Continental,Kidney Disease,Medium,4.0
+2025-06-27,Apollo,Cardiac Disease,Medium,1.0
+2024-03-09,KIMS,Diabetes,Medium,1.0
+2024-11-10,Yashoda,Asthma,High,11.0
+2024-05-27,Continental,Stroke,Critical,4.0
+2024-08-09,Continental,Hypertension,High,14.0
+2024-12-10,KIMS,Stroke,Low,14.0
+2024-01-05,Continental,Pneumonia,Medium,6.0
+2025-10-11,Apollo,Hypertension,Medium,2.0
+2025-07-06,Yashoda,Pneumonia,Medium,5.0
+2025-12-01,KIMS,Infection,Low,6.0
+2024-02-26,Yashoda,Fracture,High,14.0
+2024-05-08,Care,Stroke,Low,6.0
+2024-12-24,AIG,Cardiac Disease,Medium,5.0
+2025-09-17,Apollo,Cardiac Disease,Critical,3.0
+2024-08-10,Continental,Cardiac Disease,Low,4.0
+2024-08-06,Care,Fracture,Low,3.0
+2025-09-06,KIMS,Infection,Low,4.0
+2024-01-02,KIMS,Kidney Disease,High,4.0
+2025-11-25,AIG,Hypertension,High,2.0
+2024-05-18,Yashoda,Infection,Critical,5.0
+2024-08-21,AIG,Cardiac Disease,Critical,2.0
+2024-08-24,Apollo,Diabetes,Low,6.0
+2025-10-18,KIMS,Pneumonia,Low,1.0
+2025-08-23,Apollo,Infection,High,1.0
+2024-09-03,AIG,Infection,Low,8.0
+2024-09-06,Continental,Pneumonia,High,9.0
+2025-08-16,Apollo,Asthma,Medium,15.0
+2024-07-25,Continental,Asthma,Medium,6.0
+2025-08-06,Continental,Asthma,High,11.0
+2025-08-19,Care,Kidney Disease,Medium,8.0
+2025-04-24,Apollo,Infection,High,6.0
+2025-06-27,Apollo,Pneumonia,High,9.0
+2024-06-16,Care,Kidney Disease,Low,12.0
+2025-02-15,Apollo,Pneumonia,High,5.0
+2024-04-10,Yashoda,Asthma,Medium,6.0
+2024-02-12,KIMS,Asthma,Medium,9.0
+2024-11-06,Apollo,Fracture,High,8.0
+2024-08-03,KIMS,Cardiac Disease,Medium,6.0
+2024-04-20,Continental,Appendicitis,Low,5.0
+2025-01-19,Care,Kidney Disease,Medium,11.0
+2025-09-30,Yashoda,Cardiac Disease,High,5.0
+2024-06-30,AIG,Fracture,Low,7.0
+2024-05-10,Care,Appendicitis,Low,6.0
+2025-09-26,Apollo,Fracture,Medium,3.0
+2024-01-23,Care,Pneumonia,Medium,2.0
+2025-03-05,KIMS,Diabetes,Low,6.0
+2025-02-12,Apollo,Diabetes,Low,6.0
+2024-12-07,Continental,Cardiac Disease,Low,16.0
+2024-11-09,AIG,Fracture,Critical,7.0
+2024-01-20,Yashoda,Infection,Low,3.0
+2025-09-19,AIG,Appendicitis,Low,1.0
+2024-02-19,Care,Kidney Disease,Medium,3.0
+2024-04-27,Care,Infection,Medium,3.0
+2025-10-05,Continental,Diabetes,Critical,3.0
+2024-09-20,Continental,Pneumonia,Critical,5.0
+2024-12-01,Apollo,Asthma,High,2.0
+2025-04-13,Apollo,Stroke,Medium,3.0
+2025-02-15,Apollo,Fracture,Medium,2.0
+2025-11-11,Yashoda,Kidney Disease,Medium,5.0
+2025-11-16,KIMS,Cardiac Disease,Low,8.0
+2024-07-10,Continental,Cardiac Disease,Low,10.0
+2025-07-12,Apollo,Infection,Medium,2.0
+2025-05-17,Care,Infection,Low,5.0
+2024-06-30,AIG,Kidney Disease,Low,12.0
+2024-04-18,Yashoda,Asthma,Medium,7.0
+2025-08-18,Apollo,Asthma,Low,3.0
+2025-06-25,Apollo,Asthma,Medium,14.0
+2024-09-30,AIG,Pneumonia,Medium,12.0
+2024-08-02,Apollo,Diabetes,Low,7.0
+2025-05-19,Continental,Pneumonia,Low,3.0
+2024-06-27,Apollo,Kidney Disease,Low,6.0
+2024-12-04,KIMS,Cardiac Disease,Medium,2.0
+2024-06-16,Yashoda,Appendicitis,Medium,8.0
+2025-03-28,Yashoda,Cardiac Disease,Medium,7.0
+2024-09-27,Yashoda,Asthma,High,14.0
+,AIG,Asthma,High,4.0
+2024-08-28,,Stroke,Low,1.0
+2025-04-02,AIG,Kidney Disease,High,9.0
+2025-03-23,Care,Asthma,Medium,6.0
+2024-11-25,Continental,Kidney Disease,Low,10.0
+2025-02-02,KIMS,Appendicitis,Medium,2.0
+2024-05-10,KIMS,Diabetes,Medium,2.0
+2025-07-01,Apollo,Pneumonia,Low,10.0
+2025-06-10,Care,Stroke,Medium,10.0
+2024-08-03,Yashoda,Hypertension,Medium,4.0
+2024-11-04,Yashoda,Pneumonia,Medium,6.0
+2025-12-03,KIMS,Asthma,Medium,4.0
+2024-04-03,Apollo,Infection,Low,3.0
+2025-02-01,Continental,Appendicitis,Medium,2.0
+2025-01-23,Apollo,Pneumonia,Low,6.0
+2025-05-11,AIG,Asthma,Low,8.0
+2024-11-21,Care,Kidney Disease,Critical,9.0
+2025-05-18,Yashoda,hypertension,Low,3.0
+2024-03-22,Yashoda,Kidney Disease,High,1.0
+2024-04-21,AIG,Stroke,Medium,16.0
+2025-01-24,AIG,Fracture,Low,5.0
+2024-04-16,AIG,Hypertension,Medium,3.0
+2024-01-17,Continental,Fracture,High,10.0
+2024-12-03,Apollo,Cardiac Disease,Low,10.0
+2025-05-27,Care,Diabetes,High,3.0
+2025-01-16,kims,Stroke,Low,3.0
+2025-10-02,KIMS,Asthma,High,4.0
+2024-07-17,Care,Pneumonia,Low,4.0
+2024-11-24,Continental,Infection,Low,6.0
+2024-05-11,Continental,Fracture,Medium,9.0
+2024-07-05,Continental,Infection,High,4.0
+2025-01-03,Continental,Infection,High,1.0
+2025-03-16,AIG,Stroke,Medium,8.0
+2025-04-27,AIG,Cardiac Disease,High,5.0
+2024-07-11,Yashoda,Infection,Medium,2.0
+2024-06-16,Apollo,Pneumonia,Low,3.0
+2024-10-26,AIG,Appendicitis,Low,13.0
+2024-06-08,Yashoda,Diabetes,Medium,12.0
+2024-06-15,KIMS,Infection,Medium,7.0
+2025-11-29,Yashoda,Asthma,High,4.0
+2024-09-03,Continental,Asthma,Medium,10.0
+2025-06-13,KIMS,Stroke,High,3.0
+2024-08-20,Apollo,,Critical,10.0
+2024-01-26,KIMS,Pneumonia,Low,2.0
+2024-02-06,Continental,Stroke,Low,5.0
+2025-12-18,KIMS,Kidney Disease,Low,5.0
+2024-09-23,KIMS,Hypertension,High,15.0
+2024-01-07,Apollo,Diabetes,Critical,7.0
+2024-10-03,Care,Diabetes,Low,2.0
+2024-07-12,AIG,Diabetes,Medium,10.0
+2025-05-06,Continental,Diabetes,High,14.0
+2025-11-01,Care,Asthma,Low,5.0
+2025-10-15,Yashoda,Infection,Medium,1.0
+2024-02-28,Yashoda,Hypertension,Medium,4.0
+2024-01-03,Care,Hypertension,Medium,5.0
+2025-09-16,Care,Infection,High,4.0
+2024-05-11,Care,Hypertension,High,5.0
+2024-04-15,Care,Kidney Disease,High,6.0
+2025-11-22,Care,Appendicitis,Low,4.0
+2024-05-11,Yashoda,Cardiac Disease,Low,2.0
+2025-09-19,Yashoda,Stroke,Critical,5.0
+2025-07-27,Care,Cardiac Disease,High,4.0
+2024-05-26,AIG,Asthma,High,2.0
+2025-10-16,Yashoda,Diabetes,High,5.0
+2025-04-01,KIMS,Fracture,Medium,11.0
+2024-12-02,Continental,Appendicitis,Low,4.0
+2024-12-22,Care,Cardiac Disease,High,3.0
+2024-01-29,AIG,Infection,Medium,10.0
+2025-09-27,AIG,Infection,Critical,4.0
+2024-08-18,KIMS,Asthma,Low,3.0
+2024-07-22,KIMS,Appendicitis,Medium,9.0
+2024-01-12,KIMS,Asthma,High,17.0
+2024-07-10,Yashoda,Appendicitis,Low,3.0
+2024-09-12,KIMS,Pneumonia,High,8.0
+2024-02-02,Yashoda,Appendicitis,High,6.0
+2025-04-26,KIMS,Pneumonia,Medium,7.0
+2024-04-13,Apollo,Cardiac Disease,Low,3.0
+2024-07-12,Apollo,Diabetes,High,7.0
+2024-12-16,Yashoda,Diabetes,High,3.0
+2025-04-21,Apollo,Appendicitis,Low,1.0
+2024-05-15,Continental,Cardiac Disease,High,9.0
+2025-11-08,Yashoda,Appendicitis,Medium,3.0
+2025-01-13,AIG,Kidney Disease,Medium,5.0
+2024-12-06,Apollo,Kidney Disease,High,3.0
+2025-06-30,Apollo,Hypertension,Low,4.0
+2024-05-31,Apollo,Diabetes,Low,2.0
+2024-07-24,Yashoda,Hypertension,Medium,2.0
+2025-11-05,KIMS,Diabetes,Medium,8.0
+2025-05-29,Yashoda,Pneumonia,Medium,3.0
+2025-11-22,AIG,Fracture,Medium,3.0
+2025-04-03,AIG,Kidney Disease,Medium,6.0
+2024-04-08,Apollo,Kidney Disease,Low,7.0
+2025-07-06,KIMS,Asthma,Low,5.0
+2025-10-19,KIMS,Stroke,Medium,1.0
+2024-04-01,AIG,Kidney Disease,Medium,1.0
+2024-08-01,Yashoda,Kidney Disease,Critical,12.0
+2025-07-25,Apollo,Diabetes,Low,4.0
+2024-04-03,Apollo,Diabetes,Low,7.0
+2025-12-11,Apollo,Asthma,Low,5.0
+2024-03-27,Continental,Cardiac Disease,Medium,4.0
+2024-01-19,Apollo,Hypertension,Medium,1.0
+2025-07-09,Continental,Hypertension,High,6.0
+2024-01-04,Apollo,Fracture,Medium,3.0
+2024-03-05,AIG,Fracture,Medium,8.0
+2025-05-08,Apollo,Hypertension,High,3.0
+2025-07-11,KIMS,Stroke,Critical,6.0
+2025-10-09,Apollo,Appendicitis,Low,7.0
+2024-06-24,Continental,Stroke,High,9.0
+2025-08-17,Apollo,Infection,Low,14.0
+2024-11-02,Yashoda,Kidney Disease,Medium,6.0
+2025-07-19,AIG,Pneumonia,Low,14.0
+2024-04-14,KIMS,Pneumonia,Low,4.0
+2025-06-16,Yashoda,Diabetes,Medium,3.0
+2025-04-22,KIMS,Hypertension,High,1.0
+2024-10-25,KIMS,Hypertension,Low,3.0
+2024-11-30,Apollo,Stroke,High,3.0
+2024-05-07,Yashoda,Cardiac Disease,Medium,6.0
+2024-10-14,Care,Asthma,Low,3.0
+2025-03-22,Yashoda,Stroke,High,4.0
+2025-08-11,Care,Diabetes,Medium,5.0
+2025-03-12,Care,Diabetes,Medium,2.0
+2024-12-01,KIMS,Stroke,Medium,6.0
+2025-06-09,Yashoda,Pneumonia,Medium,2.0
+2025-05-20,KIMS,Asthma,Low,6.0
+2025-11-21,Apollo,Kidney Disease,Medium,1.0
+2025-07-25,Care,Infection,High,4.0
+2024-02-21,Yashoda,Hypertension,Low,11.0
+2025-03-25,Continental,Diabetes,Low,2.0
+2025-06-03,Yashoda,Hypertension,Medium,2.0
+2025-12-03,Continental,Pneumonia,High,7.0
+2025-07-09,AIG,Appendicitis,High,7.0
+2025-02-06,Apollo,Fracture,Medium,7.0
+2024-02-01,Apollo,Stroke,Low,11.0
+2024-06-09,Continental,Hypertension,Low,12.0
+2025-07-10,Care,Diabetes,Medium,4.0
+2025-01-31,Care,Hypertension,Low,4.0
+2025-05-17,AIG,Kidney Disease,Low,2.0
+2024-06-27,Yashoda,Asthma,Medium,1.0
+2025-08-02,KIMS,Hypertension,High,2.0
+2024-03-01,Care,Fracture,Low,9.0
+2025-12-11,Care,Appendicitis,Low,7.0
+2025-07-06,Yashoda,Cardiac Disease,Medium,8.0
+2025-05-15,Apollo,Cardiac Disease,High,1.0
+2024-07-12,Care,Hypertension,Critical,5.0
+2025-08-06,AIG,Appendicitis,Low,5.0
+2024-08-17,Continental,Infection,High,2.0
+2025-09-11,KIMS,Diabetes,Medium,11.0
+2025-12-23,KIMS,Asthma,Medium,4.0
+2025-09-19,Yashoda,Pneumonia,Medium,14.0
+2024-10-19,AIG,Fracture,High,13.0
+2025-10-23,Yashoda,Hypertension,High,8.0
+2024-11-18,Apollo,Asthma,Low,3.0
+2025-08-23,Apollo,Pneumonia,Low,7.0
+2025-11-03,KIMS,Kidney Disease,Medium,4.0
+2024-10-07,Apollo,Pneumonia,Low,4.0
+2025-07-31,Yashoda,Cardiac Disease,Medium,3.0
+2025-12-19,AIG,Hypertension,Medium,1.0
+2025-09-20,Yashoda,Asthma,Medium,4.0
+2024-05-28,KIMS,Infection,High,1.0
+2024-12-08,Continental,Asthma,Medium,10.0
+2024-11-21,Yashoda,Fracture,Low,5.0
+2024-06-04,Yashoda,Kidney Disease,Medium,2.0
+2024-06-09,Apollo,Asthma,High,6.0
+2024-02-17,Continental,Pneumonia,Critical,7.0
+2025-05-22,Apollo,Cardiac Disease,Low,2.0
+2024-02-28,Care,Appendicitis,Medium,2.0
+2024-04-02,Care,Diabetes,High,6.0
+2024-04-10,Apollo,Cardiac Disease,medium,1.0
+2025-01-14,Continental,Infection,Critical,7.0
+2024-07-15,Continental,Stroke,High,18.0
+2024-11-28,Apollo,Stroke,Low,10.0
+2025-07-22,KIMS,Fracture,Medium,4.0
+2024-09-20,Care,Stroke,Medium,6.0
+2024-06-16,Care,Hypertension,Low,3.0
+2024-02-26,Apollo,Stroke,Low,7.0
+2024-11-04,Yashoda,Pneumonia,Medium,7.0
+2025-08-20,AIG,Diabetes,High,3.0
+2024-11-30,KIMS,Diabetes,High,2.0
+2024-07-14,Apollo,Appendicitis,Low,7.0
+2024-08-14,Care,Kidney Disease,High,5.0
+2024-01-13,Care,Appendicitis,Low,5.0
+2024-05-09,Care,Pneumonia,High,2.0
+2024-03-16,Care,Kidney Disease,High,2.0
+2024-07-14,AIG,Fracture,Medium,5.0
+2025-11-19,KIMS,Asthma,High,8.0
+2025-09-15,Care,Pneumonia,Medium,3.0
+2025-07-06,KIMS,Infection,Medium,4.0
+2025-12-27,Yashoda,Pneumonia,Medium,4.0
+2024-08-13,Care,Stroke,Medium,5.0
+2024-09-27,Yashoda,Infection,Medium,4.0
+2024-01-28,AIG,Stroke,Low,2.0
+2024-12-03,AIG,Infection,Medium,12.0
+2025-01-11,KIMS,Stroke,Critical,6.0
+2024-09-01,Care,Appendicitis,Low,5.0
+2025-05-02,AIG,Appendicitis,Medium,5.0
+2024-09-24,Care,Infection,Low,7.0
+2024-11-23,Apollo,Pneumonia,High,3.0
+2025-05-17,Apollo,Pneumonia,Medium,9.0
+2025-05-22,KIMS,Cardiac Disease,Low,4.0
+2025-06-21,Continental,Diabetes,Medium,7.0
+2025-05-19,Care,Appendicitis,Medium,5.0
+2024-08-19,KIMS,Fracture,Low,9.0
+2024-06-15,Care,Kidney Disease,Low,10.0
+2024-04-16,Apollo,Hypertension,Low,4.0
+2024-08-25,KIMS,Infection,High,2.0
+2025-06-01,Yashoda,Hypertension,Low,3.0
+2025-09-08,Yashoda,Pneumonia,Medium,2.0
+2024-11-17,AIG,Infection,Medium,2.0
+2024-02-26,AIG,Hypertension,Critical,2.0
+2025-10-31,AIG,Hypertension,High,4.0
+2025-08-25,Care,Pneumonia,Medium,13.0
+2024-10-26,KIMS,Fracture,High,2.0
+2025-03-26,Yashoda,Pneumonia,Low,16.0
+2024-01-21,Care,Diabetes,Low,4.0
+2024-10-27,KIMS,Appendicitis,Low,7.0
+2025-06-14,KIMS,Appendicitis,Medium,5.0
+2025-06-27,Continental,Stroke,Critical,8.0
+2025-12-21,KIMS,Cardiac Disease,Medium,1.0
+2025-01-01,KIMS,Diabetes,Medium,11.0
+2024-12-06,AIG,Hypertension,Medium,5.0
+2025-01-28,Apollo,Asthma,Medium,9.0
+2025-11-27,Apollo,Pneumonia,Medium,4.0
+2024-03-30,Care,Pneumonia,Low,8.0
+2024-04-28,Care,Diabetes,Medium,4.0
+2025-08-08,Care,Pneumonia,Medium,12.0
+2024-06-04,Yashoda,Infection,Low,3.0
+2025-04-06,KIMS,Stroke,Critical,3.0
+2024-09-06,Continental,Fracture,Critical,1.0
+2025-07-05,Continental,Cardiac Disease,Low,1.0
+2024-10-23,Continental,Diabetes,High,3.0
+2024-04-29,KIMS,Appendicitis,High,2.0
+2025-10-19,Continental,Stroke,High,5.0
+2024-01-08,AIG,Cardiac Disease,Medium,10.0
+2025-12-11,KIMS,Asthma,Medium,5.0
+2024-02-02,Continental,Asthma,Medium,4.0
+2025-01-07,KIMS,Asthma,Low,4.0
+2025-10-29,,Hypertension,Critical,4.0
+2025-05-24,Care,Fracture,High,8.0
+2024-06-10,AIG,Fracture,Low,10.0
+2025-04-03,AIG,Kidney Disease,Critical,14.0
+2024-06-02,Care,Kidney Disease,Medium,7.0
+2025-09-21,Yashoda,Fracture,High,1.0
+2024-02-19,KIMS,Pneumonia,High,6.0
+2024-03-19,Yashoda,Asthma,Low,3.0
+2025-06-02,KIMS,Appendicitis,Low,3.0
+2025-02-14,Continental,Pneumonia,Medium,6.0
+2025-06-28,Care,Infection,Medium,5.0
+2025-08-13,Continental,Cardiac Disease,Low,3.0
+2024-03-01,Yashoda,Infection,Medium,3.0
+2025-07-19,Care,Pneumonia,Low,3.0
+2024-10-01,Apollo,Asthma,High,1.0
+2025-07-15,Apollo,Infection,Critical,6.0
+2024-05-31,Care,Pneumonia,Low,4.0
+2025-12-18,Apollo,Cardiac Disease,Medium,2.0
+2024-12-18,KIMS,Appendicitis,Medium,8.0
+2024-01-21,AIG,Asthma,Low,12.0
+2025-06-08,Apollo,Kidney Disease,Critical,5.0
+2024-03-18,Apollo,Kidney Disease,Low,10.0
+2025-03-14,AIG,Stroke,High,8.0
+2024-04-22,KIMS,Stroke,Medium,2.0
+2024-06-08,Continental,Cardiac Disease,Medium,2.0
+2025-02-28,KIMS,Asthma,Low,3.0
+2025-02-27,AIG,Stroke,Low,2.0
+2024-11-10,Care,Infection,Medium,5.0
+2024-07-26,AIG,Asthma,Low,7.0
+2024-02-16,Yashoda,Stroke,Medium,5.0
+2024-09-04,Apollo,Kidney Disease,Critical,8.0
+2024-07-23,Yashoda,Stroke,Medium,5.0
+2025-12-25,Yashoda,Kidney Disease,Low,6.0
+2024-10-12,KIMS,Asthma,Low,1.0
+2025-01-29,Care,Asthma,Medium,3.0
+2025-01-04,AIG,Pneumonia,Critical,8.0
+2025-11-09,Care,Diabetes,Critical,2.0
+2025-07-06,AIG,Hypertension,Low,3.0
+2025-02-07,AIG,Stroke,Medium,5.0
+2024-12-23,Apollo,Kidney Disease,High,3.0
+2025-10-18,Continental,Asthma,Critical,6.0
+2025-08-26,Yashoda,Diabetes,Low,5.0
+2025-05-20,KIMS,Appendicitis,Medium,6.0
+2025-01-30,Care,Asthma,Medium,5.0
+2024-03-19,Yashoda,Asthma,Critical,4.0
+2024-09-18,Continental,Cardiac Disease,Medium,26.0
+2025-05-28,KIMS,Kidney Disease,Medium,6.0
+2025-08-12,Yashoda,Hypertension,Medium,4.0
+2025-05-09,Continental,Kidney Disease,Low,2.0
+2024-05-16,Yashoda,Stroke,Medium,3.0
+2024-06-04,Continental,Cardiac Disease,High,11.0
+2025-10-12,Continental,Pneumonia,Medium,5.0
+2024-09-14,AIG,Diabetes,Low,3.0
+2025-05-07,KIMS,Hypertension,Low,8.0
+2024-05-22,Continental,Kidney Disease,Medium,3.0
+2025-11-27,Continental,Pneumonia,Medium,13.0
+2024-07-22,Continental,Kidney Disease,Medium,10.0
+2024-06-02,Yashoda,Cardiac Disease,Low,2.0
+2024-07-16,Care,Fracture,Medium,10.0
+2024-06-19,KIMS,Asthma,Critical,4.0
+2024-03-10,Yashoda,Kidney Disease,Low,7.0
+2024-11-29,Care,Infection,High,2.0
+2025-02-21,Care,Kidney Disease,High,3.0
+2024-04-18,Continental,Fracture,Medium,14.0
+2024-12-04,KIMS,Pneumonia,High,1.0
+2024-01-30,AIG,Stroke,Medium,6.0
+2025-02-06,KIMS,Diabetes,Low,2.0
+2024-09-14,Care,Appendicitis,Medium,3.0
+2025-05-09,AIG,Infection,Low,4.0
+2025-07-03,Yashoda,Fracture,Low,16.0
+2024-04-26,Apollo,Appendicitis,Low,2.0
+2025-10-11,Apollo,Kidney Disease,Medium,2.0
+2025-07-31,KIMS,Kidney Disease,MEDIUM,1.0
+2024-06-19,Apollo,Kidney Disease,Low,5.0
+2024-11-18,Continental,Asthma,Medium,2.0
+2025-11-21,Apollo,Hypertension,Low,7.0
+2025-10-06,Yashoda,Appendicitis,Low,2.0
+2024-02-27,KIMS,Infection,Medium,2.0
+2025-10-15,Apollo,Infection,Low,5.0
+2024-02-27,Continental,Diabetes,Medium,6.0
+2024-08-30,Apollo,Pneumonia,Medium,2.0
+2025-05-30,Apollo,Diabetes,Medium,5.0
+2025-08-25,Apollo,Stroke,High,3.0
+2024-02-19,AIG,Asthma,Low,4.0
+2025-12-01,Yashoda,Stroke,High,12.0
+2025-12-10,Yashoda,Fracture,Medium,10.0
+2024-10-06,Care,Stroke,Medium,2.0
+2024-07-19,AIG,Asthma,High,7.0
+2024-03-18,KIMS,Appendicitis,High,7.0
+2024-04-04,AIG,Pneumonia,High,15.0
+2024-02-13,AIG,Kidney Disease,Medium,8.0
+2025-07-15,AIG,Stroke,Medium,1.0
+2024-11-07,Continental,Appendicitis,Medium,1.0
+2024-11-04,Yashoda,Cardiac Disease,Medium,6.0
+2024-07-11,Yashoda,Cardiac Disease,Low,8.0
+2025-10-19,Apollo,Hypertension,High,2.0
+2025-01-17,,Appendicitis,Medium,9.0
+2024-12-25,KIMS,Pneumonia,Medium,1.0
+2024-10-08,AIG,Infection,Critical,6.0
+2024-01-06,Yashoda,Hypertension,Medium,5.0
+2024-04-29,Apollo,Stroke,Low,6.0
+2024-04-29,Apollo,Infection,Critical,3.0
+2024-11-06,Continental,Stroke,High,6.0
+2024-03-13,AIG,Appendicitis,Medium,4.0
+2025-10-21,Yashoda,Infection,Medium,1.0
+2024-05-12,Apollo,Pneumonia,Medium,2.0
+2025-02-28,Apollo,Pneumonia,Medium,1.0
+2024-07-16,KIMS,Pneumonia,High,2.0
+2024-03-04,Continental,Appendicitis,Low,16.0
+2024-02-25,Care,Appendicitis,Low,14.0
+2024-12-12,Care,Asthma,High,5.0
+2025-10-04,Yashoda,Appendicitis,Medium,6.0
+2025-06-15,Continental,Infection,Low,2.0
+2025-05-07,Yashoda,Cardiac Disease,Medium,3.0
+2025-04-04,KIMS,Stroke,High,5.0
+2024-11-20,KIMS,Infection,Low,2.0
+2025-05-23,KIMS,Fracture,Medium,8.0
+2025-10-18,KIMS,Cardiac Disease,Low,2.0
+2025-01-21,Apollo,Diabetes,Medium,3.0
+2025-03-23,Yashoda,Asthma,Medium,1.0
+2024-05-18,KIMS,Fracture,Medium,12.0
+2025-05-13,Apollo,Diabetes,Low,11.0
+2024-03-21,Continental,Asthma,Medium,3.0
+2025-06-04,Apollo,Asthma,Medium,7.0
+2025-12-28,Apollo,Stroke,Medium,11.0
+2024-11-17,KIMS,Pneumonia,Medium,4.0
+2025-01-14,,Appendicitis,Medium,2.0
+2024-08-02,KIMS,Hypertension,Medium,2.0
+2025-07-04,KIMS,Appendicitis,Medium,10.0
+2025-10-10,Continental,Fracture,Low,1.0
+2024-04-30,Yashoda,Appendicitis,Low,2.0
+2024-09-26,Apollo,Asthma,Critical,7.0
+2024-09-22,Continental,Fracture,Medium,7.0
+2024-11-15,Care,Stroke,Medium,11.0
+2024-01-14,Apollo,Appendicitis,Low,2.0
+2024-07-20,Care,Fracture,Low,6.0
+2024-12-27,AIG,Infection,Low,8.0
+2025-02-08,Continental,Asthma,Low,14.0
+2025-07-15,Apollo,Kidney Disease,Medium,3.0
+2025-01-28,Continental,Kidney Disease,Medium,5.0
+2024-02-01,KIMS,Diabetes,Low,6.0
+2024-11-11,Continental,Diabetes,Medium,6.0
+2024-11-14,Continental,Asthma,Low,1.0
+2024-09-15,AIG,Asthma,Low,3.0
+2024-07-25,KIMS,Asthma,Low,7.0
+2025-01-31,AIG,Kidney Disease,High,5.0
+2024-12-05,Continental,Appendicitis,Low,1.0
+2024-10-06,KIMS,Hypertension,High,7.0
+2025-12-21,Yashoda,Infection,Medium,4.0
+2025-07-23,KIMS,Cardiac Disease,Medium,2.0
+2024-04-12,AIG,Appendicitis,Medium,2.0
+2024-04-22,Continental,Cardiac Disease,Medium,6.0
+2024-07-21,Yashoda,Kidney Disease,Low,4.0
+2025-06-10,KIMS,Appendicitis,Medium,4.0
+2024-05-31,KIMS,Hypertension,Low,1.0
+2024-06-01,Continental,Fracture,High,3.0
+2025-12-28,Care,Stroke,Low,3.0
+2025-11-12,Care,Fracture,High,3.0
+2025-05-28,Continental,Pneumonia,Low,4.0
+2024-10-08,KIMS,Diabetes,Medium,7.0
+2025-04-14,KIMS,Hypertension,Medium,9.0
+2024-08-24,Yashoda,Pneumonia,High,5.0
+2024-01-12,Continental,Diabetes,High,2.0
+2025-10-20,Yashoda,Kidney Disease,Low,10.0
+2025-12-24,Continental,Kidney Disease,High,2.0
+2024-02-04,KIMS,Fracture,High,3.0
+2025-02-19,Apollo,Appendicitis,Low,3.0
+2025-12-15,KIMS,Asthma,Medium,4.0
+2025-08-21,Apollo,Infection,Medium,3.0
+2025-11-09,KIMS,Fracture,Medium,7.0
+2025-08-07,Apollo,Stroke,High,4.0
+2025-04-30,AIG,Asthma,Low,5.0
+2025-01-07,Care,Infection,Low,7.0
+2025-02-20,Care,Kidney Disease,High,3.0
+2024-01-15,Apollo,Infection,High,2.0
+2025-01-18,Apollo,Cardiac Disease,High,8.0
+2024-01-24,Apollo,Cardiac Disease,Medium,6.0
+2024-03-01,Continental,Stroke,High,14.0
+2025-08-31,Apollo,Hypertension,Low,9.0
+2024-03-07,Care,Diabetes,Critical,10.0
+2025-02-18,AIG,Stroke,Medium,17.0
+2025-05-19,Care,Hypertension,High,3.0
+2024-01-18,KIMS,Cardiac Disease,Medium,18.0
+2025-12-01,Care,Asthma,Low,8.0
+2024-10-29,Yashoda,Infection,Low,13.0
+2025-01-07,Yashoda,Hypertension,Medium,2.0
+2025-11-21,AIG,Hypertension,Low,14.0
+2024-01-01,Yashoda,Pneumonia,Medium,9.0
+2024-04-01,Yashoda,Hypertension,Medium,4.0
+2025-08-28,AIG,Pneumonia,Low,2.0
+2024-08-15,Yashoda,Diabetes,Critical,6.0
+2025-08-30,Continental,Stroke,High,4.0
+2025-11-10,AIG,Appendicitis,Medium,7.0
+2024-09-02,KIMS,Pneumonia,Critical,4.0
+2024-01-03,Continental,Kidney Disease,Medium,4.0
+2025-05-11,KIMS,Cardiac Disease,Critical,8.0
+2025-08-04,Continental,Cardiac Disease,Low,5.0
+2024-04-13,Care,Stroke,Medium,2.0
+2024-07-04,KIMS,Hypertension,High,3.0
+2024-04-29,AIG,Cardiac Disease,Low,5.0
+2025-03-15,Care,Pneumonia,Medium,1.0
+2025-06-04,Apollo,Stroke,Low,7.0
+2024-01-25,Yashoda,Diabetes,Medium,6.0
+2025-01-07,Continental,Kidney Disease,Medium,2.0
+2025-06-16,Continental,Asthma,Medium,4.0
+2025-03-06,Apollo,Stroke,Medium,4.0
+2025-12-21,KIMS,Asthma,Low,7.0
+2025-01-17,Yashoda,Fracture,Medium,8.0
+2025-11-11,KIMS,Fracture,Medium,1.0
+2025-11-18,Care,Asthma,Medium,5.0
+2024-05-10,Care,Asthma,Medium,3.0
+2025-07-30,KIMS,Diabetes,Medium,6.0
+2025-03-31,KIMS,Kidney Disease,High,3.0
+2025-10-19,Care,Kidney Disease,High,5.0
+2024-06-30,Care,Asthma,High,4.0
+2024-08-01,KIMS,Diabetes,Medium,4.0
+2024-10-25,KIMS,Appendicitis,Low,4.0
+2025-12-17,Apollo,Appendicitis,High,3.0
+2025-12-31,Continental,Hypertension,Medium,8.0
+2025-08-21,Care,Infection,Medium,3.0
+2024-02-06,Continental,Fracture,Low,13.0
+2024-03-13,Continental,Infection,Medium,4.0
+2025-05-10,AIG,Stroke,Low,20.0
+2024-03-04,KIMS,Kidney Disease,Medium,16.0
+2025-12-09,Continental,Stroke,Low,6.0
+2024-05-20,Yashoda,Appendicitis,Low,3.0
+2025-11-20,Care,Fracture,Low,9.0
+2024-09-02,KIMS,Pneumonia,Medium,7.0
+2024-07-09,Continental,Fracture,Medium,3.0
+2024-06-09,KIMS,Cardiac Disease,Medium,7.0
+2025-07-16,Care,Hypertension,Medium,5.0
+2024-02-07,Care,Appendicitis,High,7.0
+2025-03-07,AIG,Diabetes,High,9.0
+2024-11-21,AIG,Hypertension,Medium,5.0
+2025-02-03,Continental,Fracture,High,2.0
+2024-07-10,Care,Pneumonia,Medium,20.0
+2024-02-15,Yashoda,Stroke,Low,1.0
+2024-12-04,Apollo,Hypertension,Low,5.0
+2024-08-19,KIMS,Pneumonia,Low,4.0
+2025-07-26,Care,Pneumonia,High,5.0
+2024-09-02,AIG,Cardiac Disease,Medium,4.0
+2024-08-23,Yashoda,Hypertension,Medium,3.0
+2024-10-07,Apollo,Fracture,Critical,4.0
+2024-01-30,Apollo,Pneumonia,Low,5.0
+2024-12-31,Continental,Pneumonia,Medium,4.0
+2025-09-02,KIMS,Kidney Disease,Low,6.0
+2025-01-05,Continental,Hypertension,Low,1.0
+2024-12-24,AIG,Infection,Low,5.0
+2024-12-26,Care,Hypertension,Medium,2.0
+2024-06-27,KIMS,Asthma,Medium,6.0
+2024-03-20,Apollo,Cardiac Disease,High,9.0
+2025-11-09,Care,Infection,Medium,10.0
+2025-07-26,Care,Diabetes,High,7.0
+2025-06-21,Apollo,Fracture,High,9.0
+2024-02-12,Apollo,Cardiac Disease,Medium,4.0
+2024-11-04,KIMS,Appendicitis,Medium,5.0
+2024-01-01,Yashoda,Hypertension,Medium,1.0
+2024-09-10,Continental,Fracture,High,13.0
+2024-03-12,KIMS,Fracture,Medium,6.0
+2024-02-21,KIMS,Asthma,Medium,2.0
+2024-12-05,Care,Pneumonia,Medium,7.0
+2024-07-27,KIMS,Hypertension,Medium,4.0
+2025-12-14,Yashoda,Diabetes,High,4.0
+2025-06-07,Yashoda,Appendicitis,High,2.0
+2024-09-16,Yashoda,Stroke,Low,8.0
+2024-02-25,Yashoda,Pneumonia,Medium,12.0
+2025-04-17,Apollo,Stroke,High,8.0
+2024-10-02,AIG,Cardiac Disease,Low,2.0
+2024-10-03,Yashoda,Fracture,Low,4.0
+2025-03-08,Apollo,Infection,Low,4.0
+2024-10-24,KIMS,Kidney Disease,High,7.0
+2025-06-24,Care,Cardiac Disease,High,6.0
+2025-10-03,Continental,Appendicitis,High,2.0
+2025-06-27,Care,Infection,Low,4.0
+2025-12-19,AIG,Appendicitis,,4.0
+2024-08-01,AIG,Stroke,Medium,5.0
+2024-08-11,KIMS,Infection,High,16.0
+2024-08-28,KIMS,Asthma,Medium,4.0
+2024-05-18,Apollo,Asthma,Low,6.0
+2024-04-25,Care,Hypertension,Low,19.0
+2024-05-18,Care,Hypertension,High,65.0
+2025-06-17,AIG,Hypertension,High,6.0
+2025-01-04,AIG,Asthma,Medium,3.0
+2024-07-13,Yashoda,Cardiac Disease,High,1.0
+2025-04-24,AIG,Infection,Low,4.0
+2024-12-17,Yashoda,Cardiac Disease,Medium,2.0
+2024-01-06,Apollo,Stroke,Low,7.0
+2025-10-19,Yashoda,Appendicitis,Medium,5.0
+2024-10-01,Yashoda,Infection,High,14.0
+2024-01-05,Apollo,Appendicitis,Low,8.0
+2024-05-13,Continental,Kidney Disease,Medium,5.0
+2025-09-18,Yashoda,Diabetes,Medium,6.0
+2025-04-14,Continental,Fracture,High,2.0
+2025-06-24,KIMS,Fracture,Medium,2.0
+2024-08-30,KIMS,Cardiac Disease,Medium,9.0
+2025-04-16,Yashoda,Diabetes,Low,11.0
+2024-08-13,KIMS,Diabetes,Medium,7.0
+2024-10-24,Yashoda,Pneumonia,Medium,0.0
+2024-05-02,Yashoda,Stroke,Medium,15.0
+2025-04-01,Care,Infection,Low,4.0
+2025-03-17,AIG,Infection,Low,6.0
+2025-11-24,AIG,Pneumonia,Medium,2.0
+2025-05-06,AIG,Cardiac Disease,Medium,2.0
+2024-03-10,AIG,Hypertension,Low,1.0
+2024-07-13,Care,Fracture,High,1.0
+2024-02-19,KIMS,Kidney Disease,Low,5.0
+2024-07-24,AIG,Asthma,Medium,5.0
+2024-09-05,Continental,Diabetes,High,6.0
+2025-11-19,Apollo,Hypertension,Medium,2.0
+2024-03-16,AIG,Infection,Critical,2.0
+2025-01-10,KIMS,Pneumonia,Critical,5.0
+2025-11-01,Apollo,Kidney Disease,Low,9.0
+2024-08-14,Apollo,Kidney Disease,Low,4.0
+2025-07-29,Apollo,Kidney Disease,Medium,6.0
+2024-08-30,Care,Asthma,Medium,3.0
+2024-04-25,Care,Asthma,Critical,8.0
+2025-03-02,AIG,Pneumonia,Low,4.0
+2024-09-30,KIMS,Fracture,Low,9.0
+2024-01-02,Continental,Infection,High,3.0
+2024-10-30,,Diabetes,High,2.0
+2024-10-17,Continental,Hypertension,Medium,3.0
+2025-11-28,Continental,Pneumonia,High,3.0
+2025-09-20,Apollo,Kidney Disease,Low,11.0
+2024-08-28,Apollo,Diabetes,High,4.0
+2025-06-25,KIMS,Cardiac Disease,Medium,7.0
+2024-12-17,Apollo,Appendicitis,Low,1.0
+2025-10-25,Yashoda,Hypertension,High,3.0
+2025-01-21,AIG,Cardiac Disease,High,5.0
+2024-03-02,AIG,Cardiac Disease,Low,9.0
+2025-07-25,Yashoda,Kidney Disease,Medium,10.0
+2025-05-05,AIG,Pneumonia,Low,3.0
+2025-09-26,KIMS,Stroke,Low,7.0
+2025-06-08,KIMS,Stroke,Medium,5.0
+2025-05-05,Yashoda,Pneumonia,Low,10.0
+2024-09-20,Continental,Asthma,Low,2.0
+2024-09-22,KIMS,Stroke,High,6.0
+2024-10-05,KIMS,Cardiac Disease,Medium,4.0
+2024-06-16,AIG,Hypertension,Critical,7.0
+2025-06-01,Care,Asthma,Medium,14.0
+2024-10-17,KIMS,Asthma,Medium,6.0
+2025-12-04,Apollo,Infection,Low,1.0
+2025-02-24,Care,Appendicitis,Low,1.0
+2024-08-07,Continental,Hypertension,Medium,5.0
+2025-07-14,Apollo,Appendicitis,Medium,6.0
+2024-11-30,KIMS,Appendicitis,High,3.0
+2025-12-02,KIMS,Kidney Disease,Low,7.0
+2025-08-07,Apollo,Asthma,Medium,5.0
+2025-09-30,Yashoda,Asthma,Medium,8.0
+2025-12-09,Apollo,Cardiac Disease,Low,9.0
+2025-07-29,AIG,Pneumonia,Critical,6.0
+2025-11-20,AIG,Appendicitis,Medium,8.0
+2025-10-20,KIMS,Pneumonia,Low,10.0
+2024-04-20,Apollo,Asthma,Low,6.0
+2025-05-23,KIMS,Diabetes,Medium,3.0
+2025-02-10,Continental,Fracture,Medium,1.0
+2025-11-22,KIMS,Cardiac Disease,High,8.0
+2025-07-07,Continental,Kidney Disease,Low,7.0
+2025-01-10,KIMS,Pneumonia,Medium,3.0
+2025-04-10,AIG,Kidney Disease,High,5.0
+2024-03-07,Yashoda,Pneumonia,Low,2.0
+2024-09-15,AIG,Appendicitis,Medium,5.0
+2025-06-17,Yashoda,Kidney Disease,Low,3.0
+2024-11-10,AIG,Stroke,High,7.0
+2025-11-24,Continental,Hypertension,Medium,1.0
+2025-04-25,Yashoda,Cardiac Disease,Medium,2.0
+2024-01-23,Care,Pneumonia,Medium,4.0
+2024-04-25,AIG,Stroke,Critical,2.0
+2025-03-30,Care,Appendicitis,Medium,8.0
+2025-08-04,AIG,Stroke,Low,9.0
+2024-08-10,AIG,Fracture,Medium,8.0
+2024-10-15,KIMS,Diabetes,Medium,3.0
+2024-10-22,Continental,Appendicitis,Medium,4.0
+2024-06-29,KIMS,Appendicitis,Medium,8.0
+2025-11-02,AIG,Hypertension,High,2.0
+2024-12-31,Apollo,Hypertension,Low,1.0
+2024-09-01,Yashoda,Fracture,Medium,6.0
+2025-11-15,Yashoda,Appendicitis,Medium,2.0
+2025-04-02,KIMS,Kidney Disease,High,2.0
+2024-01-07,KIMS,Cardiac Disease,Low,9.0
+2024-11-05,KIMS,Asthma,Medium,6.0
+2025-05-10,Care,Pneumonia,Medium,21.0
+2025-11-08,AIG,Pneumonia,High,8.0
+2025-01-12,Care,Infection,Low,8.0
+2024-09-26,AIG,Infection,Critical,8.0
+2024-08-25,Apollo,Infection,High,2.0
+2024-03-13,Care,Fracture,Low,6.0
+2024-03-07,Continental,Infection,Medium,9.0
+2024-11-02,AIG,Kidney Disease,Low,11.0
+2025-07-27,Care,Hypertension,Medium,6.0
+2024-10-23,Yashoda,Hypertension,Medium,2.0
+2024-04-11,AIG,Fracture,Medium,3.0
+2025-10-09,KIMS,Hypertension,High,6.0
+2025-08-18,KIMS,Fracture,Low,5.0
+2024-08-30,AIG,Diabetes,Medium,1.0
+2024-09-04,AIG,Hypertension,Medium,9.0
+2024-08-02,Yashoda,Pneumonia,High,9.0
+2024-04-16,KIMS,Pneumonia,Medium,6.0
+2024-10-24,KIMS,Hypertension,Low,3.0
+2024-12-12,Continental,Kidney Disease,Critical,7.0
+2025-05-20,AIG,Appendicitis,Medium,7.0
+2024-05-11,Care,Kidney Disease,Low,5.0
+2024-11-04,KIMS,Hypertension,High,7.0
+2024-01-09,Yashoda,Appendicitis,Medium,3.0
+2025-01-16,KIMS,Fracture,Medium,2.0
+2024-10-30,Care,Cardiac Disease,Low,4.0
+2025-06-03,Continental,Infection,Medium,2.0
+2025-02-24,AIG,Fracture,Medium,12.0
+2024-01-20,Continental,Fracture,Low,1.0
+2024-04-09,Continental,Cardiac Disease,Medium,10.0
+2024-04-07,AIG,Hypertension,High,6.0
+2025-08-25,Apollo,Asthma,Medium,5.0
+2025-06-14,KIMS,Stroke,Low,7.0
+2024-04-27,KIMS,Cardiac Disease,Low,3.0
+2025-10-25,Care,Hypertension,Low,3.0
+2025-01-22,Continental,Diabetes,High,12.0
+2025-09-25,Apollo,Infection,Low,1.0
+2024-05-31,Yashoda,Asthma,Low,3.0
+2025-05-31,Apollo,Infection,High,4.0
+2025-04-13,Care,Pneumonia,High,2.0
+2025-12-18,AIG,Pneumonia,Medium,6.0
+2024-11-10,Continental,Appendicitis,Medium,11.0
+2025-09-15,Continental,Pneumonia,Low,6.0
+2024-02-17,AIG,Asthma,Medium,4.0
+2025-05-22,KIMS,Kidney Disease,Low,4.0
+2025-02-13,AIG,Pneumonia,Critical,5.0
+2025-04-12,AIG,Fracture,Low,10.0
+2025-08-02,KIMS,Hypertension,High,6.0
+2025-09-15,AIG,Hypertension,High,5.0
+2024-02-26,Care,Infection,Medium,8.0
+2025-10-05,Yashoda,Cardiac Disease,High,6.0
+2024-12-03,AIG,Hypertension,Medium,4.0
+2024-07-19,Continental,Diabetes,High,6.0
+2024-02-13,KIMS,Asthma,High,1.0
+2025-09-16,Care,Pneumonia,Low,7.0
+2025-06-09,Apollo,Stroke,High,15.0
+2025-03-05,AIG,Kidney Disease,Medium,7.0
+2024-02-05,Continental,Asthma,High,9.0
+2024-01-01,Care,Infection,Low,1.0
+2024-08-05,Apollo,Hypertension,Medium,10.0
+2024-05-24,Care,Diabetes,Low,6.0
+2025-07-07,Apollo,Pneumonia,Medium,1.0
+2025-07-23,Care,Diabetes,Low,3.0
+2024-05-29,,Asthma,Low,15.0
+2024-09-07,KIMS,Cardiac Disease,Low,9.0
+2024-02-10,AIG,Asthma,Low,10.0
+2025-09-08,AIG,Stroke,Medium,6.0
+2024-01-30,Care,Asthma,High,4.0
+2025-03-16,KIMS,Hypertension,Medium,6.0
+2025-03-27,Continental,Diabetes,Low,3.0
+2025-12-22,Apollo,Asthma,Low,5.0
+2024-11-24,Yashoda,Diabetes,Medium,3.0
+2025-07-12,Apollo,Fracture,Medium,23.0
+2024-07-15,Care,Asthma,Medium,4.0
+2024-03-09,KIMS,Cardiac Disease,High,5.0
+2025-08-28,Apollo,Stroke,Low,4.0
+2025-09-04,AIG,Hypertension,Low,11.0
+2025-11-06,Continental,Appendicitis,Medium,4.0
+2025-04-30,KIMS,Stroke,Low,1.0
+2024-03-23,Care,Cardiac Disease,Medium,6.0
+2024-06-09,Continental,Cardiac Disease,Low,4.0
+2025-02-19,KIMS,Fracture,High,7.0
+2025-01-12,AIG,Diabetes,Low,1.0
+2024-03-10,AIG,Cardiac Disease,High,5.0
+2024-04-27,Apollo,Kidney Disease,Medium,6.0
+2025-04-01,Apollo,Pneumonia,High,1.0
+2024-09-29,Yashoda,Pneumonia,Low,2.0
+2025-10-27,Apollo,Fracture,Low,10.0
+2025-06-28,Apollo,Appendicitis,Medium,7.0
+2024-12-06,Yashoda,Infection,Low,6.0
+2024-11-27,Yashoda,Diabetes,Medium,17.0
+2024-03-15,KIMS,Diabetes,Low,1.0
+2025-04-28,AIG,Cardiac Disease,Medium,3.0
+2025-08-16,AIG,Pneumonia,Medium,3.0
+2025-10-19,Continental,Kidney Disease,Medium,7.0
+2024-06-22,AIG,Pneumonia,High,7.0
+2025-05-27,Yashoda,Fracture,Medium,2.0
+2024-10-01,Continental,Cardiac Disease,Medium,2.0
+2024-03-08,Continental,Fracture,High,6.0
+2024-04-18,AIG,Kidney Disease,Low,9.0
+2024-10-28,Continental,Fracture,Critical,8.0
+2024-01-09,Apollo,Hypertension,Low,2.0
+2024-08-19,Yashoda,Kidney Disease,Medium,9.0
+2024-12-24,Apollo,Pneumonia,Low,9.0
+2024-12-15,Apollo,Infection,Medium,4.0
+2025-10-01,AIG,Fracture,High,4.0
+2025-10-17,AIG,Infection,Critical,3.0
+2024-10-16,Care,Diabetes,Medium,2.0
+2024-09-07,KIMS,Pneumonia,Medium,7.0
+2025-12-11,Continental,Infection,High,1.0
+2025-06-25,Care,Asthma,Medium,2.0
+2024-05-02,Apollo,Kidney Disease,Low,8.0
+2024-12-08,Continental,Cardiac Disease,High,10.0
+2025-03-02,Care,Pneumonia,Critical,3.0
+2025-09-04,Continental,Pneumonia,Low,17.0
+2025-01-10,AIG,Fracture,Medium,2.0
+2024-06-21,Apollo,Kidney Disease,High,3.0
+2025-11-29,KIMS,Cardiac Disease,Medium,6.0
+2025-01-17,Yashoda,Stroke,High,5.0
+2025-02-12,KIMS,Cardiac Disease,Medium,4.0
+2025-04-06,AIG,Kidney Disease,Low,6.0
+2025-11-19,Continental,Stroke,Medium,21.0
+2024-10-02,KIMS,Pneumonia,High,7.0
+2025-09-22,AIG,Fracture,Low,5.0
+2025-02-15,Continental,Stroke,Low,10.0
+2025-10-11,AIG,Fracture,Low,5.0
+2024-08-04,Apollo,Appendicitis,High,11.0
+2025-09-28,AIG,Infection,Low,2.0
+2025-12-22,Care,Fracture,High,4.0
+2025-01-02,KIMS,Cardiac Disease,Critical,7.0
+2025-05-17,AIG,Kidney Disease,Low,7.0
+2025-08-29,AIG,Kidney Disease,High,5.0
+2025-04-05,Apollo,Appendicitis,Medium,5.0
+2025-11-11,KIMS,Hypertension,Low,12.0
+2025-11-14,AIG,Appendicitis,High,5.0
+2024-05-07,KIMS,Kidney Disease,Low,2.0
+2024-11-18,Apollo,Fracture,High,7.0
+2025-08-14,KIMS,Hypertension,Medium,6.0
+2025-12-18,KIMS,HYPERTENSION,Medium,1.0
+2025-10-25,Continental,Cardiac Disease,High,11.0
+2024-03-06,Apollo,Kidney Disease,Low,4.0
+2025-08-19,Care,Diabetes,Low,3.0
+2025-12-23,AIG,Asthma,Medium,5.0
+2024-03-30,Yashoda,Appendicitis,Medium,2.0
+2025-06-10,KIMS,Asthma,Low,17.0
+2024-12-08,Care,Infection,Low,1.0
+2025-02-27,KIMS,Stroke,Medium,2.0
+2025-12-08,Care,Appendicitis,Medium,3.0
+2024-09-17,Yashoda,Stroke,Low,4.0
+2024-07-19,Yashoda,Kidney Disease,Medium,7.0
+2024-05-28,Continental,Kidney Disease,High,3.0
+2024-05-26,Apollo,Kidney Disease,High,4.0
+2025-12-19,Continental,Appendicitis,Critical,3.0
+2024-07-01,AIG,Asthma,Low,12.0
+2024-06-20,KIMS,Kidney Disease,Medium,6.0
+2025-10-19,Yashoda,Appendicitis,Medium,5.0
+2024-01-23,Care,Pneumonia,Medium,4.0
+2024-01-15,Apollo,Infection,High,2.0
+2025-08-02,Yashoda,Appendicitis,Low,
+2025-02-28,Apollo,Pneumonia,Medium,1.0
+2025-06-08,KIMS,Stroke,Medium,5.0
+2024-07-06,Apollo,Fracture,Medium,5.0
+2025-12-11,KIMS,Asthma,Medium,5.0
+2025-02-27,KIMS,Stroke,Medium,2.0
+2025-01-10,KIMS,Pneumonia,Critical,5.0

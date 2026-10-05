@@ -36,6 +36,7 @@ from orchestrator.schemas import (
     Pass1bResult,
     Pass2Result,
     PassResult,
+    PanelType,
     RankedCandidate,
     RankerWeights,
     ScoreBreakdown,
@@ -75,6 +76,7 @@ def select_winner(
     resolved_by: Optional[str] = None,
     run_id: Optional[str] = None,
     semantic_profile: Optional[Any] = None,
+    dataset: Optional[Any] = None,
 ) -> DashboardSpec:
     """Select the winning candidate, apply Pass 2, and cascade if needed.
 
@@ -239,48 +241,29 @@ def select_winner(
         semantic_profile=semantic_profile,
     )
 
-    # Build focused tiles
-    from orchestrator.schemas import DashboardTile, TileSize, TileEvidence, PanelType
-    from orchestrator.discovery.tiles import _format_provenance, build_slicer_definitions
+    # Build focused multi-tile layout
+    from orchestrator.discovery.tiles import build_focused_dashboard_tiles, build_slicer_definitions
 
-    focused_tiles: List[DashboardTile] = []
+    active_dataset = dataset
+    if active_dataset is None:
+        try:
+            from api.store import session_store
+            rec = session_store.get(dataset_id)
+            if rec and rec.dataset:
+                active_dataset = rec.dataset
+        except Exception:
+            pass
+
     main_chart_panel = next((p for p in panels if p.panel_type in (PanelType.BAR, PanelType.LINE, PanelType.KPI)), None)
-    if main_chart_panel:
-        c_type = "kpi" if main_chart_panel.panel_type == PanelType.KPI else ("line" if main_chart_panel.panel_type == PanelType.LINE else "bar")
-        focused_tiles.append(
-            DashboardTile(
-                id=f"tile_{main_chart_panel.panel_id[:8]}",
-                title=main_chart_panel.title,
-                chart_type=c_type,
-                size=TileSize(w=8, h=4) if c_type != "kpi" else TileSize(w=3, h=2),
-                priority=1,
-                generator=_format_provenance("rule_baseline"),
-                evidence=TileEvidence(
-                    strength=1.0,
-                    robustness=winner_ranked_candidate.score_breakdown.stability,
-                    score=winner_ranked_candidate.score_breakdown.total,
-                    n=winner_ranked_candidate.execution_result.row_count,
-                ),
-                why_chosen=f"Winner candidate plan: {winner_ranked_candidate.plan.reasoning.interpretation}",
-                plan=winner_ranked_candidate.plan,
-                compiled_sql=winner_ranked_candidate.execution_result.compiled_sql,
-                data=main_chart_panel.data,
-                x_key=main_chart_panel.x_key,
-                y_keys=main_chart_panel.y_keys,
-                dimensions=[d.column for d in winner_ranked_candidate.plan.dimensions],
-                metrics=[winner_ranked_candidate.plan.metric.column],
-            )
-        )
 
-    # Slicers from dataset if available
-    slicers = []
-    try:
-        from api.store import session_store
-        rec = session_store.get(dataset_id)
-        if rec and rec.dataset:
-            slicers = build_slicer_definitions(rec.dataset, semantic_profile)
-    except Exception:
-        pass
+    focused_tiles = build_focused_dashboard_tiles(
+        winner_ranked=winner_ranked_candidate,
+        dataset=active_dataset,
+        semantic_profile=semantic_profile,
+        main_chart_panel=main_chart_panel,
+    )
+
+    slicers = build_slicer_definitions(active_dataset, semantic_profile)
 
     return DashboardSpec(
         spec_id=str(uuid4()),

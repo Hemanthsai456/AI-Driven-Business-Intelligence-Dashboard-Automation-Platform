@@ -263,19 +263,23 @@ def build_dashboard_tiles(
         if measures and dims:
             m_col = measures[0]
             d_col = dims[0]
-            grouped = df.groupby(d_col)[m_col].sum().reset_index()
-            rows = grouped.to_dict(orient="records")
+            ev_m = semantic_profile.get_evidence(m_col) if semantic_profile else None
+            is_avg = ev_m and ev_m.aggregation_default == "AVG"
             from orchestrator.schemas import MetricSpec, DimensionSpec, AggregationType, PlanReasoning
+            base_agg = AggregationType.AVG if is_avg else AggregationType.SUM
+            grouped = df.groupby(d_col)[m_col].mean().reset_index() if is_avg else df.groupby(d_col)[m_col].sum().reset_index()
+            rows = grouped.to_dict(orient="records")
+            base_title = f"Average {m_col} by {d_col}" if is_avg else f"Total {m_col} by {d_col}"
             cand_plan = CandidatePlan(
                 dataset_id=dataset.metadata.dataset_id if hasattr(dataset, "metadata") else "ds",
-                intent=f"Total {m_col} by {d_col}",
-                metric=MetricSpec(column=m_col, aggregation=AggregationType.SUM),
+                intent=base_title,
+                metric=MetricSpec(column=m_col, aggregation=base_agg),
                 dimensions=[DimensionSpec(column=d_col)],
-                reasoning=PlanReasoning(interpretation=f"Total {m_col} by {d_col}", evidence=[]),
+                reasoning=PlanReasoning(interpretation=base_title, evidence=[]),
             )
             base_tile = DashboardTile(
                 id=f"tile_base_{uuid4().hex[:8]}",
-                title=f"Total {m_col} by {d_col}",
+                title=base_title,
                 chart_type="bar",
                 size=TileSize(w=8, h=4),
                 priority=len(tiles) + 1,
@@ -374,3 +378,208 @@ def build_dashboard_tiles(
         current_priority += 1
 
     return tiles
+
+
+def build_focused_dashboard_tiles(
+    winner_ranked: RankedCandidate,
+    dataset: Optional[CanonicalDataset] = None,
+    semantic_profile: Optional[DatasetSemanticProfile] = None,
+    main_chart_panel: Optional[Any] = None,
+) -> List[DashboardTile]:
+    """Build a cohesive, structured multi-tile dashboard for a focused analytical query.
+
+    Rules:
+    1. Primary / Hero Tile: The user's exact requested visualization (bar/line/kpi).
+    2. Contextual KPI Strip: Grounded summary metric for the target measure using Step 2 aggregation defaults (AVG/SUM).
+    3. Complementary Supporting Visual: Direct supporting perspective (e.g. donut for share of total).
+    4. Deterministic, domain-agnostic, zero hallucinated numbers.
+    """
+    import pandas as pd
+    import numpy as np
+    from orchestrator.schemas import (
+        AggregationType,
+        CandidatePlan,
+        DashboardTile,
+        DimensionSpec,
+        MetricSpec,
+        PlanReasoning,
+        TileEvidence,
+        TileSize,
+        VisualizationType,
+    )
+
+    tiles: List[DashboardTile] = []
+    winner_plan = winner_ranked.plan
+    winner_res = winner_ranked.execution_result
+    winner_score = winner_ranked.score_breakdown
+
+    measure = winner_plan.metric.column
+    req_agg = winner_plan.metric.aggregation
+    dimensions = [d.column for d in winner_plan.dimensions]
+    dim = dimensions[0] if dimensions else None
+
+    df = dataset.data if (dataset is not None and dataset.data is not None) else None
+
+    # Determine Step 2 semantic aggregation default for the target measure
+    ev_m = semantic_profile.get_evidence(measure) if semantic_profile else None
+    if ev_m and ev_m.aggregation_default == "AVG":
+        kpi_agg = AggregationType.AVG
+    elif ev_m and ev_m.aggregation_default == "SUM":
+        kpi_agg = AggregationType.SUM
+    else:
+        kpi_agg = req_agg
+
+    # If non-grouped single-metric request, return single focused Hero KPI tile
+    if not dim:
+        hero_title = winner_plan.reasoning.interpretation if (winner_plan.reasoning and winner_plan.reasoning.interpretation) else winner_plan.intent
+        if main_chart_panel is not None:
+            hero_title = main_chart_panel.title
+        hero_tile = DashboardTile(
+            id=f"tile_hero_{uuid4().hex[:8]}",
+            title=hero_title,
+            chart_type="kpi",
+            size=TileSize(w=4, h=2),
+            priority=1,
+            generator=_format_provenance(winner_plan.generator or "rule_baseline"),
+            evidence=TileEvidence(
+                strength=1.0,
+                robustness=winner_score.stability if winner_score else None,
+                score=winner_score.total if winner_score else None,
+                n=winner_res.row_count,
+            ),
+            why_chosen=f"Primary user requested analytical result: {hero_title}",
+            plan=winner_plan,
+            compiled_sql=winner_res.compiled_sql,
+            data=winner_res.rows or [{measure: kpi_val}],
+            x_key=None,
+            y_keys=[measure] if measure else [],
+            dimensions=[],
+            metrics=[measure] if measure else [],
+        )
+        return [hero_tile]
+
+    # -----------------------------------------------------------------------
+    # 1. Contextual KPI Tile (Overall target measure aggregate)
+    # -----------------------------------------------------------------------
+    kpi_val = 0.0
+    kpi_n = 0
+    if df is not None and measure in df.columns:
+        try:
+            clean_s = pd.to_numeric(df[measure].dropna(), errors="coerce").dropna()
+            kpi_n = len(clean_s)
+            if kpi_n > 0:
+                kpi_val = float(clean_s.mean()) if kpi_agg == AggregationType.AVG else float(clean_s.sum())
+        except Exception:
+            pass
+    elif winner_res.rows:
+        try:
+            m_vals = [float(r.get(measure, 0.0)) for r in winner_res.rows if measure in r]
+            kpi_n = len(m_vals)
+            if m_vals:
+                kpi_val = float(np.mean(m_vals)) if kpi_agg == AggregationType.AVG else float(np.sum(m_vals))
+        except Exception:
+            pass
+
+    kpi_title = _format_kpi_title(measure, kpi_agg)
+    kpi_plan = CandidatePlan(
+        dataset_id=winner_plan.dataset_id,
+        intent=f"Overall {kpi_title}",
+        metric=MetricSpec(column=measure, aggregation=kpi_agg),
+        dimensions=[],
+        visualization=VisualizationType.KPI,
+        generator="focused_context",
+        reasoning=PlanReasoning(
+            interpretation=f"Contextual overall {kpi_title} across {kpi_n} records",
+            evidence=[f"Semantic role {measure}: MEASURE ({kpi_agg.value})"],
+        ),
+    )
+
+    kpi_tile = DashboardTile(
+        id=f"tile_kpi_{uuid4().hex[:8]}",
+        title=kpi_title,
+        chart_type="kpi",
+        size=TileSize(w=3, h=2),
+        priority=1,
+        generator=_format_provenance("rule_baseline"),
+        evidence=TileEvidence(strength=1.0, robustness=1.0, score=1.0, n=kpi_n),
+        why_chosen=f"Contextual overall summary for target metric {measure}",
+        plan=kpi_plan,
+        compiled_sql=f"SELECT {kpi_agg.value}({measure}) AS {measure} FROM dataset",
+        data=[{measure: kpi_val}],
+        x_key=None,
+        y_keys=[measure],
+        metrics=[measure],
+        dimensions=[],
+    )
+    tiles.append(kpi_tile)
+
+    # -----------------------------------------------------------------------
+    # 2. Primary / Hero Tile (Exact user requested visualization)
+    # -----------------------------------------------------------------------
+    hero_chart_type = "bar"
+    hero_title = winner_plan.reasoning.interpretation if (winner_plan.reasoning and winner_plan.reasoning.interpretation) else winner_plan.intent
+    hero_data = winner_res.rows or []
+    hero_x_key = dim
+    hero_y_keys = [measure] if measure else []
+
+    if main_chart_panel is not None:
+        hero_title = main_chart_panel.title
+        p_type = main_chart_panel.panel_type.value if hasattr(main_chart_panel.panel_type, "value") else str(main_chart_panel.panel_type)
+        hero_chart_type = "kpi" if p_type == "kpi" else ("line" if p_type == "line" else "bar")
+        hero_data = main_chart_panel.data
+        hero_x_key = main_chart_panel.x_key
+        hero_y_keys = main_chart_panel.y_keys
+
+    hero_tile = DashboardTile(
+        id=f"tile_hero_{uuid4().hex[:8]}",
+        title=hero_title,
+        chart_type=hero_chart_type,
+        size=TileSize(w=8, h=4),
+        priority=2,
+        generator=_format_provenance(winner_plan.generator or "rule_baseline"),
+        evidence=TileEvidence(
+            strength=1.0,
+            robustness=winner_score.stability if winner_score else None,
+            score=winner_score.total if winner_score else None,
+            n=winner_res.row_count,
+        ),
+        why_chosen=f"Primary user requested analytical result: {hero_title}",
+        plan=winner_plan,
+        compiled_sql=winner_res.compiled_sql,
+        data=hero_data,
+        x_key=hero_x_key,
+        y_keys=hero_y_keys,
+        dimensions=dimensions,
+        metrics=[measure],
+    )
+    tiles.append(hero_tile)
+
+    # -----------------------------------------------------------------------
+    # 3. Complementary Supporting Visual (Directly related to target measure)
+    # -----------------------------------------------------------------------
+    if dim and len(hero_data) >= 2:
+        # If categorical breakdown has 2..8 categories, provide share of total composition donut
+        if len(hero_data) <= 8 and hero_chart_type == "bar":
+            clean_dim = dim.replace("_", " ").title()
+            donut_title = f"Share of {measure} by {clean_dim}"
+            donut_tile = DashboardTile(
+                id=f"tile_supp_{uuid4().hex[:8]}",
+                title=donut_title,
+                chart_type="donut",
+                size=TileSize(w=4, h=4),
+                priority=3,
+                generator=_format_provenance("rule_baseline"),
+                evidence=TileEvidence(strength=0.9, robustness=0.9, score=0.9, n=len(hero_data)),
+                why_chosen=f"Complementary composition breakdown of {measure} across {dim}",
+                plan=winner_plan,
+                compiled_sql=winner_res.compiled_sql,
+                data=hero_data,
+                x_key=hero_x_key,
+                y_keys=hero_y_keys,
+                dimensions=dimensions,
+                metrics=[measure],
+            )
+            tiles.append(donut_tile)
+
+    return tiles
+

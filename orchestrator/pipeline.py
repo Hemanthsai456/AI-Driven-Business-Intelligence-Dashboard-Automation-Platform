@@ -508,7 +508,7 @@ def run_orchestration_pipeline(
 
         is_tie = score_gap_tie or robustness_tie or coverage_tie
 
-        if is_tie:
+        if is_tie and require_clarification:
             # Determine tied candidates to present as clarification options
             if score_gap_tie:
                 tied_tuples = [t for t in ranked if abs(top_score - t[2].total) < rank_tie_epsilon]
@@ -629,6 +629,7 @@ def run_orchestration_pipeline(
             candidate_validations=candidate_validations,
             resolved_by="user" if is_user_resolved else None,
             semantic_profile=semantic_profile,
+            dataset=dataset,
         )
     except WinnerSelectionError as e:
         emit_decision_log(

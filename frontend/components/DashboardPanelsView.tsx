@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Sparkles,
   BarChart3,
@@ -32,7 +32,7 @@ import {
   Database,
 } from 'lucide-react';
 import { DashboardPanelUI, DashboardTileUI, SlicerDef } from '../lib/types';
-import { InsightChart } from './InsightChart';
+import { InsightChart, resolveChartKeys } from './InsightChart';
 import { queryTile, getProvidersStatus } from '../lib/api';
 import { THEME_TOKENS } from '../lib/theme';
 
@@ -91,12 +91,20 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       string,
       {
         data: Record<string, any>[];
+        compiled_sql?: string;
         isLoading: boolean;
         isInsufficientData: boolean;
         error?: string;
       }
     >
   >({});
+
+  // Reset state on dashboard spec transition
+  useEffect(() => {
+    setActiveFilters([]);
+    setTileOverrides({});
+    setActiveModal({ type: null, tile: null });
+  }, [spec?.spec_id]);
 
   // Parse raw tiles or fallback to adapt panels
   const rawTiles: DashboardTileUI[] = spec?.tiles || [];
@@ -175,7 +183,10 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   const rejectedInsights = spec?.rejected_insights || [];
   const cleaningCount = cleaningReport?.transformations?.length ?? 0;
 
-  // Handle cross filter toggling
+  // Request versioning to eliminate race conditions
+  const filterReqVersionRef = useRef(0);
+
+  // Handle cross filter toggling (e.g. clicking a chart bar / slice)
   const handleToggleFilter = async (column: string, value: any) => {
     let nextFilters = [...activeFilters];
     const existingIdx = nextFilters.findIndex(
@@ -183,7 +194,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     );
 
     if (existingIdx >= 0) {
-      // Remove filter if already set
+      // Remove filter if already active on same value (toggle off)
       nextFilters.splice(existingIdx, 1);
     } else {
       // Replace existing filter for this column or add new
@@ -201,12 +212,25 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     await applyFiltersToTiles(nextFilters);
   };
 
-  // Handle slicer input change
+  // Dedicated single-column filter removal (e.g. clicking 'X' on filter chip)
+  const handleRemoveFilter = async (column: string) => {
+    const nextFilters = activeFilters.filter(
+      (f) => f.column.toLowerCase() !== column.toLowerCase()
+    );
+    setActiveFilters(nextFilters);
+    await applyFiltersToTiles(nextFilters);
+  };
+
+  // Handle slicer input change (dropdown or date range)
   const handleSlicerChange = async (column: string, operator: string, values: any[]) => {
     let nextFilters = activeFilters.filter(
       (f) => f.column.toLowerCase() !== column.toLowerCase()
     );
-    if (values && values.length > 0 && values[0] !== '' && values[0] !== undefined) {
+    const hasValidValue =
+      values &&
+      values.length > 0 &&
+      values.every((v) => v !== '' && v !== undefined && v !== null);
+    if (hasValidValue) {
       nextFilters.push({ column, operator, values });
     }
     setActiveFilters(nextFilters);
@@ -215,65 +239,94 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
   // Reset all filters
   const handleResetFilters = () => {
+    filterReqVersionRef.current++;
     setActiveFilters([]);
     setTileOverrides({});
+
+    // Reset date slicer input values to initial defaults if present in DOM
+    slicers.forEach((sl) => {
+      if (sl.control_type === 'date_range') {
+        const startEl = document.getElementById(`slicer-start-${sl.id}`) as HTMLInputElement;
+        const endEl = document.getElementById(`slicer-end-${sl.id}`) as HTMLInputElement;
+        if (startEl) startEl.value = sl.min_date || '';
+        if (endEl) endEl.value = sl.max_date || '';
+      }
+    });
   };
 
-  // Re-query tiles from backend minimal API
+  // Re-query ALL dashboard tiles with active filter set
   const applyFiltersToTiles = async (
     filters: { column: string; operator: string; values: any[] }[]
   ) => {
     if (!spec?.spec_id) return;
+
+    const currentVersion = ++filterReqVersionRef.current;
 
     if (filters.length === 0) {
       setTileOverrides({});
       return;
     }
 
-    // Identify which tiles are affected (tiles whose dimensions match any filter column)
-    const filterCols = filters.map((f) => f.column.toLowerCase());
+    // Set loading state for all tiles
+    setTileOverrides((prev) => {
+      const next: typeof prev = { ...prev };
+      tiles.forEach((tile) => {
+        next[tile.id] = {
+          data: prev[tile.id]?.data || tile.data,
+          isLoading: true,
+          isInsufficientData: false,
+        };
+      });
+      return next;
+    });
 
-    for (const tile of tiles) {
-      const tileCols = [
-        ...(tile.dimensions || []),
-        tile.x_key || '',
-        ...(tile.plan?.dimensions?.map((d: any) => d.column) || []),
-      ].map((c) => c.toLowerCase());
-
-      const isAffected = tileCols.some((tc) => tc && filterCols.includes(tc));
-
-      if (isAffected) {
-        setTileOverrides((prev) => ({
-          ...prev,
-          [tile.id]: {
-            data: prev[tile.id]?.data || tile.data,
-            isLoading: true,
-            isInsufficientData: false,
-          },
-        }));
-
+    // Fetch recomputed data for all tiles in parallel
+    await Promise.all(
+      tiles.map(async (tile) => {
         try {
+          console.log(`[SQL_DEBUG] queryTile START for tile.id=${tile.id}, activeFilters=`, filters);
           const res = await queryTile(spec.spec_id, tile.id, filters);
+          console.log(`[SQL_DEBUG] queryTile RESPONSE for tile.id=${tile.id}:`, {
+            response_tile_id: res.tile_id,
+            status: res.status,
+            row_count: res.row_count,
+            compiled_sql: res.compiled_sql,
+            data_sample: res.data?.slice(0, 2),
+          });
+          if (filterReqVersionRef.current !== currentVersion) return;
+
           if (res.status === 'INSUFFICIENT_DATA' || res.row_count < 1) {
-            setTileOverrides((prev) => ({
-              ...prev,
-              [tile.id]: {
-                data: [],
-                isLoading: false,
-                isInsufficientData: true,
-              },
-            }));
+            setTileOverrides((prev) => {
+              const updated = {
+                ...prev,
+                [tile.id]: {
+                  data: [],
+                  compiled_sql: res.compiled_sql || prev[tile.id]?.compiled_sql || tile.compiled_sql,
+                  isLoading: false,
+                  isInsufficientData: true,
+                },
+              };
+              console.log(`[SQL_DEBUG] setTileOverrides (INSUFFICIENT_DATA) for tile.id=${tile.id}:`, updated[tile.id]);
+              return updated;
+            });
           } else {
-            setTileOverrides((prev) => ({
-              ...prev,
-              [tile.id]: {
-                data: res.data,
-                isLoading: false,
-                isInsufficientData: false,
-              },
-            }));
+            setTileOverrides((prev) => {
+              const updated = {
+                ...prev,
+                [tile.id]: {
+                  data: res.data,
+                  compiled_sql: res.compiled_sql || prev[tile.id]?.compiled_sql || tile.compiled_sql,
+                  isLoading: false,
+                  isInsufficientData: false,
+                },
+              };
+              console.log(`[SQL_DEBUG] setTileOverrides (SUCCESS) for tile.id=${tile.id}:`, updated[tile.id]);
+              return updated;
+            });
           }
         } catch (err: any) {
+          if (filterReqVersionRef.current !== currentVersion) return;
+          console.error(`[SQL_DEBUG] queryTile ERROR for tile.id=${tile.id}:`, err);
           setTileOverrides((prev) => ({
             ...prev,
             [tile.id]: {
@@ -284,40 +337,140 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
             },
           }));
         }
-      }
-    }
+      })
+    );
   };
 
   // Download tile chart as PNG
   const handleDownloadPng = (tileId: string, title: string) => {
     const tileEl = document.getElementById(`tile-card-${tileId}`);
     if (!tileEl) return;
-    const svgEl = tileEl.querySelector('svg');
-    if (!svgEl) return;
 
-    try {
-      const serializer = new XMLSerializer();
-      let source = serializer.serializeToString(svgEl);
+    // Find the actual chart SVG inside Recharts container (avoid grabbing small 14x14 button icons)
+    const svgEl =
+      (tileEl.querySelector('.recharts-surface') as SVGSVGElement) ||
+      (tileEl.querySelector('.recharts-wrapper svg') as SVGSVGElement) ||
+      (tileEl.querySelector('.recharts-responsive-container svg') as SVGSVGElement);
 
-      if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
-        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+    const scale = 2; // 2x high-DPI export
+
+    if (svgEl) {
+      try {
+        const w = Math.max(svgEl.clientWidth || parseInt(svgEl.getAttribute('width') || '600') || 600, 480);
+        const h = Math.max(svgEl.clientHeight || parseInt(svgEl.getAttribute('height') || '260') || 260, 240);
+        const headerH = 50;
+
+        const clone = svgEl.cloneNode(true) as SVGSVGElement;
+        clone.setAttribute('width', String(w));
+        clone.setAttribute('height', String(h));
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+        // Embed theme tokens into SVG style block
+        const computed = typeof window !== 'undefined' ? window.getComputedStyle(document.body) : null;
+        const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        styleEl.textContent = `
+          :root {
+            --chart-1: ${computed?.getPropertyValue('--chart-1')?.trim() || '#2563eb'};
+            --chart-2: ${computed?.getPropertyValue('--chart-2')?.trim() || '#16a34a'};
+            --chart-3: ${computed?.getPropertyValue('--chart-3')?.trim() || '#d97706'};
+            --chart-4: ${computed?.getPropertyValue('--chart-4')?.trim() || '#dc2626'};
+            --chart-5: ${computed?.getPropertyValue('--chart-5')?.trim() || '#8b5cf6'};
+            --foreground: ${computed?.getPropertyValue('--foreground')?.trim() || '#111827'};
+            --muted: ${computed?.getPropertyValue('--muted')?.trim() || '#6b7280'};
+            --border: ${computed?.getPropertyValue('--border')?.trim() || '#e5e7eb'};
+          }
+          text { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        `;
+        clone.insertBefore(styleEl, clone.firstChild);
+
+        const serializer = new XMLSerializer();
+        let source = serializer.serializeToString(clone);
+        if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+
+        const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+        const DOMURL = window.URL || window.webkitURL || window;
+        const url = DOMURL.createObjectURL(svgBlob);
+        const img = new Image();
+
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w * scale;
+          canvas.height = (h + headerH + 20) * scale;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.scale(scale, scale);
+            // Fill background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h + headerH + 20);
+
+            // Draw header
+            ctx.fillStyle = '#111827';
+            ctx.font = 'bold 14px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillText(title, 20, 28);
+
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '10px ui-monospace, monospace';
+            ctx.fillText(`AI-Driven BI Studio • Exported ${new Date().toLocaleDateString()}`, 20, 44);
+
+            // Draw chart SVG
+            ctx.drawImage(img, 0, headerH, w, h);
+
+            const pngUrl = canvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.download = `${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.png`;
+            a.href = pngUrl;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }
+          DOMURL.revokeObjectURL(url);
+        };
+        img.src = url;
+      } catch (e) {
+        console.error('Failed to export chart PNG:', e);
       }
-
-      const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
-      const DOMURL = window.URL || window.webkitURL || window;
-      const url = DOMURL.createObjectURL(svgBlob);
-      const img = new Image();
-
-      img.onload = () => {
+    } else {
+      // Fallback for KPI or text tile
+      try {
+        const w = 600;
+        const h = 320;
         const canvas = document.createElement('canvas');
-        canvas.width = svgEl.clientWidth || 600;
-        canvas.height = svgEl.clientHeight || 360;
+        canvas.width = w * scale;
+        canvas.height = h * scale;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          // Fill background using theme surface token
-          ctx.fillStyle = THEME_TOKENS.surface;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
+          ctx.scale(scale, scale);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+
+          // Card outline
+          ctx.strokeStyle = '#e5e7eb';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(16, 16, w - 32, h - 32);
+
+          // Title
+          ctx.fillStyle = '#6b7280';
+          ctx.font = 'bold 12px ui-monospace, monospace';
+          ctx.fillText('KPI INSIGHT', 36, 52);
+
+          ctx.fillStyle = '#111827';
+          ctx.font = 'bold 16px ui-sans-serif, system-ui, sans-serif';
+          ctx.fillText(title, 36, 80);
+
+          // Extract value from DOM
+          const valEl = tileEl.querySelector('.text-3xl, .text-4xl, font-extrabold') || tileEl;
+          const valText = valEl.textContent?.replace(title, '').trim() || '—';
+
+          ctx.fillStyle = '#2563eb';
+          ctx.font = 'bold 44px ui-monospace, monospace';
+          ctx.fillText(valText.slice(0, 20), 36, 160);
+
+          ctx.fillStyle = '#9ca3af';
+          ctx.font = '10px ui-monospace, monospace';
+          ctx.fillText(`AI-Driven BI Studio • Exported ${new Date().toLocaleDateString()}`, 36, 270);
+
           const pngUrl = canvas.toDataURL('image/png');
           const a = document.createElement('a');
           a.download = `${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.png`;
@@ -326,69 +479,482 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           a.click();
           document.body.removeChild(a);
         }
-        DOMURL.revokeObjectURL(url);
-      };
-      img.src = url;
-    } catch (e) {
-      console.error('Failed to export PNG:', e);
+      } catch (e) {
+        console.error('Failed to export KPI tile PNG:', e);
+      }
     }
+  };
+
+  // Helper to safely escape HTML strings
+  const escapeHtml = (unsafe: string | null | undefined): string => {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  // Standalone Pure SVG Chart Generator for Fallback/Self-contained Export
+  // Standalone Pure SVG Chart Generator for Dynamic Export (Supports all visual types)
+  const renderDynamicTileSvg = (
+    chartType: string,
+    rows: Record<string, any>[],
+    preferredDims: string[] = [],
+    preferredMetrics: string[] = []
+  ): string => {
+    if (!rows || rows.length === 0) {
+      return `<div style="padding: 24px; text-align: center; color: var(--muted); font-size: 12px;">No chart data available</div>`;
+    }
+
+    const cType = (chartType || 'bar').toLowerCase();
+    const { dimKey, metricKey } = resolveChartKeys(rows, preferredDims, preferredMetrics);
+    const displayRows = rows.slice(0, 20);
+    const values = displayRows.map((r) => Number(r[metricKey]) || 0);
+    const maxVal = Math.max(...values, 1);
+    const minVal = Math.min(...values, 0);
+    const range = maxVal - minVal || 1;
+
+    const width = 560;
+    const height = 240;
+    const padding = { top: 20, right: 20, bottom: 45, left: 55 };
+    const chartW = width - padding.left - padding.right;
+    const chartH = height - padding.top - padding.bottom;
+
+    const colors = [
+      THEME_TOKENS.chartSeries[0] || '#2F7F7A',
+      THEME_TOKENS.chartSeries[1] || '#5B7C99',
+      THEME_TOKENS.chartSeries[2] || '#C9A66B',
+      THEME_TOKENS.chartSeries[3] || '#B56576',
+      THEME_TOKENS.chartSeries[4] || '#9AA5B1',
+      '#4E878C',
+      '#D4A373',
+      '#E07A5F',
+    ];
+
+    // 1. Donut / Pie Composition Charts
+    if (cType === 'donut' || cType === 'pie' || cType === 'composition') {
+      const isDonut = cType === 'donut' || cType === 'composition';
+      const nonNegValues = displayRows.map((r) => Math.max(0, Number(r[metricKey]) || 0));
+      const total = nonNegValues.reduce((a, b) => a + b, 0) || 1;
+      const cx = 130;
+      const cy = height / 2;
+      const r = Math.min(cx, cy) - 20;
+      const innerR = isDonut ? r * 0.55 : 0;
+
+      const slices: string[] = [];
+      const legendItems: string[] = [];
+
+      if (displayRows.length === 1 || total <= 0) {
+        const dimLabel = escapeHtml(String(displayRows[0]?.[dimKey] ?? 'Total'));
+        const color = colors[0];
+        if (isDonut) {
+          const d = `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx} ${cy + r} A ${r} ${r} 0 1 1 ${cx} ${cy - r} M ${cx} ${cy - innerR} A ${innerR} ${innerR} 0 1 0 ${cx} ${cy + innerR} A ${innerR} ${innerR} 0 1 0 ${cx} ${cy - innerR} Z`;
+          slices.push(`<path d="${d}" fill="${color}" fill-rule="evenodd" />`);
+        } else {
+          slices.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" />`);
+        }
+        legendItems.push(`
+          <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 6px;">
+            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${color}; flex-shrink: 0;"></span>
+            <span style="color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;">${dimLabel}</span>
+            <span style="color: var(--muted); margin-left: auto; font-family: monospace;">100%</span>
+          </div>
+        `);
+      } else {
+        let startAngle = -Math.PI / 2;
+        displayRows.slice(0, 8).forEach((row, i) => {
+          const val = Math.max(0, Number(row[metricKey]) || 0);
+          const sliceAngle = (val / total) * 2 * Math.PI;
+          if (sliceAngle < 0.005) return;
+          const endAngle = startAngle + sliceAngle;
+          const color = colors[i % colors.length];
+
+          const x1 = cx + r * Math.cos(startAngle);
+          const y1 = cy + r * Math.sin(startAngle);
+          const x2 = cx + r * Math.cos(endAngle);
+          const y2 = cy + r * Math.sin(endAngle);
+          const largeArc = sliceAngle > Math.PI ? 1 : 0;
+
+          let d = '';
+          if (innerR > 0) {
+            const ix1 = cx + innerR * Math.cos(endAngle);
+            const iy1 = cy + innerR * Math.sin(endAngle);
+            const ix2 = cx + innerR * Math.cos(startAngle);
+            const iy2 = cy + innerR * Math.sin(startAngle);
+            d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix1.toFixed(2)} ${iy1.toFixed(2)} A ${innerR.toFixed(2)} ${innerR.toFixed(2)} 0 ${largeArc} 0 ${ix2.toFixed(2)} ${iy2.toFixed(2)} Z`;
+          } else {
+            d = `M ${cx.toFixed(2)} ${cy.toFixed(2)} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r.toFixed(2)} ${r.toFixed(2)} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`;
+          }
+
+          slices.push(`<path d="${d}" fill="${color}" stroke="var(--surface)" stroke-width="1.5" />`);
+          const dimLabel = escapeHtml(String(row[dimKey] ?? `Item ${i + 1}`));
+          const pct = Math.round((val / total) * 100);
+          legendItems.push(`
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; margin-bottom: 5px;">
+              <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${color}; flex-shrink: 0;"></span>
+              <span style="color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;" title="${dimLabel}">${dimLabel}</span>
+              <span style="color: var(--muted); margin-left: auto; font-family: monospace; font-weight: 500;">${pct}%</span>
+            </div>
+          `);
+          startAngle = endAngle;
+        });
+      }
+
+      return `
+        <div style="display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; flex-wrap: wrap; padding: 12px 0;">
+          <svg viewBox="0 0 260 ${height}" style="width: 240px; max-height: 220px; flex-shrink: 0;" xmlns="http://www.w3.org/2000/svg">
+            ${slices.join('')}
+          </svg>
+          <div style="flex: 1; min-width: 150px; max-width: 260px;">
+            ${legendItems.join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Grid lines and Y-axis
+    const gridLines: string[] = [];
+    const yLabels: string[] = [];
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const yVal = minVal + (range / steps) * i;
+      const yPos = padding.top + chartH - (i / steps) * chartH;
+      gridLines.push(`<line x1="${padding.left}" y1="${yPos.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${yPos.toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
+      const formattedY = yVal >= 1000 ? (yVal / 1000).toFixed(1) + 'k' : (Number.isInteger(yVal) ? yVal : yVal.toFixed(1));
+      yLabels.push(`<text x="${(padding.left - 8).toFixed(1)}" y="${(yPos + 4).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="monospace">${formattedY}</text>`);
+    }
+
+    // 2. Line Chart
+    if (cType === 'line' || cType === 'trend') {
+      const pts = displayRows.map((r, i) => {
+        const x = padding.left + (i / Math.max(displayRows.length - 1, 1)) * chartW;
+        const val = Number(r[metricKey]) || 0;
+        const y = padding.top + chartH - ((val - minVal) / range) * chartH;
+        return { x, y, val, label: String(r[dimKey] ?? '') };
+      });
+
+      const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      const xLabels = pts
+        .filter((_, idx) => idx % Math.ceil(pts.length / 6) === 0 || idx === pts.length - 1)
+        .map((p) => `
+          <text x="${p.x.toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(p.label.slice(0, 12))}</text>
+        `);
+
+      const dots = pts.map(
+        (p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`
+      );
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+          ${gridLines.join('')}
+          ${yLabels.join('')}
+          <path d="${linePath}" fill="none" stroke="${colors[0]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          ${dots.join('')}
+          ${xLabels.join('')}
+        </svg>
+      `;
+    }
+
+    // 3. Area Chart
+    if (cType === 'area') {
+      const pts = displayRows.map((r, i) => {
+        const x = padding.left + (i / Math.max(displayRows.length - 1, 1)) * chartW;
+        const val = Number(r[metricKey]) || 0;
+        const y = padding.top + chartH - ((val - minVal) / range) * chartH;
+        return { x, y, val, label: String(r[dimKey] ?? '') };
+      });
+
+      const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      const areaPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${(padding.top + chartH).toFixed(1)} L ${pts[0].x.toFixed(1)} ${(padding.top + chartH).toFixed(1)} Z`;
+
+      const xLabels = pts
+        .filter((_, idx) => idx % Math.ceil(pts.length / 6) === 0 || idx === pts.length - 1)
+        .map((p) => `
+          <text x="${p.x.toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(p.label.slice(0, 12))}</text>
+        `);
+
+      const dots = pts.map(
+        (p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`
+      );
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+          ${gridLines.join('')}
+          ${yLabels.join('')}
+          <path d="${areaPath}" fill="${colors[0]}" fill-opacity="0.15" />
+          <path d="${linePath}" fill="none" stroke="${colors[0]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+          ${dots.join('')}
+          ${xLabels.join('')}
+        </svg>
+      `;
+    }
+
+    // 4. Horizontal Bar Chart
+    if (cType === 'horizontal_bar') {
+      const barCount = displayRows.length;
+      const barSlotH = chartH / Math.max(barCount, 1);
+      const barH = Math.max(Math.min(barSlotH * 0.65, 28), 6);
+      const leftPad = 90;
+      const hChartW = width - leftPad - padding.right;
+
+      const bars: string[] = [];
+      const yAxisLabels: string[] = [];
+      const xGrid: string[] = [];
+
+      for (let i = 0; i <= steps; i++) {
+        const xVal = minVal + (range / steps) * i;
+        const xPos = leftPad + (i / steps) * hChartW;
+        xGrid.push(`<line x1="${xPos.toFixed(1)}" y1="${padding.top}" x2="${xPos.toFixed(1)}" y2="${height - padding.bottom}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
+        const formattedX = xVal >= 1000 ? (xVal / 1000).toFixed(1) + 'k' : (Number.isInteger(xVal) ? xVal : xVal.toFixed(1));
+        xGrid.push(`<text x="${xPos.toFixed(1)}" y="${height - padding.bottom + 15}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="monospace">${formattedX}</text>`);
+      }
+
+      displayRows.forEach((row, i) => {
+        const val = Number(row[metricKey]) || 0;
+        const barLen = Math.max(((val - minVal) / range) * hChartW, 2);
+        const y = padding.top + i * barSlotH + (barSlotH - barH) / 2;
+        const label = String(row[dimKey] ?? `Item ${i + 1}`);
+        const color = colors[i % colors.length];
+
+        bars.push(`<rect x="${leftPad}" y="${y.toFixed(1)}" width="${barLen.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
+        yAxisLabels.push(`<text x="${leftPad - 8}" y="${(y + barH / 2 + 3).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 14))}</text>`);
+      });
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+          ${xGrid.join('')}
+          ${bars.join('')}
+          ${yAxisLabels.join('')}
+        </svg>
+      `;
+    }
+
+    // 5. Scatter Plot
+    if (cType === 'scatter') {
+      const dots = displayRows.map((r, i) => {
+        const valX = Number(r[dimKey]) || (i + 1);
+        const valY = Number(r[metricKey]) || 0;
+        const x = padding.left + ((valX - minVal) / range) * chartW;
+        const y = padding.top + chartH - ((valY - minVal) / range) * chartH;
+        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`;
+      });
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+          ${gridLines.join('')}
+          ${yLabels.join('')}
+          ${dots.join('')}
+        </svg>
+      `;
+    }
+
+    // 6. Default: Vertical Bar / Histogram / Stacked Bar
+    const barCount = displayRows.length;
+    const barSlotW = chartW / Math.max(barCount, 1);
+    const barW = Math.max(Math.min(barSlotW * 0.65, 36), 6);
+
+    const bars: string[] = [];
+    const xLabels: string[] = [];
+
+    displayRows.forEach((row, i) => {
+      const val = Number(row[metricKey]) || 0;
+      const barH = Math.max(((val - minVal) / range) * chartH, 2);
+      const x = padding.left + i * barSlotW + (barSlotW - barW) / 2;
+      const y = padding.top + chartH - barH;
+      const label = String(row[dimKey] ?? `Item ${i + 1}`);
+      const color = colors[i % colors.length];
+
+      bars.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
+
+      if (barCount <= 10 || i % Math.ceil(barCount / 8) === 0 || i === barCount - 1) {
+        xLabels.push(
+          `<text x="${(x + barW / 2).toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 10))}</text>`
+        );
+      }
+    });
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+        ${gridLines.join('')}
+        ${yLabels.join('')}
+        ${bars.join('')}
+        ${xLabels.join('')}
+      </svg>
+    `;
+  };
+
+  // Helper to extract SVG visual representation for exported tile
+  const getTileChartVisualHtml = (tile: DashboardTileUI, dataRows: Record<string, any>[]): string => {
+    return renderDynamicTileSvg(tile.chart_type, dataRows, tile.dimensions, tile.metrics);
+  };
+
+  // Helper to render formatted HTML data table
+  const renderDataTableHtml = (rows: Record<string, any>[], maxRows = 50): string => {
+    if (!rows || rows.length === 0) {
+      return `<div style="padding: 16px; text-align: center; color: var(--muted); font-size: 12px;">No records available</div>`;
+    }
+    const keys = Object.keys(rows[0] || {});
+    const displayRows = rows.slice(0, maxRows);
+    return `
+      <div style="overflow-x: auto; max-height: 280px; border: 1px solid var(--border); border-radius: 6px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-family: monospace;">
+          <thead>
+            <tr style="background: var(--surface-muted); border-bottom: 1px solid var(--border); color: var(--muted); text-transform: uppercase; font-size: 10px;">
+              ${keys.map((k) => `<th style="padding: 6px 10px; text-align: left; font-weight: 600; white-space: nowrap;">${escapeHtml(k)}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${displayRows
+              .map(
+                (r, idx) => `
+              <tr style="border-bottom: 1px solid var(--border); ${idx % 2 === 1 ? 'background: var(--surface-muted);' : ''}">
+                ${keys.map((k) => `<td style="padding: 5px 10px; white-space: nowrap; color: var(--foreground);">${escapeHtml(String(r[k] ?? '—'))}</td>`).join('')}
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </div>
+      ${rows.length > maxRows ? `<div style="font-size: 10px; color: var(--muted); margin-top: 4px; text-align: right;">Showing top ${maxRows} of ${rows.length} rows</div>` : ''}
+    `;
   };
 
   // Export standalone self-contained HTML bundle
   const handleExportHtml = () => {
-    const dashboardTitle = `${datasetName} - Power BI Executive Dashboard`;
+    const dashboardTitle = `${datasetName} - AI-Driven Executive BI Dashboard`;
     const exportTime = new Date().toLocaleString();
+
+    // Active filters summary chip list
+    const activeFiltersHtml =
+      activeFilters && activeFilters.length > 0
+        ? `
+        <div style="margin-top: 12px; padding: 10px 14px; background: var(--primary-soft); border: 1px solid var(--primary); border-radius: 8px; font-size: 11px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <strong style="color: var(--primary);">Active Dashboard Filters (${activeFilters.length}):</strong>
+          ${activeFilters
+            .map(
+              (f) => `
+            <span style="background: var(--surface); border: 1px solid var(--border); padding: 3px 8px; border-radius: 4px; font-family: monospace; font-size: 11px; color: var(--foreground);">
+              <strong>${escapeHtml(f.column)}</strong> ${escapeHtml(f.operator)} <em>${escapeHtml(Array.isArray(f.values) ? f.values.join(', ') : String(f.values))}</em>
+            </span>
+          `
+            )
+            .join('')}
+        </div>
+      `
+        : `
+        <div style="margin-top: 10px; font-size: 11px; color: var(--muted);">
+          Filter State: <span style="font-weight: 600; color: var(--foreground);">All Records (Unfiltered Baseline)</span>
+        </div>
+      `;
 
     const tilesHtml = tiles
       .map((t) => {
         const override = tileOverrides[t.id];
-        const dataRows = override?.data || t.data || [];
+        const dataRows = override?.data !== undefined ? override.data : t.data || [];
+        const effectiveSql = override?.compiled_sql || t.compiled_sql || t.plan?.compiled_sql || '';
         const isKpi = t.chart_type === 'kpi';
-        const kpiVal =
+        const isTable = t.chart_type === 'table';
+
+        // KPI value computation
+        const rawKpiVal =
           dataRows[0] && Object.values(dataRows[0])[0] !== undefined
             ? Object.values(dataRows[0])[0]
             : '—';
+        const kpiValFormatted =
+          typeof rawKpiVal === 'number'
+            ? Number.isInteger(rawKpiVal)
+              ? rawKpiVal.toLocaleString()
+              : rawKpiVal.toFixed(2)
+            : String(rawKpiVal);
+
+        const colSpanClass =
+          t.chart_type === 'kpi'
+            ? 'col-span-3'
+            : t.size.w === 8
+            ? 'col-span-8'
+            : t.size.w === 4
+            ? 'col-span-4'
+            : t.size.w === 6
+            ? 'col-span-6'
+            : 'col-span-4';
+
+        let bodyContent = '';
+
+        if (isKpi) {
+          bodyContent = `
+            <div style="padding: 16px 0; text-align: left;">
+              <div class="kpi-value">${kpiValFormatted}</div>
+              ${
+                t.delta
+                  ? `<div style="font-size: 11px; color: ${
+                      t.delta.direction === 'up'
+                        ? 'var(--success)'
+                        : t.delta.direction === 'down'
+                        ? 'var(--error)'
+                        : 'var(--muted)'
+                    }; font-weight: 600;">
+                    ${t.delta.direction === 'up' ? '▲' : t.delta.direction === 'down' ? '▼' : '●'} ${escapeHtml(t.delta.label || '')} ${t.delta.percentage !== undefined ? `${t.delta.percentage}%` : ''}
+                  </div>`
+                  : ''
+              }
+            </div>
+          `;
+        } else if (isTable) {
+          bodyContent = `
+            <div style="margin: 10px 0;">
+              ${renderDataTableHtml(dataRows, 50)}
+            </div>
+          `;
+        } else {
+          // Visual Chart (Bar, Line, Area, Donut, Pie, Scatter, etc.)
+          const chartVisualSvg = getTileChartVisualHtml(t, dataRows);
+          bodyContent = `
+            <div style="margin: 8px 0;">
+              ${chartVisualSvg}
+              <details style="margin-top: 10px; font-size: 11px; border-top: 1px dashed var(--border); padding-top: 8px;">
+                <summary style="cursor: pointer; color: var(--muted); font-weight: 600;">View Underlying Data Table (${dataRows.length} rows)</summary>
+                <div style="margin-top: 8px;">
+                  ${renderDataTableHtml(dataRows, 25)}
+                </div>
+              </details>
+            </div>
+          `;
+        }
 
         return `
-          <div class="tile-card" style="border: 1px solid var(--border); border-radius: 10px; padding: 16px; background: var(--surface);">
-            <div style="font-size: 11px; font-weight: bold; text-transform: uppercase; color: var(--muted); margin-bottom: 6px;">
-              ${t.chart_type.toUpperCase()} • ${t.generator}
+          <div class="tile-card ${colSpanClass}">
+            <div>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
+                <span class="tile-badge">${escapeHtml(t.chart_type)}</span>
+                <span style="font-size: 10px; font-family: monospace; color: var(--muted);">${escapeHtml(t.generator)}</span>
+              </div>
+              <div class="tile-title">${escapeHtml(t.title)}</div>
             </div>
-            <div style="font-size: 14px; font-weight: bold; color: var(--foreground); margin-bottom: 12px;">
-              ${t.title}
+
+            <div style="flex: 1;">
+              ${bodyContent}
             </div>
-            ${isKpi
-            ? `<div style="font-size: 32px; font-weight: 800; font-family: monospace; color: var(--primary); margin: 20px 0;">${kpiVal}</div>`
-            : `<div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">Rows: ${dataRows.length}</div>
-                   <table style="width: 100%; border-collapse: collapse; font-size: 11px; font-family: monospace;">
-                     <thead>
-                       <tr style="border-bottom: 1px solid var(--border); color: var(--muted);">
-                         ${Object.keys(dataRows[0] || {})
-              .slice(0, 4)
-              .map((k) => `<th style="padding: 4px 8px; text-align: left;">${k}</th>`)
-              .join('')}
-                       </tr>
-                     </thead>
-                     <tbody>
-                       ${dataRows
-              .slice(0, 5)
-              .map(
-                (row) => `
-                         <tr style="border-bottom: 1px solid var(--border);">
-                           ${Object.keys(dataRows[0] || {})
-                    .slice(0, 4)
-                    .map((k) => `<td style="padding: 4px 8px;">${row[k]}</td>`)
-                    .join('')}
-                         </tr>`
-              )
-              .join('')}
-                     </tbody>
-                   </table>`
-          }
-            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); display: flex; justify-content: space-between;">
-              <span>Strength: ${(t.evidence?.strength ?? 0.8).toFixed(2)}</span>
-              <span>Robustness: ${((t.evidence?.robustness ?? 0.85) * 100).toFixed(0)}%</span>
-              <span>FDR: ${t.evidence?.fdr_passed ? 'PASS' : 'FAIL'}</span>
+
+            <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border);">
+              <div style="font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; font-family: monospace; margin-bottom: 4px;">
+                <span>Strength: ${(t.evidence?.strength ?? 0.8).toFixed(2)}</span>
+                <span>Robustness: ${((t.evidence?.robustness ?? 0.85) * 100).toFixed(0)}%</span>
+                <span style="color: ${t.evidence?.fdr_passed ? 'var(--success)' : 'var(--error)'}; font-weight: bold;">FDR: ${t.evidence?.fdr_passed ? 'PASS' : 'FAIL'}</span>
+                <span>n=${dataRows.length}</span>
+              </div>
+              ${
+                effectiveSql
+                  ? `
+                <details style="margin-top: 6px; font-size: 10px; color: var(--muted);">
+                  <summary style="cursor: pointer; font-family: monospace; color: var(--muted);">Compiled SQL Query</summary>
+                  <pre style="background: var(--surface-muted); padding: 8px; border-radius: 6px; font-size: 10px; overflow-x: auto; margin-top: 4px; border: 1px solid var(--border); color: var(--foreground); line-height: 1.4;"><code>${escapeHtml(effectiveSql)}</code></pre>
+                </details>
+              `
+                  : ''
+              }
             </div>
           </div>
         `;
@@ -400,63 +966,183 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${dashboardTitle}</title>
+  <title>${escapeHtml(dashboardTitle)}</title>
   <style>
     :root {
       --bg: ${THEME_TOKENS.background};
       --surface: ${THEME_TOKENS.surface};
+      --surface-muted: #F0F2F5;
       --border: ${THEME_TOKENS.border};
       --foreground: ${THEME_TOKENS.text};
       --muted: ${THEME_TOKENS.mutedText};
       --primary: ${THEME_TOKENS.primary};
+      --primary-hover: ${THEME_TOKENS.primaryHover};
       --primary-soft: ${THEME_TOKENS.primarySoft};
       --attention: ${THEME_TOKENS.attention};
       --attention-soft: ${THEME_TOKENS.attentionSoft};
+      --error: ${THEME_TOKENS.error};
+      --success: ${THEME_TOKENS.success};
+      --chart-1: ${THEME_TOKENS.chartSeries[0]};
+      --chart-2: ${THEME_TOKENS.chartSeries[1]};
+      --chart-3: ${THEME_TOKENS.chartSeries[2]};
+      --chart-4: ${THEME_TOKENS.chartSeries[3]};
+      --chart-5: ${THEME_TOKENS.chartSeries[4]};
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: rgb(18, 23, 28);
-        --surface: rgb(26, 33, 40);
-        --border: rgb(42, 51, 60);
-        --foreground: rgb(230, 234, 238);
-        --muted: rgb(152, 163, 175);
-        --primary: rgb(79, 163, 157);
-        --primary-soft: rgb(30, 53, 51);
-        --attention: rgb(217, 164, 65);
-        --attention-soft: rgb(51, 41, 26);
+        --bg: #0D1117;
+        --surface: #161B22;
+        --surface-muted: #21262D;
+        --border: #30363D;
+        --foreground: #C9D1D9;
+        --muted: #8B949E;
+        --primary: #58A6FF;
+        --primary-hover: #79B8FF;
+        --primary-soft: #1F2937;
+        --attention: #D29922;
+        --attention-soft: #382805;
+        --error: #F85149;
+        --success: #3FB950;
+        --chart-1: #58A6FF;
+        --chart-2: #3FB950;
+        --chart-3: #D29922;
+        --chart-4: #F85149;
+        --chart-5: #A371F7;
       }
     }
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background: var(--bg);
       color: var(--foreground);
       margin: 0;
       padding: 24px;
+      line-height: 1.5;
     }
     .header {
-      padding: 16px;
+      padding: 20px;
       border: 1px solid var(--border);
       border-radius: 10px;
       background: var(--surface);
-      margin-bottom: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(12, 1fr);
       gap: 16px;
     }
+    .col-span-3 { grid-column: span 3; }
+    .col-span-4 { grid-column: span 4; }
+    .col-span-6 { grid-column: span 6; }
+    .col-span-8 { grid-column: span 8; }
+    .col-span-12 { grid-column: span 12; }
+    
+    @media (max-width: 1024px) {
+      .col-span-3, .col-span-4, .col-span-6, .col-span-8 { grid-column: span 6; }
+    }
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+      .col-span-3, .col-span-4, .col-span-6, .col-span-8, .col-span-12 { grid-column: span 1; }
+    }
+    .tile-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .tile-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      background: var(--surface-muted);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      font-family: monospace;
+    }
+    .tile-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--foreground);
+      margin: 8px 0 12px 0;
+      line-height: 1.35;
+    }
+    .kpi-value {
+      font-size: 32px;
+      font-weight: 800;
+      font-family: monospace;
+      color: var(--primary);
+      margin: 12px 0;
+    }
+    .recharts-surface text {
+      fill: var(--foreground);
+      font-family: -apple-system, sans-serif;
+    }
+    .recharts-cartesian-axis-tick-value {
+      fill: var(--muted) !important;
+      font-size: 10px !important;
+    }
+    .recharts-cartesian-axis line, .recharts-cartesian-axis path {
+      stroke: var(--border) !important;
+    }
+    .recharts-cartesian-grid line {
+      stroke: var(--border) !important;
+      stroke-opacity: 0.6;
+    }
+    .recharts-legend-item-text {
+      color: var(--foreground) !important;
+      font-size: 11px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: monospace;
+    }
+    th, td {
+      padding: 5px 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: var(--surface-muted);
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 10px;
+    }
+    details summary {
+      cursor: pointer;
+      user-select: none;
+    }
     @media print {
-      body { background: white; color: black; }
-      .tile-card { break-inside: avoid; }
+      body { background: white; color: black; padding: 0; }
+      .tile-card { break-inside: avoid; box-shadow: none; border-color: #ddd; }
+      .header { box-shadow: none; border-color: #ddd; }
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); font-family: monospace;">AI-Driven Executive BI Dashboard</div>
-    <h1 style="margin: 4px 0 8px 0; font-size: 20px;">${headlineText}</h1>
-    <div style="font-size: 12px; color: var(--muted);">Dataset: <strong>${datasetName}</strong> • Rows: <strong>${rowCount}</strong> • Exported: ${exportTime}</div>
+    <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); font-family: monospace; letter-spacing: 0.5px;">AI-Driven Executive BI Dashboard</div>
+    <h1 style="margin: 6px 0 10px 0; font-size: 22px; font-weight: 800; color: var(--foreground);">${escapeHtml(headlineText)}</h1>
+    <div style="font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap;">
+      <span>Dataset: <strong style="color: var(--foreground);">${escapeHtml(datasetName)}</strong></span>
+      <span>Rows: <strong style="color: var(--foreground);">${rowCount}</strong></span>
+      <span>Exported: <strong style="color: var(--foreground);">${escapeHtml(exportTime)}</strong></span>
+    </div>
+    ${activeFiltersHtml}
   </div>
+
   <div class="grid">
     ${tilesHtml}
   </div>
@@ -697,21 +1383,22 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                         </label>
                         <div className="flex items-center gap-1">
                           <input
+                            id={`slicer-start-${sl.id}`}
                             type="date"
                             defaultValue={sl.min_date}
                             onChange={(e) => {
-                              const end = (document.getElementById(`end-${sl.id}`) as HTMLInputElement)?.value;
-                              handleSlicerChange(sl.column, 'BETWEEN', [e.target.value, end || sl.max_date || e.target.value]);
+                              const end = (document.getElementById(`slicer-end-${sl.id}`) as HTMLInputElement)?.value || sl.max_date || e.target.value;
+                              handleSlicerChange(sl.column, 'BETWEEN', [e.target.value, end]);
                             }}
                             className="w-full text-2xs font-mono p-1 rounded bg-surface border border-border text-foreground"
                           />
                           <span className="text-muted-foreground text-xs">–</span>
                           <input
-                            id={`end-${sl.id}`}
+                            id={`slicer-end-${sl.id}`}
                             type="date"
                             defaultValue={sl.max_date}
                             onChange={(e) => {
-                              const start = sl.min_date || '';
+                              const start = (document.getElementById(`slicer-start-${sl.id}`) as HTMLInputElement)?.value || sl.min_date || e.target.value;
                               handleSlicerChange(sl.column, 'BETWEEN', [start, e.target.value]);
                             }}
                             className="w-full text-2xs font-mono p-1 rounded bg-surface border border-border text-foreground"
@@ -757,22 +1444,32 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                   <span className="text-3xs font-mono uppercase text-muted-foreground">
                     Active Filters:
                   </span>
-                  {activeFilters.map((f, fIdx) => (
-                    <span
-                      key={fIdx}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono bg-primary-soft text-primary border border-primary/30"
-                    >
-                      <span>
-                        {f.column} = {Array.isArray(f.values) ? f.values.join(', ') : f.values}
-                      </span>
-                      <button
-                        onClick={() => handleToggleFilter(f.column, f.values[0])}
-                        className="hover:text-error transition-colors"
+                  {activeFilters.map((f, fIdx) => {
+                    const displayVal =
+                      f.operator === 'BETWEEN' && Array.isArray(f.values) && f.values.length >= 2
+                        ? `${f.values[0]} to ${f.values[1]}`
+                        : Array.isArray(f.values)
+                        ? f.values.join(', ')
+                        : String(f.values);
+                    const opSymbol = f.operator === 'BETWEEN' ? 'between' : f.operator;
+                    return (
+                      <span
+                        key={fIdx}
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-2xs font-mono bg-primary-soft text-primary border border-primary/30"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+                        <span>
+                          {f.column} {opSymbol} {displayVal}
+                        </span>
+                        <button
+                          onClick={() => handleRemoveFilter(f.column)}
+                          className="hover:text-error transition-colors ml-0.5"
+                          title={`Remove filter on ${f.column}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1083,7 +1780,17 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
             </div>
           </div>
           <pre className="p-3 bg-surface-muted/50 rounded-card border border-border font-mono text-xs text-foreground overflow-x-auto">
-            <code>{spec.winner.execution.compiled_sql}</code>
+            <code>
+              {(() => {
+                const heroTile = tiles.find((t) => t.size.w === 8) || tiles[0];
+                return (
+                  (heroTile && tileOverrides[heroTile.id]?.compiled_sql) ||
+                  spec.winner?.execution?.compiled_sql ||
+                  tiles[0]?.compiled_sql ||
+                  '-- Re-compiled dynamically through DuckDB sandboxed compiler\nSELECT * FROM dataset'
+                );
+              })()}
+            </code>
           </pre>
         </div>
       )}
@@ -1091,6 +1798,26 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       {/* MODALS: View SQL, View Data, Why Chosen, Expand */}
       {activeModal.type && activeModal.tile && (() => {
         const modalTile = activeModal.tile;
+        const effectiveModalData =
+          tileOverrides[modalTile.id]?.data !== undefined
+            ? tileOverrides[modalTile.id].data
+            : modalTile.data;
+        const effectiveModalSql =
+          tileOverrides[modalTile.id]?.compiled_sql ||
+          modalTile.compiled_sql ||
+          modalTile.plan?.compiled_sql ||
+          '-- Re-compiled dynamically through DuckDB sandboxed compiler\nSELECT * FROM dataset';
+
+        console.log(`[SQL_DEBUG] Modal rendering: type=${activeModal.type}`, {
+          modalTileId: modalTile?.id,
+          overrideIds: Object.keys(tileOverrides),
+          override: modalTile ? tileOverrides[modalTile.id] : undefined,
+          modalTileCompiledSql: modalTile?.compiled_sql,
+          overrideCompiledSql: modalTile ? tileOverrides[modalTile.id]?.compiled_sql : undefined,
+          effectiveModalSql,
+          activeFilters,
+        });
+
         return (
           <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-surface border border-border rounded-card shadow-lg max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
@@ -1118,23 +1845,19 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                 {activeModal.type === 'sql' && (
                   <div>
                     <pre className="p-3 bg-surface-muted font-mono text-xs text-foreground rounded-card border border-border overflow-x-auto">
-                      <code>
-                        {modalTile.compiled_sql ||
-                          modalTile.plan?.compiled_sql ||
-                          '-- Re-compiled dynamically through DuckDB sandboxed compiler\nSELECT * FROM dataset'}
-                      </code>
+                      <code>{effectiveModalSql}</code>
                     </pre>
                   </div>
                 )}
 
                 {activeModal.type === 'data' && (
                   <div>
-                    {modalTile.data && modalTile.data.length > 0 ? (
+                    {effectiveModalData && effectiveModalData.length > 0 ? (
                       <div className="overflow-x-auto max-h-96">
                         <table className="w-full text-left text-xs font-mono border-collapse">
                           <thead>
                             <tr className="border-b border-border bg-surface-muted text-2xs uppercase text-muted-foreground">
-                              {Object.keys(modalTile.data[0] || {}).map((k) => (
+                              {Object.keys(effectiveModalData[0] || {}).map((k) => (
                                 <th key={k} className="py-2 px-3 font-semibold whitespace-nowrap">
                                   {k}
                                 </th>
@@ -1142,9 +1865,9 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border text-foreground">
-                            {modalTile.data.map((r, rIdx) => (
+                            {effectiveModalData.map((r, rIdx) => (
                               <tr key={rIdx} className="hover:bg-surface-muted/20">
-                                {Object.keys(modalTile.data[0] || {}).map((k) => (
+                                {Object.keys(effectiveModalData[0] || {}).map((k) => (
                                   <td key={k} className="py-1 px-3 whitespace-nowrap text-muted-foreground">
                                     {String(r[k])}
                                   </td>
@@ -1194,7 +1917,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                       <div className="p-2.5 bg-surface-muted rounded-card border border-border text-center">
                         <div className="text-3xs uppercase font-mono text-muted-foreground">Sample Size</div>
                         <div className="text-sm font-bold font-mono text-foreground mt-1">
-                          n={modalTile.evidence?.n ?? 0}
+                          n={effectiveModalData ? effectiveModalData.length : (modalTile.evidence?.n ?? 0)}
                         </div>
                       </div>
                     </div>
@@ -1211,7 +1934,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                       visualization={modalTile.chart_type}
                       metric={modalTile.metrics?.[0]}
                       dimensions={modalTile.dimensions}
-                      executionData={modalTile.data}
+                      executionData={effectiveModalData}
                       className="w-full h-full"
                     />
                   </div>

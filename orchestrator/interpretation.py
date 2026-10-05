@@ -6,6 +6,7 @@ coherent SemanticInterpretation instances.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from orchestrator.schemas import (
     AggregationType,
     AmbiguityResult,
     AmbiguityType,
+    FilterSpec,
     Granularity,
     SemanticInterpretation,
     StructuredIntent,
@@ -36,6 +38,60 @@ def _col_confidence(semantic_profile: DatasetSemanticProfile, col: str) -> float
     return float(ev.confidence) if ev else 0.5
 
 
+def _resolve_aggregation(
+    metric_col: str,
+    intent_text: str,
+    semantic_profile: DatasetSemanticProfile,
+) -> AggregationType:
+    """Resolve semantically appropriate aggregation function.
+
+    Priority:
+    1. Explicit intent keywords (avg, mean, sum, total, count, min, max, median, stddev).
+    2. Runtime semantic intelligence: ev.aggregation_category (INTENSIVE/SCORE/DURATION/RATE -> AVG, ADDITIVE/COUNT -> SUM).
+    3. ev.aggregation_default if specified.
+    4. Fallback by semantic candidate_role: MEASURE -> SUM, DIMENSION/IDENTIFIER -> COUNT.
+    """
+    intent_lower = (intent_text or "").lower()
+
+    # 1. Explicit user intent tokens take highest precedence (with word boundaries)
+    if re.search(r"\b(?:count\s+distinct|distinct\s+count|unique\s+count)\b", intent_lower):
+        return AggregationType.COUNT_DISTINCT
+    if re.search(r"\b(?:avg|average|mean)\b", intent_lower):
+        return AggregationType.AVG
+    if re.search(r"\b(?:sum|total)\b", intent_lower):
+        return AggregationType.SUM
+    if re.search(r"\b(?:count|number\s+of|how\s+many|records|rows)\b", intent_lower):
+        return AggregationType.COUNT
+    if re.search(r"\b(?:min|minimum|lowest|least)\b", intent_lower):
+        return AggregationType.MIN
+    if re.search(r"\b(?:max|maximum|highest|greatest)\b", intent_lower):
+        return AggregationType.MAX
+    if re.search(r"\bmedian\b", intent_lower):
+        return AggregationType.MEDIAN
+    if re.search(r"\b(?:stddev|standard\s+deviation|variance)\b", intent_lower):
+        return AggregationType.STDDEV
+
+    # 2. Semantic Intelligence: Consult ColumnSemanticEvidence aggregation_category
+    ev = semantic_profile.get_evidence(metric_col)
+    if ev:
+        agg_cat = (ev.aggregation_category or "").upper()
+        if agg_cat in ("INTENSIVE", "SCORE", "DURATION", "RATE"):
+            return AggregationType.AVG
+        if agg_cat in ("ADDITIVE", "COUNT"):
+            return AggregationType.SUM
+
+        if ev.aggregation_default:
+            try:
+                return AggregationType(ev.aggregation_default.upper())
+            except (ValueError, KeyError):
+                pass
+
+        if ev.candidate_role == ColumnRole.MEASURE:
+            return AggregationType.SUM
+
+    return AggregationType.COUNT
+
+
 def generate_interpretations(
     structured_intent: StructuredIntent,
     semantic_profile: DatasetSemanticProfile,
@@ -50,7 +106,7 @@ def generate_interpretations(
     2. If multiple candidate metrics or dimensions were requested, forks distinct
        interpretations exploring primary analytical choices.
     3. If unambiguous, produces the canonical interpretation with explicit
-       evidence and minimal assumptions.
+       evidence, dynamic filters, ordering, and minimal assumptions.
     """
     interpretations: List[SemanticInterpretation] = []
 
@@ -67,14 +123,28 @@ def generate_interpretations(
         elif ev.candidate_role == ColumnRole.DATETIME:
             datetimes.append(col)
 
+    # Resolve filters
+    filter_specs = list(structured_intent.detected_filter_specs)
+    if not filter_specs and structured_intent.filters:
+        for f in structured_intent.filters:
+            if isinstance(f, dict) and "column" in f and "operator" in f:
+                filter_specs.append(FilterSpec(
+                    column=f["column"],
+                    operator=f["operator"],
+                    value=f.get("value"),
+                ))
+
     # Resolve primary metric
     candidate_metrics = structured_intent.requested_metrics or measures
-    primary_metric = candidate_metrics[0] if candidate_metrics else (measures[0] if measures else "count")
-    metric_agg = AggregationType.SUM if primary_metric in measures else AggregationType.COUNT
+    primary_metric = candidate_metrics[0] if candidate_metrics else (measures[0] if measures else "*")
+    metric_agg = _resolve_aggregation(primary_metric, structured_intent.original_request, semantic_profile)
 
     # Resolve primary dimension
     primary_dims = structured_intent.requested_dimensions
     granularity = _granularity_from_string(structured_intent.grouping_granularity)
+    order_by = structured_intent.order_by
+    order_direction = structured_intent.order_direction
+    limit = structured_intent.limit
 
     # Check for item-level date ambiguity
     date_alts: List[str] = []
@@ -98,13 +168,18 @@ def generate_interpretations(
                 aggregation=metric_agg,
                 dimension_columns=dim_cols,
                 granularity=granularity or Granularity.MONTH,
+                filter_specs=filter_specs,
+                order_by=order_by,
+                order_direction=order_direction,
+                limit=limit,
                 visualization=vis,
                 resolved_intent_elements={
                     "metric": primary_metric,
                     "date_column": date_col,
                     "granularity": (granularity or Granularity.MONTH).value,
+                    "filters": [f.model_dump() for f in filter_specs],
                 },
-                referenced_columns=[primary_metric] + dim_cols,
+                referenced_columns=[primary_metric] + dim_cols + [f.column for f in filter_specs],
                 assumptions=[f"Assumed date dimension '{date_col}' among available alternatives: {date_alts}"],
                 unresolved_elements=[],
                 evidence=[
@@ -118,20 +193,26 @@ def generate_interpretations(
     # Scenario 2: Multiple candidate metrics requested -> fork interpretations
     elif len(structured_intent.requested_metrics) > 1:
         for m_col in structured_intent.requested_metrics[:k]:
+            m_agg = _resolve_aggregation(m_col, structured_intent.original_request, semantic_profile)
             vis = VisualizationType.BAR if primary_dims else VisualizationType.KPI
             interp = SemanticInterpretation(
                 interpretation_id=str(uuid4()),
                 intent_summary=f"Aggregate {m_col} across {primary_dims or 'entire dataset'}",
                 metric_column=m_col,
-                aggregation=AggregationType.SUM,
+                aggregation=m_agg,
                 dimension_columns=primary_dims,
                 granularity=granularity,
+                filter_specs=filter_specs,
+                order_by=order_by,
+                order_direction=order_direction,
+                limit=limit,
                 visualization=vis,
                 resolved_intent_elements={
                     "metric": m_col,
                     "dimensions": primary_dims,
+                    "filters": [f.model_dump() for f in filter_specs],
                 },
-                referenced_columns=[m_col] + primary_dims,
+                referenced_columns=[m_col] + primary_dims + [f.column for f in filter_specs],
                 assumptions=[],
                 unresolved_elements=structured_intent.unresolved_terms,
                 evidence=[
@@ -144,7 +225,9 @@ def generate_interpretations(
     # Scenario 3: Canonical single interpretation
     if not interpretations:
         dim_cols = list(primary_dims)
-        temporal_col = structured_intent.temporal_scope or (datetimes[0] if structured_intent.analytical_goal == "trend" and datetimes else None)
+        temporal_col = structured_intent.temporal_scope or (
+            datetimes[0] if (structured_intent.analytical_goal == "trend" and not primary_dims and datetimes) else None
+        )
 
         if temporal_col and temporal_col not in dim_cols:
             dim_cols.append(temporal_col)
@@ -161,7 +244,7 @@ def generate_interpretations(
                 "area": VisualizationType.AREA,
             }
             vis = vis_map.get(structured_intent.requested_visual_preferences.lower(), VisualizationType.BAR)
-        elif structured_intent.analytical_goal == "trend":
+        elif structured_intent.analytical_goal == "trend" and any(d in datetimes for d in dim_cols):
             vis = VisualizationType.LINE
         elif not dim_cols:
             vis = VisualizationType.KPI
@@ -172,29 +255,49 @@ def generate_interpretations(
 
         evidence_list = []
         if primary_metric in semantic_profile.column_evidences:
+            ev_m = semantic_profile.get_evidence(primary_metric)
+            agg_cat_desc = f" [{ev_m.aggregation_category}]" if ev_m and ev_m.aggregation_category else ""
             evidence_list.append(
-                f"Metric '{primary_metric}' confidence: {_col_confidence(semantic_profile, primary_metric):.2f}"
+                f"Metric '{primary_metric}'{agg_cat_desc} confidence: {_col_confidence(semantic_profile, primary_metric):.2f}"
             )
         for d in dim_cols:
             if d in semantic_profile.column_evidences:
                 evidence_list.append(
                     f"Dimension '{d}' confidence: {_col_confidence(semantic_profile, d):.2f}"
                 )
+        for f in filter_specs:
+            evidence_list.append(f"Applied filter: {f.column} {f.operator} {f.value}")
+
+        summary_parts = [f"Compute {metric_agg.value} of {primary_metric}"]
+        if dim_cols:
+            summary_parts.append(f"by {', '.join(dim_cols)}")
+        if filter_specs:
+            summary_parts.append(f"filtered by {', '.join(f'{f.column} {f.operator} {f.value}' for f in filter_specs)}")
+        if limit:
+            summary_parts.append(f"(Limit {limit})")
 
         interp = SemanticInterpretation(
             interpretation_id=str(uuid4()),
-            intent_summary=f"Compute {metric_agg.value} of {primary_metric}" + (f" by {', '.join(dim_cols)}" if dim_cols else ""),
+            intent_summary=" ".join(summary_parts),
             metric_column=primary_metric,
             aggregation=metric_agg,
             dimension_columns=dim_cols,
             granularity=granularity if temporal_col else None,
+            filter_specs=filter_specs,
+            order_by=order_by,
+            order_direction=order_direction,
+            limit=limit,
             visualization=vis,
             resolved_intent_elements={
                 "metric": primary_metric,
                 "dimensions": dim_cols,
                 "granularity": granularity.value if (temporal_col and granularity) else None,
+                "filters": [f.model_dump() for f in filter_specs],
+                "order_by": order_by,
+                "order_direction": order_direction,
+                "limit": limit,
             },
-            referenced_columns=[primary_metric] + dim_cols,
+            referenced_columns=[primary_metric] + dim_cols + [f.column for f in filter_specs],
             assumptions=[] if primary_dims or temporal_col else ["Defaulted to aggregated summary view."],
             unresolved_elements=structured_intent.unresolved_terms,
             evidence=evidence_list,

@@ -51,12 +51,31 @@ from orchestrator.llm import (
     get_llm_client,
     get_multi_provider_clients,
 )
+from orchestrator.insights import (
+    AnalyticalInsightDiscoverer,
+    EvidenceGroundedInsight,
+    InsightEngine,
+    InsightEvidence,
+    InsightGenerationResult,
+    InsightNarrator,
+    InsightRanker,
+    InsightRejectionInfo,
+    InsightType,
+    InsightValidator,
+    generate_grounded_insights,
+)
+from orchestrator.query_engine import (
+    AnalyticalQueryEngine,
+    default_query_engine,
+    execute_analytical_query,
+)
 from orchestrator.schemas import (
     AggregationType,
     AmbiguityDetail,
     AmbiguityResult,
     AmbiguityStatus,
     AmbiguityType,
+    AnalyticalQueryResult,
     CandidateConsistencyCheck,
     CandidatePlan,
     DashboardSpec,
@@ -139,6 +158,11 @@ __all__ = [
     "generate_interpretations",
     "StructuredIntent",
     "SemanticInterpretation",
+    # Analytical Query Engine
+    "AnalyticalQueryEngine",
+    "default_query_engine",
+    "execute_analytical_query",
+    "AnalyticalQueryResult",
     # Compiler
     "compile_plan_to_sql",
     "quote_identifier",
@@ -231,4 +255,16 @@ __all__ = [
     "RunExpiredError",
     "PlanNotFoundError",
     "default_run_store",
+    # Step 6: Evidence-Grounded AI Insights
+    "InsightType",
+    "InsightEvidence",
+    "EvidenceGroundedInsight",
+    "InsightRejectionInfo",
+    "InsightGenerationResult",
+    "AnalyticalInsightDiscoverer",
+    "InsightValidator",
+    "InsightNarrator",
+    "InsightRanker",
+    "InsightEngine",
+    "generate_grounded_insights",
 ]

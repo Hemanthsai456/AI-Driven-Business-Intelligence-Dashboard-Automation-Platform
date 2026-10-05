@@ -58,27 +58,86 @@ from orchestrator.validator import validate_pass1a, validate_pass1b
 from providers.base import LLMClient
 
 
-GENERIC_DISCOVERY_PROMPTS: Set[str] = {
-    "",
-    "dashboard on this data",
-    "dashboard",
-    "create dashboard",
-    "generate dashboard",
-    "build dashboard",
-    "explore data",
-    "explore this data",
-    "analyze data",
-    "analyze this data",
-    "insights",
-    "show insights",
-    "discover insights",
-    "auto dashboard",
-    "give me a dashboard",
-    "create a dashboard on this data",
-    "generate a dashboard on this data",
-    "build a dashboard on this data",
-    "overview",
-    "data overview",
+# ---------------------------------------------------------------------------
+# Structural-signal vocabulary for domain-agnostic intent classification.
+# These sets contain only grammatical/analytical primitives, never domain
+# column names or dataset-specific terminology.
+# ---------------------------------------------------------------------------
+
+# Verbs/nouns that imply a concrete aggregation operation.
+# NOTE: Do NOT include generic question starters ("what is the", "what are the");
+# those can prefix both focused AND discovery requests and must be handled by
+# the anchor tiers instead.
+_AGGREGATION_SIGNALS: Set[str] = {
+    "sum", "total", "count", "number of", "average", "avg", "mean", "median",
+    "max", "maximum", "min", "minimum", "calculate", "compute", "how much",
+    "how many", "percentage", "percent", "ratio", "rate", "proportion",
+    "kpi", "kpis", "metric", "metrics", "measure", "measures", "numbers",
+    # Analytical dimensional nouns that imply a grouped computation
+    "distribution", "trend", "trends", "breakdown", "correlation", "variance",
+    # Implicit measure-retrieval phrases: "show me what X is by Y" = "retrieve X by Y"
+    "show me what",
+}
+
+# Words/phrases that imply grouping, slicing, or cross-dimensional comparison.
+_GROUPING_SIGNALS: Set[str] = {
+    " by ", " per ", " across ", " for each ", " between ", " vs ", " versus ",
+    "compared to", "compare", "group by", "broken down", "breakdown", "split by",
+    "segment", "segmented",
+}
+
+# Words/phrases that imply row filtering or ranking.
+# NOTE: "most " is intentionally omitted -- too broad and collides with
+# discovery phrases like "most important".  Use "most recent", "most common",
+# etc. if you need ranked-filter semantics in the future.
+_FILTER_SIGNALS: Set[str] = {
+    "where ", "filter", "only ", "limit", "top ", "bottom ", "highest",
+    "lowest", "least ", "above ", "below ", "more than", "less than",
+    "greater than", "fewer than", "within", "between",
+}
+
+# ---------------------------------------------------------------------------
+# Discovery anchors -- split into two tiers:
+#
+# STRONG anchors: exclusively exploratory phrases that can NEVER appear in a
+#   focused analytical request.  A match routes unconditionally to DISCOVERY.
+#
+# WEAK anchors: rhetorical verbs / question starters that USUALLY signal
+#   exploration but CAN prefix a focused request (e.g. "Explain the average
+#   temperature by device").  A match routes to DISCOVERY only when there is
+#   NO simultaneous (aggregation + grouping/filter) signal.
+# ---------------------------------------------------------------------------
+
+_STRONG_DISCOVERY_ANCHORS: Set[str] = {
+    # Overview / summary vocabulary -- cannot precede a slice operation
+    "overview", "summarize", "data summary", "dataset summary", "overall summary", "exploration",
+    "key insight", "important insight", "useful trend",
+    "what should i know", "should i know", "what matters",
+    "most important things", "most important",
+    "analyze this dataset", "analyse this dataset",
+    # Dashboard-construction phrases
+    "build a dashboard", "build me a dashboard", "generate a dashboard",
+    "create a dashboard", "make a dashboard", "give me a dashboard",
+    "give me an overview", "auto dashboard",
+    # Quantifier-free exploration phrases
+    "all metrics", "all insights", "everything",
+    "main insight", "top insight", "quick look",
+    "at a glance", "snapshot", "high level", "high-level",
+    # Unambiguous curiosity phrases
+    "what can you tell me", "what do you see", "what does this data",
+    "interesting about", "worth knowing", "what is going on",
+}
+
+_WEAK_DISCOVERY_ANCHORS: Set[str] = {
+    # Rhetorical starters -- exploratory when there is no agg+group slice,
+    # but can also introduce a focused request ("Explain avg X by Y").
+    # NOTE: "show me what" is intentionally omitted -- "show me what X is by Y"
+    # is a dimensional slice request and should be focused when a grouping
+    # signal follows. It carries no reliable exploratory-only signal.
+    "explore", "tell me about", "tell me what",
+    "what are the key", "what are the most",
+    "understand", "describe", "explain",
+    "most useful",
 }
 
 
@@ -86,7 +145,23 @@ def classify_intent_mode(
     intent: Optional[str],
     semantic_profile: DatasetSemanticProfile,
 ) -> Tuple[str, Optional[str]]:
-    """Determine whether a brief triggers DISCOVERY mode or FOCUSED mode.
+    """Classify an intent string as DISCOVERY or FOCUSED using structural signals.
+
+    The classifier is fully domain-agnostic: it reads only grammatical /
+    analytical primitives (aggregation verbs, grouping prepositions, filter
+    qualifiers, exploration anchors) from the intent text.  It never inspects
+    dataset column names or any domain-specific vocabulary.
+
+    Routing logic (deterministic, in priority order):
+        1. Empty intent                                      -> discovery
+        2. STRONG_DISCOVERY_ANCHOR match                     -> discovery
+        3. AGGREGATION + (GROUPING or FILTER)                -> focused
+           [structural signals evaluated BEFORE weak anchors]
+        4. WEAK_DISCOVERY_ANCHOR (no agg+slice present)      -> discovery
+        5. Very short (<=3 tokens), no signals               -> discovery
+        6. GROUPING or FILTER only (no aggregation)          -> discovery
+        7. AGGREGATION alone                                 -> focused
+        8. Default fallback                                  -> discovery
 
     Returns:
         (mode, topic) where mode is "discovery" or "focused"
@@ -94,45 +169,68 @@ def classify_intent_mode(
     if not intent or intent.strip() == "":
         return "discovery", None
 
-    cleaned = intent.strip().lower()
-    cleaned_no_punct = re.sub(r"[^\w\s]", "", cleaned)
+    cleaned = " " + intent.strip().lower() + " "  # pad so boundary checks work
+    cleaned_no_punct = re.sub(r"[^\w\s]", " ", cleaned)
 
-    if cleaned in GENERIC_DISCOVERY_PROMPTS or cleaned_no_punct in GENERIC_DISCOVERY_PROMPTS:
-        return "discovery", None
-
-    # Check for generic patterns
-    generic_prefixes = (
-        "dashboard on",
-        "dashboard for",
-        "explore",
-        "overview of",
-        "insights on",
-        "insights for",
-        "analyze",
-    )
-
-    tokens = cleaned_no_punct.split()
-    # Check if brief is very short (1-2 words) naming only a measure/topic
-    # e.g. "sales", "revenue", "orders", "customers"
-    known_cols = {col.lower(): col for col in semantic_profile.column_evidences.keys()}
-
-    if len(tokens) <= 2:
-        for t in tokens:
-            if t in known_cols:
-                return "discovery", t
-        if "dashboard" in tokens or "insights" in tokens:
+    # --- Priority 1: Strong discovery anchors (unconditional) ---
+    for anchor in _STRONG_DISCOVERY_ANCHORS:
+        if anchor in cleaned or anchor in cleaned_no_punct:
             return "discovery", None
 
-    # If it starts with a generic exploration prefix and doesn't specify concrete grouping operations
-    specific_keywords = {"by", "group by", "top", "bottom", "highest", "lowest", "filter", "where", "compare to"}
-    has_specific = any(sk in cleaned for sk in specific_keywords)
+    # --- Structural signal detection ---
+    has_measure = False
+    tokens_set = set(re.findall(r"\b[a-z0-9_]+\b", cleaned.lower()))
+    if semantic_profile and hasattr(semantic_profile, "column_evidences"):
+        for col, ev in semantic_profile.column_evidences.items():
+            if ev.candidate_role == ColumnRole.MEASURE:
+                col_norm = col.lower().replace("_", " ").replace("-", " ")
+                col_words = set(re.findall(r"\b[a-z0-9]+\b", col_norm))
+                if (
+                    col.lower() in cleaned_no_punct
+                    or col_norm in cleaned_no_punct
+                    or (col_words and col_words.issubset(tokens_set))
+                ):
+                    has_measure = True
+                    break
+                for cw in col_words:
+                    if len(cw) >= 4 and cw in tokens_set:
+                        has_measure = True
+                        break
+                if has_measure:
+                    break
 
-    for prefix in generic_prefixes:
-        if cleaned.startswith(prefix) and not has_specific:
-            topic_candidate = cleaned[len(prefix) :].strip()
-            return "discovery", topic_candidate if topic_candidate else None
+    has_aggregation = any(sig in cleaned or sig in cleaned_no_punct for sig in _AGGREGATION_SIGNALS) or has_measure
+    has_grouping = any(sig in cleaned for sig in _GROUPING_SIGNALS)
+    has_filter = any(sig in cleaned for sig in _FILTER_SIGNALS)
+    has_slice = has_grouping or has_filter
 
-    return "focused", None
+    # --- Priority 2: Aggregation + slice -> focused (beats weak anchors) ---
+    if has_aggregation and has_slice:
+        return "focused", None
+
+    # --- Priority 3: Weak discovery anchors (only when no agg+slice) ---
+    for anchor in _WEAK_DISCOVERY_ANCHORS:
+        if anchor in cleaned or anchor in cleaned_no_punct:
+            return "discovery", None
+
+    tokens = cleaned_no_punct.split()
+
+    # --- Priority 4: Very short intents with no concrete signals ---
+    if len(tokens) <= 3 and not has_aggregation and not has_slice:
+        return "discovery", None
+
+    # --- Priority 5: Slice/filter only, no aggregation -> discovery ---
+    #   ("Show me the data by region" is still exploratory)
+    if has_slice and not has_aggregation:
+        return "discovery", None
+
+    # --- Priority 6: Aggregation alone -> focused ---
+    #   ("What is the total revenue?" is a concrete metric question)
+    if has_aggregation:
+        return "focused", None
+
+    # --- Default: treat as exploratory ---
+    return "discovery", None
 
 
 def run_discovery_pipeline(

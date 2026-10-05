@@ -1,0 +1,955 @@
+[
+  {
+    "dataset": "healthcare",
+    "status": "SUCCESS",
+    "mode": "discovery",
+    "panels_count": 4,
+    "tiles_count": 2,
+    "slicers_count": 4,
+    "headline": "Total SUM of length_of_stay is 5,629 across 1000 records.",
+    "summary": {
+      "candidates_generated": 15,
+      "candidates_executed": 15,
+      "candidates_rejected": 13,
+      "candidates_selected": 2,
+      "enumerator_proposed": 15,
+      "agent_proposed": 0,
+      "candidates_fdr_passed": 2,
+      "enumerator_fdr_passed": 2,
+      "agent_fdr_passed": 0,
+      "enumerator_selected": 2,
+      "agent_selected": 0,
+      "fdr_alpha": 0.05,
+      "notice": "the data doesn't support more (fewer than 3 insights passed statistical and quality floors)"
+    },
+    "tiles": [
+      {
+        "id": "tile_kpi_5cc9bf9f",
+        "title": "Total Length Of Stay",
+        "chart_type": "kpi",
+        "size": {
+          "w": 3,
+          "h": 2
+        },
+        "priority": 1,
+        "candidate_id": "5cc9bf9f-1d51-415e-9ec7-3e33b5846547",
+        "generator": "rule-based baseline",
+        "evidence": null,
+        "why_chosen": "Strength: 1.00 (strong effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "ea5a7627-a6ac-4a0c-b062-c1b59f95d6d9",
+          "dataset_id": "ds_tmpol9q0yri_519a45_cleaned",
+          "intent": "Discovery TOTAL_KPI: SUM(length_of_stay)",
+          "metric": {
+            "column": "length_of_stay",
+            "aggregation": "SUM"
+          },
+          "dimensions": [],
+          "filters": [],
+          "comparison": null,
+          "visualization": "KPI",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate TOTAL_KPI for SUM(length_of_stay)",
+            "evidence": [
+              "Role length_of_stay: MEASURE"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  SUM(\"length_of_stay\") AS \"sum_length_of_stay\"\nFROM \"source_data\"\nLIMIT 50001;",
+        "data": [
+          {
+            "sum_length_of_stay": 5629.0
+          }
+        ],
+        "x_key": null,
+        "y_keys": [
+          "sum_length_of_stay"
+        ],
+        "dimensions": [],
+        "metrics": [
+          "length_of_stay"
+        ],
+        "delta": null,
+        "metadata": {}
+      },
+      {
+        "id": "tile_dc538ad1",
+        "title": "Identified 9 extreme outlier records in length_of_stay, representing 0.9% of distribution.",
+        "chart_type": "histogram",
+        "size": {
+          "w": 8,
+          "h": 4
+        },
+        "priority": 2,
+        "candidate_id": "dc538ad1-4680-41a3-a770-33d80b6424f8",
+        "generator": "rule-based baseline",
+        "evidence": {
+          "strength": 0.09,
+          "robustness": 1.0,
+          "fdr_passed": true,
+          "fdr_q_value": null,
+          "n": 1,
+          "score": 0.09
+        },
+        "why_chosen": "Strength: 0.09 (weak effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0001 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "359c37e3-b064-4d86-b8cd-eec900d36a1c",
+          "dataset_id": "ds_tmpol9q0yri_519a45_cleaned",
+          "intent": "Discovery DISTRIBUTION_OUTLIERS: AVG(length_of_stay)",
+          "metric": {
+            "column": "length_of_stay",
+            "aggregation": "AVG"
+          },
+          "dimensions": [],
+          "filters": [],
+          "comparison": null,
+          "visualization": "BAR",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate DISTRIBUTION_OUTLIERS for AVG(length_of_stay)",
+            "evidence": [
+              "Role length_of_stay: MEASURE"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  AVG(\"length_of_stay\") AS \"avg_length_of_stay\"\nFROM \"source_data\"\nLIMIT 50001;",
+        "data": [
+          {
+            "avg_length_of_stay": 5.629
+          }
+        ],
+        "x_key": "avg_length_of_stay",
+        "y_keys": [
+          "avg_length_of_stay"
+        ],
+        "dimensions": [],
+        "metrics": [
+          "length_of_stay"
+        ],
+        "delta": null,
+        "metadata": {}
+      }
+    ],
+    "slicers": [
+      {
+        "id": "slicer_admission_date",
+        "column": "admission_date",
+        "role": "DATETIME",
+        "control_type": "date_range",
+        "min_date": "2024-01-01",
+        "max_date": "2025-12-31",
+        "options": []
+      },
+      {
+        "id": "slicer_hospital",
+        "column": "hospital",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "KIMS",
+            "label": "KIMS",
+            "count": 195
+          },
+          {
+            "value": "Apollo",
+            "label": "Apollo",
+            "count": 171
+          },
+          {
+            "value": "Aig",
+            "label": "Aig",
+            "count": 166
+          },
+          {
+            "value": "Continental",
+            "label": "Continental",
+            "count": 158
+          },
+          {
+            "value": "Yashoda",
+            "label": "Yashoda",
+            "count": 155
+          },
+          {
+            "value": "Care",
+            "label": "Care",
+            "count": 149
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 6
+          }
+        ]
+      },
+      {
+        "id": "slicer_diagnosis",
+        "column": "diagnosis",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Pneumonia",
+            "label": "Pneumonia",
+            "count": 118
+          },
+          {
+            "value": "Asthma",
+            "label": "Asthma",
+            "count": 110
+          },
+          {
+            "value": "Kidney Disease",
+            "label": "Kidney Disease",
+            "count": 106
+          },
+          {
+            "value": "Infection",
+            "label": "Infection",
+            "count": 101
+          },
+          {
+            "value": "Hypertension",
+            "label": "Hypertension",
+            "count": 99
+          },
+          {
+            "value": "Cardiac Disease",
+            "label": "Cardiac Disease",
+            "count": 99
+          },
+          {
+            "value": "Appendicitis",
+            "label": "Appendicitis",
+            "count": 96
+          },
+          {
+            "value": "Fracture",
+            "label": "Fracture",
+            "count": 95
+          },
+          {
+            "value": "Stroke",
+            "label": "Stroke",
+            "count": 92
+          },
+          {
+            "value": "Diabetes",
+            "label": "Diabetes",
+            "count": 83
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "id": "slicer_severity",
+        "column": "severity",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Medium",
+            "label": "Medium",
+            "count": 397
+          },
+          {
+            "value": "Low",
+            "label": "Low",
+            "count": 323
+          },
+          {
+            "value": "High",
+            "label": "High",
+            "count": 218
+          },
+          {
+            "value": "Critical",
+            "label": "Critical",
+            "count": 61
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "dataset": "education",
+    "status": "SUCCESS",
+    "mode": "discovery",
+    "panels_count": 3,
+    "tiles_count": 2,
+    "slicers_count": 3,
+    "headline": "Total SUM of marks is 86,825 across 1200 records.",
+    "summary": {
+      "candidates_generated": 12,
+      "candidates_executed": 12,
+      "candidates_rejected": 11,
+      "candidates_selected": 1,
+      "enumerator_proposed": 12,
+      "agent_proposed": 0,
+      "candidates_fdr_passed": 1,
+      "enumerator_fdr_passed": 1,
+      "agent_fdr_passed": 0,
+      "enumerator_selected": 1,
+      "agent_selected": 0,
+      "fdr_alpha": 0.05,
+      "notice": "the data doesn't support more (fewer than 3 insights passed statistical and quality floors)"
+    },
+    "tiles": [
+      {
+        "id": "tile_kpi_b8e56ad7",
+        "title": "Total Marks",
+        "chart_type": "kpi",
+        "size": {
+          "w": 3,
+          "h": 2
+        },
+        "priority": 1,
+        "candidate_id": "b8e56ad7-a79a-4c8b-bca3-de5a2dc149d2",
+        "generator": "rule-based baseline",
+        "evidence": null,
+        "why_chosen": "Strength: 1.00 (strong effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "289cca2c-a146-43fe-b183-0059680aba86",
+          "dataset_id": "ds_tmpdr94u2h2_2274ed_cleaned",
+          "intent": "Discovery TOTAL_KPI: SUM(marks)",
+          "metric": {
+            "column": "marks",
+            "aggregation": "SUM"
+          },
+          "dimensions": [],
+          "filters": [],
+          "comparison": null,
+          "visualization": "KPI",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate TOTAL_KPI for SUM(marks)",
+            "evidence": [
+              "Role marks: MEASURE"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  SUM(\"marks\") AS \"sum_marks\"\nFROM \"source_data\"\nLIMIT 50001;",
+        "data": [
+          {
+            "sum_marks": 86825.0
+          }
+        ],
+        "x_key": null,
+        "y_keys": [
+          "sum_marks"
+        ],
+        "dimensions": [],
+        "metrics": [
+          "marks"
+        ],
+        "delta": null,
+        "metadata": {}
+      },
+      {
+        "id": "tile_base_1f9df9e9",
+        "title": "Total marks by department",
+        "chart_type": "bar",
+        "size": {
+          "w": 8,
+          "h": 4
+        },
+        "priority": 2,
+        "candidate_id": null,
+        "generator": "rule-based baseline",
+        "evidence": {
+          "strength": 1.0,
+          "robustness": 0.8,
+          "fdr_passed": null,
+          "fdr_q_value": null,
+          "n": 7,
+          "score": 0.8
+        },
+        "why_chosen": null,
+        "plan": {
+          "plan_id": "b8797a0b-75c4-4a31-a89b-e512dbc1ef9b",
+          "dataset_id": "ds_tmpdr94u2h2_2274ed_cleaned",
+          "intent": "Total marks by department",
+          "metric": {
+            "column": "marks",
+            "aggregation": "SUM"
+          },
+          "dimensions": [
+            {
+              "column": "department",
+              "granularity": null
+            }
+          ],
+          "filters": [],
+          "comparison": null,
+          "visualization": "TABLE",
+          "generator": "llm_direct",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Total marks by department",
+            "evidence": []
+          }
+        },
+        "compiled_sql": null,
+        "data": [
+          {
+            "department": "Aids",
+            "marks": 14501.0
+          },
+          {
+            "department": "Civil",
+            "marks": 15245.0
+          },
+          {
+            "department": "Cse",
+            "marks": 14112.0
+          },
+          {
+            "department": "Ece",
+            "marks": 13666.0
+          },
+          {
+            "department": "Eee",
+            "marks": 15221.0
+          },
+          {
+            "department": "MECH",
+            "marks": 13980.0
+          },
+          {
+            "department": "Unknown",
+            "marks": 100.0
+          }
+        ],
+        "x_key": "department",
+        "y_keys": [
+          "marks"
+        ],
+        "dimensions": [
+          "department"
+        ],
+        "metrics": [
+          "marks"
+        ],
+        "delta": null,
+        "metadata": {}
+      }
+    ],
+    "slicers": [
+      {
+        "id": "slicer_department",
+        "column": "department",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Civil",
+            "label": "Civil",
+            "count": 211
+          },
+          {
+            "value": "Eee",
+            "label": "Eee",
+            "count": 211
+          },
+          {
+            "value": "Aids",
+            "label": "Aids",
+            "count": 201
+          },
+          {
+            "value": "Cse",
+            "label": "Cse",
+            "count": 196
+          },
+          {
+            "value": "MECH",
+            "label": "MECH",
+            "count": 192
+          },
+          {
+            "value": "Ece",
+            "label": "Ece",
+            "count": 187
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 2
+          }
+        ]
+      },
+      {
+        "id": "slicer_subject",
+        "column": "subject",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Computer Networks",
+            "label": "Computer Networks",
+            "count": 183
+          },
+          {
+            "value": "Python",
+            "label": "Python",
+            "count": 177
+          },
+          {
+            "value": "Database Systems",
+            "label": "Database Systems",
+            "count": 174
+          },
+          {
+            "value": "Mathematics",
+            "label": "Mathematics",
+            "count": 168
+          },
+          {
+            "value": "Operating Systems",
+            "label": "Operating Systems",
+            "count": 167
+          },
+          {
+            "value": "Machine Learning",
+            "label": "Machine Learning",
+            "count": 167
+          },
+          {
+            "value": "Statistics",
+            "label": "Statistics",
+            "count": 161
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 3
+          }
+        ]
+      },
+      {
+        "id": "slicer_exam_date",
+        "column": "exam_date",
+        "role": "DATETIME",
+        "control_type": "date_range",
+        "min_date": "2024-01-01",
+        "max_date": "2025-12-31",
+        "options": []
+      }
+    ]
+  },
+  {
+    "dataset": "iot",
+    "status": "SUCCESS",
+    "mode": "discovery",
+    "panels_count": 5,
+    "tiles_count": 4,
+    "slicers_count": 3,
+    "headline": "Total SUM of pressure is 2,025,908.4 across 2000 records.",
+    "summary": {
+      "candidates_generated": 21,
+      "candidates_executed": 21,
+      "candidates_rejected": 17,
+      "candidates_selected": 4,
+      "enumerator_proposed": 21,
+      "agent_proposed": 0,
+      "candidates_fdr_passed": 6,
+      "enumerator_fdr_passed": 6,
+      "agent_fdr_passed": 0,
+      "enumerator_selected": 4,
+      "agent_selected": 0,
+      "fdr_alpha": 0.05,
+      "notice": null
+    },
+    "tiles": [
+      {
+        "id": "tile_kpi_98ed5693",
+        "title": "Total Pressure",
+        "chart_type": "kpi",
+        "size": {
+          "w": 3,
+          "h": 2
+        },
+        "priority": 1,
+        "candidate_id": "98ed5693-024d-4a8c-884d-5ae78e103ec2",
+        "generator": "rule-based baseline",
+        "evidence": null,
+        "why_chosen": "Strength: 1.00 (strong effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "4dee600f-8c67-4f7f-adea-366b3540b72b",
+          "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+          "intent": "Discovery TOTAL_KPI: SUM(pressure)",
+          "metric": {
+            "column": "pressure",
+            "aggregation": "SUM"
+          },
+          "dimensions": [],
+          "filters": [],
+          "comparison": null,
+          "visualization": "KPI",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate TOTAL_KPI for SUM(pressure)",
+            "evidence": [
+              "Role pressure: MEASURE"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  SUM(\"pressure\") AS \"sum_pressure\"\nFROM \"source_data\"\nLIMIT 50001;",
+        "data": [
+          {
+            "sum_pressure": 2025908.3499999978
+          }
+        ],
+        "x_key": null,
+        "y_keys": [
+          "sum_pressure"
+        ],
+        "dimensions": [],
+        "metrics": [
+          "pressure"
+        ],
+        "delta": null,
+        "metadata": {}
+      },
+      {
+        "id": "tile_kpi_603b189e",
+        "title": "Total Temperature",
+        "chart_type": "kpi",
+        "size": {
+          "w": 3,
+          "h": 2
+        },
+        "priority": 2,
+        "candidate_id": "603b189e-3741-47e6-89b0-96844d0b20ed",
+        "generator": "rule-based baseline",
+        "evidence": null,
+        "why_chosen": "Strength: 1.00 (strong effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "ae09b941-2402-4ab8-935e-f75f032c8412",
+          "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+          "intent": "Discovery TOTAL_KPI: SUM(temperature)",
+          "metric": {
+            "column": "temperature",
+            "aggregation": "SUM"
+          },
+          "dimensions": [],
+          "filters": [],
+          "comparison": null,
+          "visualization": "KPI",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate TOTAL_KPI for SUM(temperature)",
+            "evidence": [
+              "Role temperature: MEASURE"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  SUM(\"temperature\") AS \"sum_temperature\"\nFROM \"source_data\"\nLIMIT 50001;",
+        "data": [
+          {
+            "sum_temperature": 50444.89000000014
+          }
+        ],
+        "x_key": null,
+        "y_keys": [
+          "sum_temperature"
+        ],
+        "dimensions": [],
+        "metrics": [
+          "temperature"
+        ],
+        "delta": null,
+        "metadata": {}
+      },
+      {
+        "id": "tile_d02450db",
+        "title": "Top category Normal leads with 1,374 in COUNT of *, accounting for 68.7% of total.",
+        "chart_type": "bar",
+        "size": {
+          "w": 8,
+          "h": 4
+        },
+        "priority": 3,
+        "candidate_id": "d02450db-b657-46fe-86ac-4147e68015b0",
+        "generator": "rule-based baseline",
+        "evidence": {
+          "strength": 0.5827,
+          "robustness": 1.0,
+          "fdr_passed": true,
+          "fdr_q_value": null,
+          "n": 4,
+          "score": 0.2913
+        },
+        "why_chosen": "Strength: 0.58 (strong effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "65910e93-9cc4-485f-a1a4-3e7557a3588a",
+          "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+          "intent": "Discovery RANKING: COUNT(*) by status",
+          "metric": {
+            "column": "*",
+            "aggregation": "COUNT"
+          },
+          "dimensions": [
+            {
+              "column": "status",
+              "granularity": null
+            }
+          ],
+          "filters": [],
+          "comparison": null,
+          "visualization": "BAR",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate RANKING for COUNT(*) grouped by status",
+            "evidence": [
+              "Role *: MEASURE",
+              "Role status: DIMENSION"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  \"status\",\n  COUNT(*) AS \"count_records\"\nFROM \"source_data\"\nGROUP BY 1\nORDER BY 1 ASC\nLIMIT 50001;",
+        "data": [
+          {
+            "status": "Maintenance",
+            "count_records": 457
+          },
+          {
+            "status": "Normal",
+            "count_records": 1374
+          },
+          {
+            "status": "Unknown",
+            "count_records": 5
+          },
+          {
+            "status": "Warning",
+            "count_records": 164
+          }
+        ],
+        "x_key": "status",
+        "y_keys": [
+          "count_records"
+        ],
+        "dimensions": [
+          "status"
+        ],
+        "metrics": [
+          "*"
+        ],
+        "delta": null,
+        "metadata": {}
+      },
+      {
+        "id": "tile_f8aaa2ba",
+        "title": "Normal accounts for 68.7% of total * across status.",
+        "chart_type": "donut",
+        "size": {
+          "w": 4,
+          "h": 4
+        },
+        "priority": 4,
+        "candidate_id": "f8aaa2ba-762a-4ea4-849e-ee30d2d8e7b3",
+        "generator": "rule-based baseline",
+        "evidence": {
+          "strength": 0.5827,
+          "robustness": 1.0,
+          "fdr_passed": true,
+          "fdr_q_value": null,
+          "n": 4,
+          "score": 0.2913
+        },
+        "why_chosen": "Strength: 0.58 (moderate effect size), Robustness: 100.0% (perturbation preservation), Significance: p=0.0000 (passed Benjamini-Hochberg FDR control).",
+        "plan": {
+          "plan_id": "143b9be1-e622-4b81-baa5-cd46e672060d",
+          "dataset_id": "ds_tmpv95qpgsz_69924f_cleaned",
+          "intent": "Discovery COMPOSITION: COUNT(*) by status",
+          "metric": {
+            "column": "*",
+            "aggregation": "COUNT"
+          },
+          "dimensions": [
+            {
+              "column": "status",
+              "granularity": null
+            }
+          ],
+          "filters": [],
+          "comparison": null,
+          "visualization": "BAR",
+          "generator": "discovery_enumerator",
+          "provider": "unknown",
+          "supporting_providers": [],
+          "supporting_count": 1,
+          "providers_responded": 1,
+          "reasoning": {
+            "interpretation": "Evaluate COMPOSITION for COUNT(*) grouped by status",
+            "evidence": [
+              "Role *: MEASURE",
+              "Role status: DIMENSION"
+            ]
+          }
+        },
+        "compiled_sql": "SELECT\n  \"status\",\n  COUNT(*) AS \"count_records\"\nFROM \"source_data\"\nGROUP BY 1\nORDER BY 1 ASC\nLIMIT 50001;",
+        "data": [
+          {
+            "status": "Maintenance",
+            "count_records": 457
+          },
+          {
+            "status": "Normal",
+            "count_records": 1374
+          },
+          {
+            "status": "Unknown",
+            "count_records": 5
+          },
+          {
+            "status": "Warning",
+            "count_records": 164
+          }
+        ],
+        "x_key": "status",
+        "y_keys": [
+          "count_records"
+        ],
+        "dimensions": [
+          "status"
+        ],
+        "metrics": [
+          "*"
+        ],
+        "delta": null,
+        "metadata": {}
+      }
+    ],
+    "slicers": [
+      {
+        "id": "slicer_timestamp",
+        "column": "timestamp",
+        "role": "DATETIME",
+        "control_type": "date_range",
+        "min_date": "2025-01-01",
+        "max_date": "2025-01-21",
+        "options": []
+      },
+      {
+        "id": "slicer_device",
+        "column": "device",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Sensor-A",
+            "label": "Sensor-A",
+            "count": 421
+          },
+          {
+            "value": "Sensor-E",
+            "label": "Sensor-E",
+            "count": 415
+          },
+          {
+            "value": "Sensor-C",
+            "label": "Sensor-C",
+            "count": 402
+          },
+          {
+            "value": "Sensor-B",
+            "label": "Sensor-B",
+            "count": 387
+          },
+          {
+            "value": "Sensor-D",
+            "label": "Sensor-D",
+            "count": 374
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 1
+          }
+        ]
+      },
+      {
+        "id": "slicer_status",
+        "column": "status",
+        "role": "DIMENSION",
+        "control_type": "multi_select",
+        "min_date": null,
+        "max_date": null,
+        "options": [
+          {
+            "value": "Normal",
+            "label": "Normal",
+            "count": 1374
+          },
+          {
+            "value": "Maintenance",
+            "label": "Maintenance",
+            "count": 457
+          },
+          {
+            "value": "Warning",
+            "label": "Warning",
+            "count": 164
+          },
+          {
+            "value": "Unknown",
+            "label": "Unknown",
+            "count": 5
+          }
+        ]
+      }
+    ]
+  }
+]

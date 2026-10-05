@@ -8,7 +8,7 @@ import time
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
-DEFAULT_GROQ_MODEL: str = "openai/gpt-oss-120b"
+DEFAULT_GROQ_MODEL: str = "openai/gpt-oss-20b"
 GROQ_API_KEY_ENV: str = "GROQ_API_KEY"
 GROQ_MODEL_ENV: str = "GROQ_MODEL"
 

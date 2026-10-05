@@ -54,7 +54,7 @@ class RateLimiter:
     """Per-provider rate limiter + daily call counter."""
     
     def __init__(self, limits_per_day: Dict[str, int] = None):
-        self.limits = limits_per_day or {"gemini": 1000, "groq": 500, "ollama": 10000}
+        self.limits = limits_per_day or {"gemini": 1000, "groq": 500, "ollama": 10000, "rule_based_baseline": 100000}
         self.state_file = "artifacts/quotas.json"
         self._load()
 
@@ -230,6 +230,21 @@ class MultiProviderGenerator(PlanGenerator):
 
         self.eval_mode = os.getenv("EVAL_MODE", "false").lower() == "true"
 
+        baseline_providers = {"rule_based_baseline", "local", "zero_cost_local"}
+        self.primary_clients = [
+            c for c in self.clients
+            if getattr(c, "provider", "").lower() not in baseline_providers
+        ]
+        fallback_candidates = [
+            c for c in self.clients
+            if getattr(c, "provider", "").lower() in baseline_providers
+        ]
+        if fallback_candidates:
+            self.fallback_client = fallback_candidates[0]
+        else:
+            from providers.adapters.local import RuleBasedBaselineClient
+            self.fallback_client = RuleBasedBaselineClient()
+
     def _build_prompt(
         self,
         context: LLMContext,
@@ -268,6 +283,8 @@ class MultiProviderGenerator(PlanGenerator):
     def _call_provider(self, client: LLMClient, prompt: str, schema: Dict[str, Any], context: LLMContext, k: int) -> Tuple[List[CandidatePlan], GeneratorCallLog]:
         provider = client.provider
         model = client.model_name
+        is_baseline = provider.lower() in {"rule_based_baseline", "local", "zero_cost_local"}
+        gen_label = "rule_based_baseline" if is_baseline else "llm_direct"
         
         # Check quota
         RATE_LIMITER.check_and_increment(provider)
@@ -279,7 +296,8 @@ class MultiProviderGenerator(PlanGenerator):
                 # Mock a call log
                 call_log = GeneratorCallLog(
                     model=model,
-                    generator="llm_direct",
+                    provider=provider,
+                    generator=gen_label,
                     steps=1,
                     input_tokens=100,
                     output_tokens=100,
@@ -292,7 +310,7 @@ class MultiProviderGenerator(PlanGenerator):
                 for item in candidates:
                     if isinstance(item, dict):
                         item["dataset_id"] = context.dataset_id
-                        item["generator"] = "llm_direct"
+                        item["generator"] = gen_label
                         item["provider"] = provider
                         if "intent" not in item:
                             item["intent"] = context.intent
@@ -304,7 +322,7 @@ class MultiProviderGenerator(PlanGenerator):
         raw_json, call_log = client.generate_structured(
             prompt=prompt,
             response_schema=schema,
-            generator_label="llm_direct",
+            generator_label=gen_label,
         )
         
         # Save to cache
@@ -315,7 +333,7 @@ class MultiProviderGenerator(PlanGenerator):
         for item in candidates:
             if isinstance(item, dict):
                 item["dataset_id"] = context.dataset_id
-                item["generator"] = "llm_direct"
+                item["generator"] = gen_label
                 item["provider"] = provider
                 if "intent" not in item:
                     item["intent"] = context.intent
@@ -337,44 +355,83 @@ class MultiProviderGenerator(PlanGenerator):
         attempts = 1 + AI_MAX_RETRIES
         last_error = None
         
-        for attempt in range(attempts):
-            prompt = self._build_prompt(context, k=k, retry_error=last_error, interpretations=interpretations)
+        # 1. Primary external LLM providers attempted first
+        if self.primary_clients:
+            for attempt in range(attempts):
+                prompt = self._build_prompt(context, k=k, retry_error=last_error, interpretations=interpretations)
 
-            
-            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-                futures = {
-                    executor.submit(self._call_provider, client, prompt, schema, context, k): client
-                    for client in self.clients
-                }
-                
-                for future in concurrent.futures.as_completed(futures):
-                    client = futures[future]
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(self.primary_clients)))
+                try:
+                    futures = {
+                        executor.submit(self._call_provider, client, prompt, schema, context, k): client
+                        for client in self.primary_clients
+                    }
+
                     try:
-                        # Timeout isolated per provider
-                        plans, log = future.result(timeout=15.0)
-                        all_logs.append(log)
-                        all_plans.extend(plans)
-                    except Exception as e:
-                        # Failures are logged, never fatal
-                        err_log = GeneratorCallLog(
-                            model=client.model_name,
-                            provider=client.provider,
-                            generator="llm_direct",
-                            steps=1,
-                            input_tokens=0,
-                            output_tokens=0,
-                            latency_seconds=0.0,
-                            estimated_cost_usd=0.0,
-                        )
-                        all_logs.append(err_log)
-                        last_error = str(e)
+                        for future in concurrent.futures.as_completed(futures, timeout=15.0):
+                            client = futures[future]
+                            try:
+                                plans, log = future.result()
+                                all_logs.append(log)
+                                all_plans.extend(plans)
+                            except Exception as e:
+                                err_log = GeneratorCallLog(
+                                    model=getattr(client, "model_name", "unknown"),
+                                    provider=getattr(client, "provider", "unknown"),
+                                    generator="llm_direct",
+                                    steps=1,
+                                    input_tokens=0,
+                                    output_tokens=0,
+                                    latency_seconds=0.0,
+                                    estimated_cost_usd=0.0,
+                                )
+                                all_logs.append(err_log)
+                                last_error = str(e)
+                    except concurrent.futures.TimeoutError:
+                        for f, c in futures.items():
+                            if not f.done():
+                                err_log = GeneratorCallLog(
+                                    model=getattr(c, "model_name", "unknown"),
+                                    provider=getattr(c, "provider", "unknown"),
+                                    generator="llm_direct",
+                                    steps=1,
+                                    input_tokens=0,
+                                    output_tokens=0,
+                                    latency_seconds=15.0,
+                                    estimated_cost_usd=0.0,
+                                )
+                                all_logs.append(err_log)
+                finally:
+                    executor.shutdown(wait=False, cancel_futures=True)
 
-            if all_plans:
-                break
-                
+                if all_plans:
+                    break
+                    
         # Reject structurally invalid plans before dedup / agreement scoring
         from orchestrator.validator import is_plan_structurally_valid
         valid_plans = [p for p in all_plans if is_plan_structurally_valid(p)]
+
+        # 2. Deterministic baseline fallback if no valid plans from primary providers
+        if not valid_plans and self.fallback_client:
+            prompt = self._build_prompt(context, k=k, retry_error=last_error, interpretations=interpretations)
+            try:
+                fb_plans, fb_log = self._call_provider(self.fallback_client, prompt, schema, context, k)
+                all_logs.append(fb_log)
+                for p in fb_plans:
+                    if is_plan_structurally_valid(p):
+                        valid_plans.append(p)
+            except Exception as e:
+                err_log = GeneratorCallLog(
+                    model=getattr(self.fallback_client, "model_name", "rule_based_baseline"),
+                    provider="rule_based_baseline",
+                    generator="rule_based_baseline",
+                    steps=1,
+                    input_tokens=0,
+                    output_tokens=0,
+                    latency_seconds=0.0,
+                    estimated_cost_usd=0.0,
+                )
+                all_logs.append(err_log)
 
         # Dedupe by plan_signature, aggregate supporting_count and provider lists
         unique_plans: Dict[str, CandidatePlan] = {}

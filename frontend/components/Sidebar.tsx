@@ -29,8 +29,6 @@ const WORKSPACE_NAV: NavItem[] = [
 ];
 
 const ADVANCED_NAV: NavItem[] = [
-  { href: '/ask', label: 'Ask NL Query', icon: Sparkles },
-  { href: '/plan-runner', label: 'Plan Runner', icon: Terminal },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
