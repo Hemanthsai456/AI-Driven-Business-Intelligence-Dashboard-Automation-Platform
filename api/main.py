@@ -636,6 +636,28 @@ def get_dataset_cleaning_report(dataset_id: str):
     return {"dataset_id": dataset_id, "changes": []}
 
 
+@app.get("/api/datasets/{dataset_id}/cleaning-plan")
+def get_dataset_cleaning_plan(dataset_id: str):
+    """Retrieve deterministic cleaning recommendations and plan for a dataset."""
+    from cleaning.planner import CleaningPlanner
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    planner = CleaningPlanner()
+    plan = planner.generate_plan(
+        canonical=record.dataset,
+        profile=record.profile,
+        semantic_profile=record.semantic_profile,
+        quality_assessment=getattr(record, "quality_assessment", None),
+    )
+    return plan.to_dict()
+
+
 @app.get("/api/providers/status")
 def get_providers_status():
     """Retrieve live availability and diagnostic status for configured LLM providers."""

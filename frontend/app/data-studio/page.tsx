@@ -28,10 +28,12 @@ import {
   getDatasetSemanticAnalysis,
   getDatasetReadiness,
   getDatasetQualityAssessment,
+  getDatasetCleaningPlan,
   listDatasets,
 } from '../../lib/api';
 import {
   AnalysisReadiness,
+  CleaningPlan,
   DataPreviewResponse,
   DataProfile,
   DatasetListItem,
@@ -42,6 +44,7 @@ import {
 import { OverviewTab } from '../../components/data_studio/OverviewTab';
 import { QualityTab } from '../../components/data_studio/QualityTab';
 import { ProfilingTab } from '../../components/data_studio/ProfilingTab';
+import { CleaningTab } from '../../components/data_studio/CleaningTab';
 
 type DataStudioTab = 'overview' | 'quality' | 'profiling' | 'cleaning' | 'eda';
 type AnalysisState = 'idle' | 'analyzing' | 'ready' | 'error';
@@ -75,6 +78,7 @@ function DataStudioContent() {
   const [semanticProfile, setSemanticProfile] = useState<SemanticProfile | null>(null);
   const [readiness, setReadiness] = useState<AnalysisReadiness | null>(null);
   const [qualityAssessment, setQualityAssessment] = useState<QualityAssessment | null>(null);
+  const [cleaningPlan, setCleaningPlan] = useState<CleaningPlan | null>(null);
 
   // Load registered datasets list on initial mount
   useEffect(() => {
@@ -119,6 +123,7 @@ function DataStudioContent() {
     setSemanticProfile(null);
     setReadiness(null);
     setQualityAssessment(null);
+    setCleaningPlan(null);
 
     const params = new URLSearchParams(window.location.search);
     params.set('id', newDatasetId);
@@ -134,13 +139,14 @@ function DataStudioContent() {
     setAnalysisError(null);
 
     try {
-      const [meta, prev, prof, sem, read, qual] = await Promise.all([
+      const [meta, prev, prof, sem, read, qual, plan] = await Promise.all([
         getDatasetMetadata(selectedDatasetId),
         getDatasetPreview(selectedDatasetId, 50),
         getDatasetProfile(selectedDatasetId),
         getDatasetSemanticAnalysis(selectedDatasetId),
         getDatasetReadiness(selectedDatasetId),
         getDatasetQualityAssessment(selectedDatasetId).catch(() => null),
+        getDatasetCleaningPlan(selectedDatasetId).catch(() => null),
       ]);
 
       setMetadata(meta);
@@ -149,6 +155,7 @@ function DataStudioContent() {
       setSemanticProfile(sem);
       setReadiness(read);
       setQualityAssessment(qual);
+      setCleaningPlan(plan);
       setAnalysisState('ready');
     } catch (err: any) {
       console.error('Error during Data Studio analysis:', err);
@@ -505,22 +512,14 @@ function DataStudioContent() {
               />
             )}
 
-            {/* Tab 4: Cleaning Placeholder (Parts 4–6) */}
+            {/* Tab 4: Cleaning Plan */}
             {activeTab === 'cleaning' && (
-              <Card className="p-10 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-primary-soft border border-primary/20 flex items-center justify-center mx-auto text-primary">
-                  <Sparkle className="w-6 h-6" />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-center gap-2">
-                    <h3 className="text-sm font-bold text-foreground">Deterministic Cleaning & Preparation</h3>
-                    <Badge variant="blue" size="xs">Coming in Parts 4–6</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
-                    Deterministic cleaning recommendations, user-guided batch approvals, transformation previews, validation checks, and separate cleaned dataset registration.
-                  </p>
-                </div>
-              </Card>
+              <CleaningTab
+                metadata={metadata}
+                cleaningPlan={cleaningPlan}
+                semanticProfile={semanticProfile}
+                qualityAssessment={qualityAssessment}
+              />
             )}
 
             {/* Tab 5: EDA Placeholder (Part 7) */}

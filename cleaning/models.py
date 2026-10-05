@@ -145,3 +145,115 @@ class CleaningResult:
             "dataset": self.dataset.to_dict(),
             "report": self.report.to_dict(),
         }
+
+
+# =========================================================================
+# Part 4 — Data Studio: Cleaning Intelligence & Cleaning Plan Models
+# =========================================================================
+
+
+@dataclass
+class CleaningRecommendation:
+    """Structured deterministic cleaning proposal for a dataset column or whole dataset.
+
+    Attributes:
+        recommendation_id: Unique deterministic identifier for the recommendation.
+        column_name: Name of the target column, or None for whole-dataset operations (e.g. deduplication).
+        operation: Standardized operation name (e.g. 'REMOVE_DUPLICATES', 'IMPUTE_MEDIAN', 'FILL_MODE').
+        category: Broad category ('duplicates', 'missing_values', 'empty_values', 'type_conversion',
+                  'datetime_conversion', 'boolean_normalization', 'invalid_values', 'outliers').
+        evidence: Deterministic evidence statements backing the recommendation.
+        affected_rows: Number of rows affected by this operation.
+        affected_percentage: Percentage of total rows affected (0.0 to 100.0).
+        confidence: Deterministic confidence score from 0.0 to 1.0.
+        confidence_level: Categorical confidence ('HIGH', 'MEDIUM', 'LOW').
+        risk_level: Risk classification ('LOW', 'MEDIUM', 'HIGH').
+        default_selected: Whether this operation is preselected by default (safe + high confidence).
+        user_selected: Current selection state for user approval/modification.
+        rationale: Clear human-readable explanation of why this cleaning step is recommended.
+        expected_effect: Clear human-readable description of what will happen if executed.
+        requires_review: Whether this operation requires explicit user inspection before execution.
+        status: Recommendation status ('RECOMMENDED', 'REVIEW_REQUIRED', 'NOT_RECOMMENDED').
+        params: Contextual parameters (e.g., fill_value, strategy, target_dtype).
+    """
+
+    recommendation_id: str
+    column_name: Optional[str]
+    operation: str
+    category: str
+    evidence: List[str]
+    affected_rows: int
+    affected_percentage: float
+    confidence: float
+    confidence_level: str
+    risk_level: str
+    default_selected: bool
+    user_selected: bool
+    rationale: str
+    expected_effect: str
+    requires_review: bool
+    status: str
+    params: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert cleaning recommendation to a JSON-serializable dictionary."""
+        return {
+            "recommendation_id": self.recommendation_id,
+            "column_name": self.column_name,
+            "operation": self.operation,
+            "category": self.category,
+            "evidence": self.evidence,
+            "affected_rows": int(self.affected_rows),
+            "affected_percentage": round(float(self.affected_percentage), 2),
+            "confidence": round(float(self.confidence), 2),
+            "confidence_level": self.confidence_level,
+            "risk_level": self.risk_level,
+            "default_selected": bool(self.default_selected),
+            "user_selected": bool(self.user_selected),
+            "rationale": self.rationale,
+            "expected_effect": self.expected_effect,
+            "requires_review": bool(self.requires_review),
+            "status": self.status,
+            "params": sanitize_json_value(self.params),
+        }
+
+
+@dataclass
+class CleaningPlan:
+    """Ordered collection of deterministic cleaning recommendations for user review.
+
+    Attributes:
+        dataset_id: Identifier of the dataset.
+        total_recommendations: Total count of proposed recommendations.
+        recommended_count: Count of high-confidence recommended operations.
+        review_required_count: Count of operations flagged for user review.
+        safe_count: Count of low-risk safe operations.
+        estimated_rows_affected: Estimated distinct rows affected across all recommendations.
+        recommendations: Ordered list of cleaning recommendations.
+        generated_at: ISO timestamp of plan creation.
+    """
+
+    dataset_id: str
+    total_recommendations: int
+    recommended_count: int
+    review_required_count: int
+    safe_count: int
+    estimated_rows_affected: int
+    recommendations: List[CleaningRecommendation] = field(default_factory=list)
+    generated_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert cleaning plan to a JSON-serializable dictionary."""
+        return {
+            "dataset_id": self.dataset_id,
+            "total_recommendations": int(self.total_recommendations),
+            "recommended_count": int(self.recommended_count),
+            "review_required_count": int(self.review_required_count),
+            "safe_count": int(self.safe_count),
+            "estimated_rows_affected": int(self.estimated_rows_affected),
+            "recommendations": [r.to_dict() for r in self.recommendations],
+            "generated_at": sanitize_json_value(self.generated_at),
+        }
+

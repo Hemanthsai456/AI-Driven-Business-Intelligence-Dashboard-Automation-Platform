@@ -9,9 +9,12 @@ from cleaning.cleaner import DataCleaner, clean_dataset
 from cleaning.models import (
     CleaningChange,
     CleaningConfig,
+    CleaningPlan,
+    CleaningRecommendation,
     CleaningReport,
     CleaningResult,
 )
+from cleaning.planner import CleaningPlanner, generate_cleaning_plan
 
 __all__ = [
     "DataCleaner",
@@ -20,4 +23,8 @@ __all__ = [
     "CleaningConfig",
     "CleaningReport",
     "CleaningResult",
+    "CleaningPlan",
+    "CleaningRecommendation",
+    "CleaningPlanner",
+    "generate_cleaning_plan",
 ]

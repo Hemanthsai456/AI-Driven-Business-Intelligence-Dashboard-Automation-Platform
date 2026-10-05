@@ -1,5 +1,6 @@
 import {
   AnalysisReadiness,
+  CleaningPlan,
   DataPreviewResponse,
   DataProfile,
   DatasetListItem,
@@ -74,6 +75,11 @@ export async function getDatasetReadiness(datasetId: string): Promise<AnalysisRe
 export async function getDatasetQualityAssessment(datasetId: string): Promise<QualityAssessment> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/quality-assessment`);
   return handleResponse<QualityAssessment>(res);
+}
+
+export async function getDatasetCleaningPlan(datasetId: string): Promise<CleaningPlan> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning-plan`);
+  return handleResponse<CleaningPlan>(res);
 }
 
 export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {

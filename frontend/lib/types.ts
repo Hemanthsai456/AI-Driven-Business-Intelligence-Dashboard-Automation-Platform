@@ -203,6 +203,37 @@ export interface QualityAssessment {
   readiness_blocking_issues: string[];
 }
 
+export interface CleaningRecommendation {
+  recommendation_id: string;
+  column_name: string | null;
+  operation: string;
+  category: string;
+  evidence: string[];
+  affected_rows: number;
+  affected_percentage: number;
+  confidence: number;
+  confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  default_selected: boolean;
+  user_selected: boolean;
+  rationale: string;
+  expected_effect: string;
+  requires_review: boolean;
+  status: 'RECOMMENDED' | 'REVIEW_REQUIRED' | 'NOT_RECOMMENDED';
+  params: Record<string, any>;
+}
+
+export interface CleaningPlan {
+  dataset_id: string;
+  total_recommendations: number;
+  recommended_count: number;
+  review_required_count: number;
+  safe_count: number;
+  estimated_rows_affected: number;
+  recommendations: CleaningRecommendation[];
+  generated_at: string;
+}
+
 
 export interface DatasetListItem {
   dataset_id: string;
