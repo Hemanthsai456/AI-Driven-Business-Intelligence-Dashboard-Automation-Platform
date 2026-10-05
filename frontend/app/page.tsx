@@ -48,6 +48,8 @@ import { Badge } from '../components/Badge';
 import { PipelineStepper, PipelineStep, ProviderStatusItem } from '../components/PipelineStepper';
 import { ClarificationCard } from '../components/ClarificationCard';
 import { DashboardPanelsView } from '../components/DashboardPanelsView';
+import { DatasetChatView } from '../components/DatasetChatView';
+import { MessageSquare } from 'lucide-react';
 
 export default function HomePage() {
   // 1. Dataset & Ingestion State
@@ -59,6 +61,7 @@ export default function HomePage() {
   const [previewData, setPreviewData] = useState<DataPreviewResponse | null>(null);
   const [cleaningReport, setCleaningReport] = useState<any>(null);
   const [cleaningExpanded, setCleaningExpanded] = useState<boolean>(false);
+  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
 
   // Uploading state
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -482,6 +485,17 @@ export default function HomePage() {
                   </span>
                 </div>
 
+                {/* Dataset Chat Button */}
+                <Button
+                  id="dataset-chat-trigger-btn"
+                  variant="primary"
+                  size="xs"
+                  onClick={() => setIsChatOpen(!isChatOpen)}
+                  leftIcon={<MessageSquare className="w-3.5 h-3.5" />}
+                >
+                  Dataset Chat
+                </Button>
+
                 {/* Compact Replace dataset button */}
                 <Button
                   variant="outline"
@@ -669,6 +683,17 @@ export default function HomePage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setIsChatOpen((prev) => !prev)}
+            disabled={!selectedDatasetId}
+            leftIcon={<MessageSquare className="w-3.5 h-3.5 text-primary" />}
+            className={isChatOpen ? 'border-primary text-primary bg-primary-soft/30' : ''}
+          >
+            {isChatOpen ? 'Close Chat' : 'Dataset Chat'}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={async () => {
               setIntent('');
               abortControllerRef.current = new AbortController();
@@ -803,6 +828,28 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {/* Floating / Docked Dataset Chat Drawer */}
+      {isChatOpen && selectedDatasetId && (
+        <DatasetChatView
+          datasetId={selectedDatasetId}
+          metadata={metadata}
+          semanticProfile={semanticProfile}
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+        />
+      )}
+
+      {/* Floating Trigger Button when chat is closed */}
+      {!isChatOpen && selectedDatasetId && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-xl hover:shadow-2xl transition-all duration-200 font-semibold text-xs border border-indigo-400/30 active:scale-95"
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Ask Dataset (Chat)</span>
+        </button>
+      )}
     </div>
   );
 }

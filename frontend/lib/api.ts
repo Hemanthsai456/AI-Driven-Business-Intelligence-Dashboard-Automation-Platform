@@ -213,4 +213,34 @@ export async function generateOverviewDashboard(
   return handleResponse<import('./types').OrchestratorPipelineResponse>(res);
 }
 
+export async function sendChatMessage(
+  datasetId: string,
+  message: string,
+  conversationId?: string,
+  useLlm: boolean = true
+): Promise<import('./types').ChatResponseUI> {
+  const res = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dataset_id: datasetId,
+      message,
+      conversation_id: conversationId,
+      use_llm: useLlm,
+    }),
+  });
+  return handleResponse<import('./types').ChatResponseUI>(res);
+}
+
+export async function clearChatConversation(
+  datasetId: string,
+  conversationId: string
+): Promise<{ status: string; cleared: boolean; conversation_id: string }> {
+  const res = await fetch(`${API_BASE}/chat/conversation/${datasetId}/${conversationId}/clear`, {
+    method: 'POST',
+  });
+  return handleResponse<any>(res);
+}
+
+
 

@@ -1,26 +1,28 @@
 """In-memory dataset session store for development stage.
 
 Stores uploaded CanonicalDatasets and their generated DataProfiles,
-DatasetSemanticProfiles, and AnalysisReadiness assessments.
+DatasetSemanticProfiles, AnalysisReadiness assessments, and ConversationContexts.
 """
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 import pandas as pd
 
 from ingestion.models import CanonicalDataset
 from intelligence.profiler import DataProfile
 from intelligence.semantic_analyzer import DatasetSemanticProfile
 from intelligence.schema_validator import AnalysisReadiness
+from orchestrator.chat.schemas import ConversationContext
 
 
 class DatasetSessionRecord:
     def __init__(
         self,
         dataset: CanonicalDataset,
-        profile: DataProfile,
-        semantic_profile: DatasetSemanticProfile,
-        readiness: AnalysisReadiness,
+        profile: Optional[DataProfile],
+        semantic_profile: Optional[DatasetSemanticProfile],
+        readiness: Optional[AnalysisReadiness],
         cleaning_report: Optional[Any] = None,
     ):
         self.dataset = dataset
@@ -29,7 +31,29 @@ class DatasetSessionRecord:
         self.readiness = readiness
         self.cleaning_report = cleaning_report
         self.cached_candidates: Dict[str, List[Any]] = {}
+        self.conversations: Dict[str, ConversationContext] = {}
         self.created_at = datetime.now(timezone.utc).isoformat()
+
+    def get_or_create_conversation(self, conversation_id: Optional[str] = None) -> ConversationContext:
+        """Retrieve existing ConversationContext or create a new one."""
+        cid = conversation_id or str(uuid4())
+        if cid not in self.conversations:
+            self.conversations[cid] = ConversationContext(
+                conversation_id=cid,
+                dataset_id=self.dataset.metadata.dataset_id if self.dataset and self.dataset.metadata else "unknown_ds",
+            )
+        return self.conversations[cid]
+
+    def get_conversation(self, conversation_id: str) -> Optional[ConversationContext]:
+        """Retrieve specific conversation context."""
+        return self.conversations.get(conversation_id)
+
+    def clear_conversation(self, conversation_id: str) -> bool:
+        """Reset history for a specific conversation."""
+        if conversation_id in self.conversations:
+            del self.conversations[conversation_id]
+            return True
+        return False
 
     def to_metadata_dict(self) -> Dict:
         return {
