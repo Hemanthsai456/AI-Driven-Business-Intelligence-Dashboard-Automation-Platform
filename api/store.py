@@ -33,6 +33,7 @@ class DatasetSessionRecord:
         self.cleaned_dataset: Optional[CanonicalDataset] = None
         self.last_cleaning_result: Optional[Dict[str, Any]] = None
         self.registered_cleaned_dataset_id: Optional[str] = None
+        self.user_semantic_role_overrides: Dict[str, str] = {}
         self.cached_candidates: Dict[str, List[Any]] = {}
         self.conversations: Dict[str, ConversationContext] = {}
         self.created_at = datetime.now(timezone.utc).isoformat()

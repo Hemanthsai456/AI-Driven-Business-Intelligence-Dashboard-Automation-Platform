@@ -57,6 +57,18 @@ from api.schemas import (
     MultiValuePreviewResponse,
     MultiValueApplyRequest,
     MultiValueApplyResponse,
+    DropColumnsRequest,
+    DropColumnsPreviewResponse,
+    FilterConditionSchema,
+    RowFilterRequest,
+    RowFilterPreviewResponse,
+    DuplicateRemovalRequest,
+    DuplicateRemovalPreviewResponse,
+    StructuralQualityRecommendationSchema,
+    StructuralRecommendationsResponse,
+    SemanticRoleOverrideRequest,
+    SemanticRoleOverrideResponse,
+    StructuralApplyResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
@@ -888,6 +900,480 @@ def apply_multivalue_transformation(dataset_id: str, request: MultiValueApplyReq
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to apply multi-value transformation: {str(ex)}",
+        )
+
+
+# =========================================================================
+# Part 6.4 — Structural Cleaning & Semantic Role Overrides Endpoints
+# =========================================================================
+
+
+@app.get(
+    "/api/datasets/{dataset_id}/cleaning/structural/recommendations",
+    response_model=StructuralRecommendationsResponse,
+)
+def get_structural_recommendations(dataset_id: str):
+    """Retrieve deterministic data-quality structural recommendations."""
+    from cleaning.structural import StructuralCleaner
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        recs = cleaner.get_structural_recommendations(
+            canonical=target_dataset,
+            profile=record.profile,
+            semantic_profile=record.semantic_profile,
+        )
+        return {
+            "dataset_id": dataset_id,
+            "total_recommendations": len(recs),
+            "recommendations": [r.to_dict() for r in recs],
+        }
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate structural recommendations: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/drop-columns/preview",
+    response_model=DropColumnsPreviewResponse,
+)
+def preview_drop_columns(dataset_id: str, request: DropColumnsRequest):
+    """Non-mutating preview of column dropping."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        preview_result = cleaner.preview_drop_columns(
+            canonical=target_dataset,
+            columns_to_drop=request.columns,
+        )
+        return preview_result.to_dict()
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview column drop: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/drop-columns/apply",
+    response_model=StructuralApplyResponse,
+)
+def apply_drop_columns(dataset_id: str, request: DropColumnsRequest):
+    """Apply column dropping on a copy, updating the in-memory cleaned dataset."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+    from intelligence.profiler import DataProfiler
+    from intelligence.semantic_analyzer import SemanticAnalyzer
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        cleaned_canonical, audit_info = cleaner.apply_drop_columns(
+            canonical=target_dataset,
+            columns_to_drop=request.columns,
+        )
+
+        record.cleaned_dataset = cleaned_canonical
+        record.last_cleaning_result = {
+            "dataset_id": dataset_id,
+            "action": "DROP_COLUMNS",
+            "audit_info": audit_info,
+            "status": "APPLIED",
+        }
+
+        # Refresh profiler and semantics
+        try:
+            profiler = DataProfiler()
+            record.profile = profiler.profile(cleaned_canonical, attach=True)
+            semantic_analyzer = SemanticAnalyzer()
+            sem_profile = semantic_analyzer.analyze(cleaned_canonical)
+            if hasattr(record, "user_semantic_role_overrides") and record.user_semantic_role_overrides:
+                for col_name, role_str in record.user_semantic_role_overrides.items():
+                    if col_name in cleaned_canonical.data.columns:
+                        ev = sem_profile.get_evidence(col_name)
+                        if ev is not None:
+                            if not hasattr(ev, "system_role") or getattr(ev, "system_role") is None:
+                                ev.system_role = ev.candidate_role
+                            ev.user_override_role = ColumnRole(role_str)
+                            ev.candidate_role = ColumnRole(role_str)
+                            ev.is_user_overridden = True
+                            ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {role_str}."]
+            record.semantic_profile = sem_profile
+        except Exception:
+            pass
+
+        return {
+            "dataset_id": dataset_id,
+            "action": "DROP_COLUMNS",
+            "audit_info": audit_info,
+            "cleaned_row_count": len(cleaned_canonical.data),
+            "cleaned_column_count": len(cleaned_canonical.data.columns),
+            "status": "SUCCESS",
+        }
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply column drop: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/filter-rows/preview",
+    response_model=RowFilterPreviewResponse,
+)
+def preview_filter_rows(dataset_id: str, request: RowFilterRequest):
+    """Non-mutating preview of row removal based on conditions."""
+    from cleaning.structural import FilterCondition, StructuralCleaner, StructuralExecutionError
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        conditions = [
+            FilterCondition(column=c.column, operator=c.operator, value=c.value)
+            for c in request.conditions
+        ]
+        preview_result = cleaner.preview_filter_rows(
+            canonical=target_dataset,
+            conditions=conditions,
+            logical_operator=request.logical_operator,
+        )
+        return preview_result.to_dict()
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview row filtering: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/filter-rows/apply",
+    response_model=StructuralApplyResponse,
+)
+def apply_filter_rows(dataset_id: str, request: RowFilterRequest):
+    """Apply row filtering on a copy, updating the in-memory cleaned dataset."""
+    from cleaning.structural import FilterCondition, StructuralCleaner, StructuralExecutionError
+    from intelligence.profiler import DataProfiler
+    from intelligence.semantic_analyzer import SemanticAnalyzer
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        conditions = [
+            FilterCondition(column=c.column, operator=c.operator, value=c.value)
+            for c in request.conditions
+        ]
+        cleaned_canonical, audit_info = cleaner.apply_filter_rows(
+            canonical=target_dataset,
+            conditions=conditions,
+            logical_operator=request.logical_operator,
+        )
+
+        record.cleaned_dataset = cleaned_canonical
+        record.last_cleaning_result = {
+            "dataset_id": dataset_id,
+            "action": "FILTER_ROWS",
+            "audit_info": audit_info,
+            "status": "APPLIED",
+        }
+
+        try:
+            profiler = DataProfiler()
+            record.profile = profiler.profile(cleaned_canonical, attach=True)
+            semantic_analyzer = SemanticAnalyzer()
+            sem_profile = semantic_analyzer.analyze(cleaned_canonical)
+            if hasattr(record, "user_semantic_role_overrides") and record.user_semantic_role_overrides:
+                for col_name, role_str in record.user_semantic_role_overrides.items():
+                    if col_name in cleaned_canonical.data.columns:
+                        ev = sem_profile.get_evidence(col_name)
+                        if ev is not None:
+                            if not hasattr(ev, "system_role") or getattr(ev, "system_role") is None:
+                                ev.system_role = ev.candidate_role
+                            ev.user_override_role = ColumnRole(role_str)
+                            ev.candidate_role = ColumnRole(role_str)
+                            ev.is_user_overridden = True
+                            ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {role_str}."]
+            record.semantic_profile = sem_profile
+        except Exception:
+            pass
+
+        return {
+            "dataset_id": dataset_id,
+            "action": "FILTER_ROWS",
+            "audit_info": audit_info,
+            "cleaned_row_count": len(cleaned_canonical.data),
+            "cleaned_column_count": len(cleaned_canonical.data.columns),
+            "status": "SUCCESS",
+        }
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply row filter: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/duplicates/preview",
+    response_model=DuplicateRemovalPreviewResponse,
+)
+def preview_duplicate_removal(dataset_id: str, request: DuplicateRemovalRequest):
+    """Non-mutating preview of duplicate row removal."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        preview_result = cleaner.preview_remove_duplicates(
+            canonical=target_dataset,
+            keep_strategy=request.keep_strategy,
+        )
+        return preview_result.to_dict()
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview duplicate removal: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/duplicates/apply",
+    response_model=StructuralApplyResponse,
+)
+def apply_duplicate_removal(dataset_id: str, request: DuplicateRemovalRequest):
+    """Apply duplicate row removal on a copy, updating the in-memory cleaned dataset."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+    from intelligence.profiler import DataProfiler
+    from intelligence.semantic_analyzer import SemanticAnalyzer
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        cleaned_canonical, audit_info = cleaner.apply_remove_duplicates(
+            canonical=target_dataset,
+            keep_strategy=request.keep_strategy,
+        )
+
+        record.cleaned_dataset = cleaned_canonical
+        record.last_cleaning_result = {
+            "dataset_id": dataset_id,
+            "action": "REMOVE_DUPLICATES",
+            "audit_info": audit_info,
+            "status": "APPLIED",
+        }
+
+        try:
+            profiler = DataProfiler()
+            record.profile = profiler.profile(cleaned_canonical, attach=True)
+            semantic_analyzer = SemanticAnalyzer()
+            sem_profile = semantic_analyzer.analyze(cleaned_canonical)
+            if hasattr(record, "user_semantic_role_overrides") and record.user_semantic_role_overrides:
+                for col_name, role_str in record.user_semantic_role_overrides.items():
+                    if col_name in cleaned_canonical.data.columns:
+                        ev = sem_profile.get_evidence(col_name)
+                        if ev is not None:
+                            if not hasattr(ev, "system_role") or getattr(ev, "system_role") is None:
+                                ev.system_role = ev.candidate_role
+                            ev.user_override_role = ColumnRole(role_str)
+                            ev.candidate_role = ColumnRole(role_str)
+                            ev.is_user_overridden = True
+                            ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {role_str}."]
+            record.semantic_profile = sem_profile
+        except Exception:
+            pass
+
+        return {
+            "dataset_id": dataset_id,
+            "action": "REMOVE_DUPLICATES",
+            "audit_info": audit_info,
+            "cleaned_row_count": len(cleaned_canonical.data),
+            "cleaned_column_count": len(cleaned_canonical.data.columns),
+            "status": "SUCCESS",
+        }
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply duplicate removal: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/semantic-role/preview",
+    response_model=SemanticRoleOverrideResponse,
+)
+def preview_semantic_role_override(dataset_id: str, request: SemanticRoleOverrideRequest):
+    """Non-mutating preview of overriding a column's semantic role."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        preview_result = cleaner.preview_semantic_role_override(
+            canonical=target_dataset,
+            column_name=request.column_name,
+            selected_role=request.selected_role,
+            semantic_profile=record.semantic_profile,
+        )
+        return {
+            **preview_result.to_dict(),
+            "status": "SUCCESS",
+        }
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to preview semantic role override: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/structural/semantic-role/apply",
+    response_model=SemanticRoleOverrideResponse,
+)
+def apply_semantic_role_override(dataset_id: str, request: SemanticRoleOverrideRequest):
+    """Apply user-controlled semantic role override, storing it as authoritative."""
+    from cleaning.structural import StructuralCleaner, StructuralExecutionError
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        cleaner = StructuralCleaner()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        updated_sem_profile, audit_info = cleaner.apply_semantic_role_override(
+            canonical=target_dataset,
+            column_name=request.column_name,
+            selected_role=request.selected_role,
+            semantic_profile=record.semantic_profile,
+            user_role_overrides_dict=record.user_semantic_role_overrides,
+        )
+        record.semantic_profile = updated_sem_profile
+
+        # Also update column metadata schema if present
+        for col in target_dataset.metadata.schema:
+            if col.original_name == request.column_name:
+                col.semantic_role = ColumnRole(request.selected_role.upper().strip())
+
+        ev = updated_sem_profile.get_evidence(request.column_name)
+        system_role = (
+            ev.system_role.value if ev and hasattr(ev.system_role, "value")
+            else (str(ev.system_role) if ev and ev.system_role else "UNKNOWN")
+        )
+
+        return {
+            "dataset_id": dataset_id,
+            "column_name": request.column_name,
+            "system_role": system_role,
+            "selected_role": request.selected_role.upper().strip(),
+            "physical_dtype": str(target_dataset.data[request.column_name].dtype),
+            "evidence": ev.evidence if ev else [],
+            "status": "SUCCESS",
+        }
+    except StructuralExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply semantic role override: {str(ex)}",
         )
 
 

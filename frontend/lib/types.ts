@@ -427,6 +427,108 @@ export interface MultiValueApplyResponse {
   status: string;
 }
 
+// ----------------------------------------------------
+// PART 6.4 — STRUCTURAL CLEANING & SEMANTIC ROLE TYPES
+// ----------------------------------------------------
+
+export interface DropColumnsRequest {
+  columns: string[];
+}
+
+export interface DropColumnsPreviewResult {
+  dataset_id: string;
+  original_column_count: number;
+  resulting_column_count: number;
+  columns_to_drop: string[];
+  remaining_columns: string[];
+  original_row_count: number;
+  resulting_row_count: number;
+  sample_before_after: Array<{
+    row_index: number;
+    before: Record<string, any>;
+    after: Record<string, any>;
+  }>;
+}
+
+export interface FilterCondition {
+  column: string;
+  operator: string;
+  value?: any;
+}
+
+export interface RowFilterRequest {
+  conditions: FilterCondition[];
+  logical_operator: 'AND' | 'OR';
+}
+
+export interface RowFilterPreviewResult {
+  dataset_id: string;
+  conditions: Array<{ column: string; operator: string; value?: any }>;
+  logical_operator: 'AND' | 'OR';
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_removed: number;
+  original_column_count: number;
+  resulting_column_count: number;
+  sample_matching_rows: Record<string, any>[];
+  sample_remaining_rows: Record<string, any>[];
+}
+
+export interface DuplicateRemovalRequest {
+  keep_strategy: 'first' | 'last';
+}
+
+export interface DuplicateRemovalPreviewResult {
+  dataset_id: string;
+  duplicate_rows_count: number;
+  keep_strategy: string;
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_removed: number;
+  sample_duplicate_rows: Record<string, any>[];
+}
+
+export interface StructuralQualityRecommendation {
+  recommendation_id: string;
+  column_name: string | null;
+  issue_type: 'HIGH_MISSINGNESS' | 'CONSTANT_COLUMN' | 'LIKELY_IDENTIFIER' | 'DUPLICATE_ROWS' | string;
+  reason: string;
+  evidence: string[];
+  suggested_action: 'DROP_COLUMN' | 'MARK_IDENTIFIER' | 'REMOVE_DUPLICATES' | 'KEEP' | string;
+  allowed_actions: string[];
+  metrics: Record<string, any>;
+}
+
+export interface StructuralRecommendationsResponse {
+  dataset_id: string;
+  total_recommendations: number;
+  recommendations: StructuralQualityRecommendation[];
+}
+
+export interface SemanticRoleOverrideRequest {
+  column_name: string;
+  selected_role: 'IDENTIFIER' | 'DIMENSION' | 'MEASURE' | 'DATETIME' | 'UNKNOWN' | string;
+}
+
+export interface SemanticRoleOverrideResponse {
+  dataset_id: string;
+  column_name: string;
+  system_role: string;
+  selected_role: string;
+  physical_dtype: string;
+  evidence: string[];
+  status: string;
+}
+
+export interface StructuralApplyResponse {
+  dataset_id: string;
+  action: string;
+  audit_info: Record<string, any>;
+  cleaned_row_count: number;
+  cleaned_column_count: number;
+  status: string;
+}
+
 export interface DatasetListItem {
   dataset_id: string;
   filename: string;

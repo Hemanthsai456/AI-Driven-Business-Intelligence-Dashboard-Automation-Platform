@@ -18,6 +18,16 @@ import {
   QualityAssessment,
   RegisterCleanedDatasetResponse,
   SemanticProfile,
+  DropColumnsRequest,
+  DropColumnsPreviewResult,
+  RowFilterRequest,
+  RowFilterPreviewResult,
+  DuplicateRemovalRequest,
+  DuplicateRemovalPreviewResult,
+  StructuralRecommendationsResponse,
+  SemanticRoleOverrideRequest,
+  SemanticRoleOverrideResponse,
+  StructuralApplyResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -184,6 +194,114 @@ export async function applyMultiValue(
   });
   return handleResponse<MultiValueApplyResponse>(res);
 }
+
+// ----------------------------------------------------
+// PART 6.4 — STRUCTURAL CLEANING & SEMANTIC ROLES API
+// ----------------------------------------------------
+
+export async function getStructuralRecommendations(
+  datasetId: string
+): Promise<StructuralRecommendationsResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/recommendations`);
+  return handleResponse<StructuralRecommendationsResponse>(res);
+}
+
+export async function previewDropColumns(
+  datasetId: string,
+  request: DropColumnsRequest
+): Promise<DropColumnsPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/drop-columns/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<DropColumnsPreviewResult>(res);
+}
+
+export async function applyDropColumns(
+  datasetId: string,
+  request: DropColumnsRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/drop-columns/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewFilterRows(
+  datasetId: string,
+  request: RowFilterRequest
+): Promise<RowFilterPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/filter-rows/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<RowFilterPreviewResult>(res);
+}
+
+export async function applyFilterRows(
+  datasetId: string,
+  request: RowFilterRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/filter-rows/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewRemoveDuplicates(
+  datasetId: string,
+  request: DuplicateRemovalRequest
+): Promise<DuplicateRemovalPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/duplicates/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<DuplicateRemovalPreviewResult>(res);
+}
+
+export async function applyRemoveDuplicates(
+  datasetId: string,
+  request: DuplicateRemovalRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/duplicates/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewSemanticRoleOverride(
+  datasetId: string,
+  request: SemanticRoleOverrideRequest
+): Promise<SemanticRoleOverrideResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/semantic-role/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<SemanticRoleOverrideResponse>(res);
+}
+
+export async function applySemanticRoleOverride(
+  datasetId: string,
+  request: SemanticRoleOverrideRequest
+): Promise<SemanticRoleOverrideResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/semantic-role/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<SemanticRoleOverrideResponse>(res);
+}
+
 
 
 export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {

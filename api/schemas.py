@@ -380,5 +380,128 @@ class MultiValueApplyResponse(BaseModel):
     status: str = "SUCCESS"
 
 
+# =========================================================================
+# Part 6.4 — Structural Cleaning & Semantic Role Overrides Schemas
+# =========================================================================
+
+
+class DropColumnsRequest(BaseModel):
+    """Request payload for dropping one or more columns."""
+
+    columns: List[str]
+
+
+class DropColumnsPreviewResponse(BaseModel):
+    """Response payload for column drop preview."""
+
+    dataset_id: str
+    original_column_count: int
+    resulting_column_count: int
+    columns_to_drop: List[str]
+    remaining_columns: List[str]
+    original_row_count: int
+    resulting_row_count: int
+    sample_before_after: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class FilterConditionSchema(BaseModel):
+    """Structured condition for row removal."""
+
+    column: str
+    operator: str
+    value: Optional[Any] = None
+
+
+class RowFilterRequest(BaseModel):
+    """Request payload for single or multi-condition row removal."""
+
+    conditions: List[FilterConditionSchema]
+    logical_operator: str = "AND"  # "AND" | "OR"
+
+
+class RowFilterPreviewResponse(BaseModel):
+    """Response payload for row removal preview."""
+
+    dataset_id: str
+    conditions: List[Dict[str, Any]]
+    logical_operator: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_removed: int
+    original_column_count: int
+    resulting_column_count: int
+    sample_matching_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    sample_remaining_rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class DuplicateRemovalRequest(BaseModel):
+    """Request payload for duplicate row removal."""
+
+    keep_strategy: str = "first"  # "first" | "last"
+
+
+class DuplicateRemovalPreviewResponse(BaseModel):
+    """Response payload for duplicate row removal preview."""
+
+    dataset_id: str
+    duplicate_rows_count: int
+    keep_strategy: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_removed: int
+    sample_duplicate_rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class StructuralQualityRecommendationSchema(BaseModel):
+    """Deterministic structural recommendation based on profiling observations."""
+
+    recommendation_id: str
+    column_name: Optional[str] = None
+    issue_type: str
+    reason: str
+    evidence: List[str] = Field(default_factory=list)
+    suggested_action: str
+    allowed_actions: List[str] = Field(default_factory=list)
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StructuralRecommendationsResponse(BaseModel):
+    """Response containing structural recommendations."""
+
+    dataset_id: str
+    total_recommendations: int
+    recommendations: List[StructuralQualityRecommendationSchema] = Field(default_factory=list)
+
+
+class SemanticRoleOverrideRequest(BaseModel):
+    """Request payload for overriding a column's semantic role."""
+
+    column_name: str
+    selected_role: str  # "IDENTIFIER" | "DIMENSION" | "MEASURE" | "DATETIME" | "UNKNOWN"
+
+
+class SemanticRoleOverrideResponse(BaseModel):
+    """Response payload after overriding a column's semantic role."""
+
+    dataset_id: str
+    column_name: str
+    system_role: str
+    selected_role: str
+    physical_dtype: str
+    evidence: List[str] = Field(default_factory=list)
+    status: str = "SUCCESS"
+
+
+class StructuralApplyResponse(BaseModel):
+    """Response payload after applying a structural cleaning operation."""
+
+    dataset_id: str
+    action: str
+    audit_info: Dict[str, Any]
+    cleaned_row_count: int
+    cleaned_column_count: int
+    status: str = "SUCCESS"
+
+
 
 

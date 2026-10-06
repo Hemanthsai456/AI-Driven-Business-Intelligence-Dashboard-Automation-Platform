@@ -29,6 +29,11 @@ import {
   Wand2,
   PlusCircle,
   Trash2,
+  Columns,
+  Rows,
+  Copy,
+  Tag,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
@@ -41,23 +46,38 @@ import {
   ColumnTransformPreviewResult,
   CustomColumnTransformation,
   DatasetMetadata,
+  DropColumnsPreviewResult,
+  DuplicateRemovalPreviewResult,
+  FilterCondition,
   MultiValueApplyResponse,
   MultiValueCandidate,
   MultiValuePreviewResult,
   OperationExecutionResult,
   QualityAssessment,
   RegisterCleanedDatasetResponse,
+  RowFilterPreviewResult,
   SampleCellChange,
   SemanticProfile,
+  SemanticRoleOverrideResponse,
+  StructuralQualityRecommendation,
 } from '../../lib/types';
 import {
   applyCleaningPlan,
+  applyDropColumns,
+  applyFilterRows,
   applyMultiValue,
+  applyRemoveDuplicates,
+  applySemanticRoleOverride,
   getDatasetDownloadUrl,
   getMultiValueCandidates,
+  getStructuralRecommendations,
   previewCleaningPlan,
   previewColumnTransformation,
+  previewDropColumns,
+  previewFilterRows,
   previewMultiValue,
+  previewRemoveDuplicates,
+  previewSemanticRoleOverride,
   registerCleanedDataset,
 } from '../../lib/api';
 
@@ -145,6 +165,59 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [mvApplyLoading, setMvApplyLoading] = useState<boolean>(false);
   const [mvApplySuccess, setMvApplySuccess] = useState<string | null>(null);
   const [mvApplyError, setMvApplyError] = useState<string | null>(null);
+
+  // ----------------------------------------------------
+  // PART 6.4 — STRUCTURAL CLEANING & SEMANTIC ROLES STATE
+  // ----------------------------------------------------
+
+  // Active Structural Cleaning Subtab
+  const [activeStructTab, setActiveStructTab] = useState<'DROP_COLUMNS' | 'FILTER_ROWS' | 'DUPLICATES' | 'RECOMMENDATIONS' | 'SEMANTIC_ROLES'>('RECOMMENDATIONS');
+
+  // Structural Quality Recommendations
+  const [structRecs, setStructRecs] = useState<StructuralQualityRecommendation[]>([]);
+  const [isLoadingStructRecs, setIsLoadingStructRecs] = useState<boolean>(false);
+  const [structRecsError, setStructRecsError] = useState<string | null>(null);
+
+  // Column Dropping State
+  const [selectedDropCols, setSelectedDropCols] = useState<string[]>([]);
+  const [dropPreviewLoading, setDropPreviewLoading] = useState<boolean>(false);
+  const [dropPreviewResult, setDropPreviewResult] = useState<DropColumnsPreviewResult | null>(null);
+  const [dropPreviewError, setDropPreviewError] = useState<string | null>(null);
+  const [dropApplyLoading, setDropApplyLoading] = useState<boolean>(false);
+  const [dropApplySuccess, setDropApplySuccess] = useState<string | null>(null);
+  const [dropApplyError, setDropApplyError] = useState<string | null>(null);
+
+  // Row Filtering State
+  const [filterConditions, setFilterConditions] = useState<FilterCondition[]>([
+    { column: '', operator: 'equals', value: '' },
+  ]);
+  const [filterLogicalOp, setFilterLogicalOp] = useState<'AND' | 'OR'>('AND');
+  const [filterPreviewLoading, setFilterPreviewLoading] = useState<boolean>(false);
+  const [filterPreviewResult, setFilterPreviewResult] = useState<RowFilterPreviewResult | null>(null);
+  const [filterPreviewError, setFilterPreviewError] = useState<string | null>(null);
+  const [filterApplyLoading, setFilterApplyLoading] = useState<boolean>(false);
+  const [filterApplySuccess, setFilterApplySuccess] = useState<string | null>(null);
+  const [filterApplyError, setFilterApplyError] = useState<string | null>(null);
+
+  // Duplicate Rows State
+  const [dupKeepStrategy, setDupKeepStrategy] = useState<'first' | 'last'>('first');
+  const [dupPreviewLoading, setDupPreviewLoading] = useState<boolean>(false);
+  const [dupPreviewResult, setDupPreviewResult] = useState<DuplicateRemovalPreviewResult | null>(null);
+  const [dupPreviewError, setDupPreviewError] = useState<string | null>(null);
+  const [dupApplyLoading, setDupApplyLoading] = useState<boolean>(false);
+  const [dupApplySuccess, setDupApplySuccess] = useState<string | null>(null);
+  const [dupApplyError, setDupApplyError] = useState<string | null>(null);
+
+  // Semantic Role Overrides State
+  const [selectedRoleCol, setSelectedRoleCol] = useState<string>('');
+  const [selectedRoleValue, setSelectedRoleValue] = useState<string>('IDENTIFIER');
+  const [rolePreviewLoading, setRolePreviewLoading] = useState<boolean>(false);
+  const [rolePreviewResult, setRolePreviewResult] = useState<SemanticRoleOverrideResponse | null>(null);
+  const [rolePreviewError, setRolePreviewError] = useState<string | null>(null);
+  const [roleApplyLoading, setRoleApplyLoading] = useState<boolean>(false);
+  const [roleApplySuccess, setRoleApplySuccess] = useState<string | null>(null);
+  const [roleApplyError, setRoleApplyError] = useState<string | null>(null);
+  const [userRoleOverrides, setUserRoleOverrides] = useState<Record<string, string>>({});
 
   // Preview & Execution State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -502,6 +575,260 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       setMvApplyError(err.message || 'Failed to apply multi-value transformation.');
     } finally {
       setMvApplyLoading(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // PART 6.4 — STRUCTURAL CLEANING HANDLERS
+  // ----------------------------------------------------
+
+  const fetchStructRecs = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setIsLoadingStructRecs(true);
+    setStructRecsError(null);
+    try {
+      const res = await getStructuralRecommendations(datasetId);
+      setStructRecs(res.recommendations || []);
+    } catch (err: any) {
+      setStructRecsError(err.message || 'Failed to fetch structural recommendations.');
+    } finally {
+      setIsLoadingStructRecs(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchStructRecs();
+    setDropPreviewResult(null);
+    setDropPreviewError(null);
+    setDropApplySuccess(null);
+    setDropApplyError(null);
+    setFilterPreviewResult(null);
+    setFilterPreviewError(null);
+    setFilterApplySuccess(null);
+    setFilterApplyError(null);
+    setDupPreviewResult(null);
+    setDupPreviewError(null);
+    setDupApplySuccess(null);
+    setDupApplyError(null);
+    setRolePreviewResult(null);
+    setRolePreviewError(null);
+    setRoleApplySuccess(null);
+    setRoleApplyError(null);
+
+    if (availableColumns.length > 0) {
+      setSelectedRoleCol((prev) => (prev && availableColumns.includes(prev) ? prev : availableColumns[0]));
+      setFilterConditions((prev) => {
+        if (prev.length === 0 || !prev[0].column || !availableColumns.includes(prev[0].column)) {
+          return [{ column: availableColumns[0], operator: 'equals', value: '' }];
+        }
+        return prev;
+      });
+    }
+  }, [metadata?.dataset_id, availableColumns]);
+
+  // Handlers for Column Dropping
+  const handleToggleDropCol = (colName: string) => {
+    setSelectedDropCols((prev) =>
+      prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
+    );
+    setDropPreviewResult(null);
+  };
+
+  const handlePreviewDropColumns = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId || selectedDropCols.length === 0) return;
+    setDropPreviewLoading(true);
+    setDropPreviewError(null);
+    setDropPreviewResult(null);
+    setDropApplySuccess(null);
+    setDropApplyError(null);
+    try {
+      const res = await previewDropColumns(datasetId, { columns: selectedDropCols });
+      setDropPreviewResult(res);
+    } catch (err: any) {
+      setDropPreviewError(err.message || 'Failed to preview column drop.');
+    } finally {
+      setDropPreviewLoading(false);
+    }
+  };
+
+  const handleApplyDropColumns = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId || selectedDropCols.length === 0) return;
+    setDropApplyLoading(true);
+    setDropApplyError(null);
+    setDropApplySuccess(null);
+    try {
+      const res = await applyDropColumns(datasetId, { columns: selectedDropCols });
+      setDropApplySuccess(
+        `Successfully dropped ${selectedDropCols.length} column(s). Cleaned dataset now has ${res.cleaned_column_count} columns and ${res.cleaned_row_count} rows.`
+      );
+      setSelectedDropCols([]);
+      setDropPreviewResult(null);
+      await fetchStructRecs();
+      if (onRetryPlan) onRetryPlan();
+    } catch (err: any) {
+      setDropApplyError(err.message || 'Failed to apply column drop.');
+    } finally {
+      setDropApplyLoading(false);
+    }
+  };
+
+  // Handlers for Row Filtering
+  const handleAddCondition = () => {
+    setFilterConditions((prev) => [
+      ...prev,
+      { column: availableColumns[0] || '', operator: 'equals', value: '' },
+    ]);
+    setFilterPreviewResult(null);
+  };
+
+  const handleRemoveCondition = (index: number) => {
+    setFilterConditions((prev) => prev.filter((_, i) => i !== index));
+    setFilterPreviewResult(null);
+  };
+
+  const handleUpdateCondition = (index: number, field: keyof FilterCondition, value: any) => {
+    setFilterConditions((prev) =>
+      prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
+    );
+    setFilterPreviewResult(null);
+  };
+
+  const handlePreviewFilterRows = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId || filterConditions.length === 0) return;
+    setFilterPreviewLoading(true);
+    setFilterPreviewError(null);
+    setFilterPreviewResult(null);
+    setFilterApplySuccess(null);
+    setFilterApplyError(null);
+    try {
+      const res = await previewFilterRows(datasetId, {
+        conditions: filterConditions,
+        logical_operator: filterLogicalOp,
+      });
+      setFilterPreviewResult(res);
+    } catch (err: any) {
+      setFilterPreviewError(err.message || 'Failed to preview row filtering.');
+    } finally {
+      setFilterPreviewLoading(false);
+    }
+  };
+
+  const handleApplyFilterRows = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId || filterConditions.length === 0) return;
+    setFilterApplyLoading(true);
+    setFilterApplyError(null);
+    setFilterApplySuccess(null);
+    try {
+      const res = await applyFilterRows(datasetId, {
+        conditions: filterConditions,
+        logical_operator: filterLogicalOp,
+      });
+      setFilterApplySuccess(
+        `Successfully applied row filtering. Cleaned dataset now has ${res.cleaned_row_count} rows (${res.cleaned_column_count} columns).`
+      );
+      setFilterPreviewResult(null);
+      await fetchStructRecs();
+      if (onRetryPlan) onRetryPlan();
+    } catch (err: any) {
+      setFilterApplyError(err.message || 'Failed to apply row filter.');
+    } finally {
+      setFilterApplyLoading(false);
+    }
+  };
+
+  // Handlers for Duplicate Removal
+  const handlePreviewRemoveDuplicates = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setDupPreviewLoading(true);
+    setDupPreviewError(null);
+    setDupPreviewResult(null);
+    setDupApplySuccess(null);
+    setDupApplyError(null);
+    try {
+      const res = await previewRemoveDuplicates(datasetId, { keep_strategy: dupKeepStrategy });
+      setDupPreviewResult(res);
+    } catch (err: any) {
+      setDupPreviewError(err.message || 'Failed to preview duplicate removal.');
+    } finally {
+      setDupPreviewLoading(false);
+    }
+  };
+
+  const handleApplyRemoveDuplicates = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setDupApplyLoading(true);
+    setDupApplyError(null);
+    setDupApplySuccess(null);
+    try {
+      const res = await applyRemoveDuplicates(datasetId, { keep_strategy: dupKeepStrategy });
+      setDupApplySuccess(
+        `Successfully removed duplicate rows. Cleaned dataset now has ${res.cleaned_row_count} rows.`
+      );
+      setDupPreviewResult(null);
+      await fetchStructRecs();
+      if (onRetryPlan) onRetryPlan();
+    } catch (err: any) {
+      setDupApplyError(err.message || 'Failed to apply duplicate removal.');
+    } finally {
+      setDupApplyLoading(false);
+    }
+  };
+
+  // Handlers for Semantic Role Overrides
+  const handlePreviewSemanticRoleOverride = async (colName?: string, roleVal?: string) => {
+    const datasetId = metadata?.dataset_id;
+    const targetCol = colName || selectedRoleCol;
+    const targetRole = roleVal || selectedRoleValue;
+    if (!datasetId || !targetCol) return;
+    setRolePreviewLoading(true);
+    setRolePreviewError(null);
+    setRolePreviewResult(null);
+    setRoleApplySuccess(null);
+    setRoleApplyError(null);
+    try {
+      const res = await previewSemanticRoleOverride(datasetId, {
+        column_name: targetCol,
+        selected_role: targetRole,
+      });
+      setRolePreviewResult(res);
+    } catch (err: any) {
+      setRolePreviewError(err.message || 'Failed to preview semantic role override.');
+    } finally {
+      setRolePreviewLoading(false);
+    }
+  };
+
+  const handleApplySemanticRoleOverride = async (colName?: string, roleVal?: string) => {
+    const datasetId = metadata?.dataset_id;
+    const targetCol = colName || selectedRoleCol;
+    const targetRole = roleVal || selectedRoleValue;
+    if (!datasetId || !targetCol) return;
+    setRoleApplyLoading(true);
+    setRoleApplyError(null);
+    setRoleApplySuccess(null);
+    try {
+      const res = await applySemanticRoleOverride(datasetId, {
+        column_name: targetCol,
+        selected_role: targetRole,
+      });
+      setUserRoleOverrides((prev) => ({ ...prev, [targetCol]: res.selected_role }));
+      setRoleApplySuccess(
+        `Successfully designated "${targetCol}" as authoritative semantic role "${res.selected_role}". Physical type (${res.physical_dtype}) is preserved.`
+      );
+      setRolePreviewResult(null);
+      await fetchStructRecs();
+      if (onRetryPlan) onRetryPlan();
+    } catch (err: any) {
+      setRoleApplyError(err.message || 'Failed to apply semantic role override.');
+    } finally {
+      setRoleApplyLoading(false);
     }
   };
 
@@ -1816,6 +2143,1104 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 </div>
               );
             })}
+          </div>
+        )}
+      </Card>
+
+      {/* ========================================================================= */}
+      {/* PART 6.4 — STRUCTURAL CLEANING & USER-CONTROLLED SEMANTIC ROLES          */}
+      {/* ========================================================================= */}
+      <Card className="p-5 border border-primary/20 bg-surface/80 backdrop-blur-sm space-y-5">
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+              <SlidersHorizontal className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-foreground">
+                  Structural Cleaning & Semantic Roles
+                </h3>
+                <Badge variant="blue" size="xs">
+                  Deterministic · Part 6.4
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Drop columns, filter rows with structured multi-conditions, remove duplicate rows, and authoritatively override semantic roles.
+              </p>
+            </div>
+          </div>
+
+          {/* Subtab Navigation Pills */}
+          <div className="flex items-center gap-1.5 p-1 bg-surface-muted/60 rounded-lg border border-border text-xs flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveStructTab('RECOMMENDATIONS')}
+              className={`px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+                activeStructTab === 'RECOMMENDATIONS'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Recommendations</span>
+              {structRecs.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-2xs font-bold">
+                  {structRecs.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveStructTab('DROP_COLUMNS')}
+              className={`px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+                activeStructTab === 'DROP_COLUMNS'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Columns className="w-3.5 h-3.5" />
+              <span>Drop Columns</span>
+              {selectedDropCols.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-2xs font-bold">
+                  {selectedDropCols.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveStructTab('FILTER_ROWS')}
+              className={`px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+                activeStructTab === 'FILTER_ROWS'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filter Rows</span>
+              {filterConditions.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-white/20 rounded-full text-2xs font-bold">
+                  {filterConditions.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveStructTab('DUPLICATES')}
+              className={`px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+                activeStructTab === 'DUPLICATES'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span>Duplicates</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveStructTab('SEMANTIC_ROLES')}
+              className={`px-2.5 py-1 rounded-md transition-colors font-medium flex items-center gap-1.5 ${
+                activeStructTab === 'SEMANTIC_ROLES'
+                  ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Semantic Roles</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ------------------------------------------------------------------- */}
+        {/* SUBTAB 1: STRUCTURAL QUALITY RECOMMENDATIONS                        */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStructTab === 'RECOMMENDATIONS' && (
+          <div className="space-y-4">
+            {structRecsError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{structRecsError}</span>
+              </div>
+            )}
+
+            {isLoadingStructRecs && (
+              <div className="p-8 text-center space-y-2">
+                <div className="w-6 h-6 mx-auto text-primary">
+                  <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+                <p className="text-xs text-muted-foreground">Evaluating structural anomalies and column statistics...</p>
+              </div>
+            )}
+
+            {!isLoadingStructRecs && structRecs.length === 0 && !structRecsError && (
+              <div className="p-6 bg-surface-muted/20 border border-border/60 rounded-lg text-center space-y-1.5">
+                <div className="w-8 h-8 rounded-full bg-surface-muted text-muted-foreground flex items-center justify-center mx-auto">
+                  <Check className="w-4 h-4 text-emerald-500" />
+                </div>
+                <h4 className="text-xs font-bold text-foreground">No Structural Anomalies Detected</h4>
+                <p className="text-2xs text-muted-foreground max-w-md mx-auto">
+                  All columns possess healthy variance, manageable missingness, and distinct semantic profiles. No automatic drop actions required.
+                </p>
+              </div>
+            )}
+
+            {!isLoadingStructRecs && structRecs.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {structRecs.map((rec) => {
+                  const issueBadgeVariant: 'red' | 'amber' | 'purple' | 'blue' =
+                    rec.issue_type === 'HIGH_MISSINGNESS'
+                      ? 'red'
+                      : rec.issue_type === 'CONSTANT_COLUMN'
+                      ? 'amber'
+                      : rec.issue_type === 'LIKELY_IDENTIFIER'
+                      ? 'purple'
+                      : 'blue';
+
+                  return (
+                    <div
+                      key={rec.recommendation_id}
+                      className="p-4 bg-surface border border-border rounded-lg space-y-3 hover:border-primary/40 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={issueBadgeVariant} size="xs">
+                              {rec.issue_type.replace('_', ' ')}
+                            </Badge>
+                            {rec.column_name && (
+                              <span className="font-mono font-bold text-foreground text-xs px-2 py-0.5 bg-surface-muted rounded border border-border">
+                                {rec.column_name}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-semibold text-foreground">
+                            {rec.reason}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Evidence List */}
+                      {rec.evidence && rec.evidence.length > 0 && (
+                        <div className="space-y-1 bg-surface-muted/40 p-2.5 rounded border border-border/60 text-2xs text-muted-foreground">
+                          {rec.evidence.map((ev, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                              <span>{ev}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1 border-t border-border/60 flex-wrap">
+                        <span className="text-2xs font-semibold text-muted-foreground mr-1">
+                          Actions:
+                        </span>
+
+                        {rec.allowed_actions.includes('DROP_COLUMN') && rec.column_name && (
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => {
+                              setSelectedDropCols([rec.column_name!]);
+                              setActiveStructTab('DROP_COLUMNS');
+                              handlePreviewDropColumns();
+                            }}
+                            className="text-xs text-rose-500 hover:text-rose-600 border-rose-500/30"
+                          >
+                            Drop Column
+                          </Button>
+                        )}
+
+                        {rec.allowed_actions.includes('MARK_IDENTIFIER') && rec.column_name && (
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => {
+                              setSelectedRoleCol(rec.column_name!);
+                              setSelectedRoleValue('IDENTIFIER');
+                              setActiveStructTab('SEMANTIC_ROLES');
+                              handlePreviewSemanticRoleOverride(rec.column_name!, 'IDENTIFIER');
+                            }}
+                            className="text-xs text-purple-500 hover:text-purple-600 border-purple-500/30"
+                          >
+                            Mark as Identifier
+                          </Button>
+                        )}
+
+                        {rec.allowed_actions.includes('REMOVE_DUPLICATES') && (
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => {
+                              setActiveStructTab('DUPLICATES');
+                              handlePreviewRemoveDuplicates();
+                            }}
+                            className="text-xs text-amber-500 hover:text-amber-600 border-amber-500/30"
+                          >
+                            Remove Duplicates
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={() => {
+                            setStructRecs((prev) => prev.filter((r) => r.recommendation_id !== rec.recommendation_id));
+                          }}
+                          className="text-2xs text-muted-foreground"
+                        >
+                          Keep
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* SUBTAB 2: COLUMN DROPPING                                           */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStructTab === 'DROP_COLUMNS' && (
+          <div className="space-y-4">
+            {dropApplySuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-500 flex items-center justify-between">
+                <span>{dropApplySuccess}</span>
+                <button onClick={() => setDropApplySuccess(null)} className="text-emerald-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {dropApplyError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{dropApplyError}</span>
+                <button onClick={() => setDropApplyError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {dropPreviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{dropPreviewError}</span>
+                <button onClick={() => setDropPreviewError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-foreground">
+                  Select Columns to Remove ({selectedDropCols.length} of {availableColumns.length} selected):
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDropCols([])}
+                    className="text-2xs text-muted-foreground hover:text-foreground"
+                  >
+                    Clear All
+                  </button>
+                </div>
+              </div>
+
+              {/* Checkbox Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 p-3.5 bg-surface-muted/20 border border-border rounded-lg max-h-56 overflow-y-auto">
+                {availableColumns.map((colName) => {
+                  const isChecked = selectedDropCols.includes(colName);
+                  return (
+                    <label
+                      key={colName}
+                      className={`flex items-center gap-2.5 p-2 rounded-md border cursor-pointer transition-colors text-xs ${
+                        isChecked
+                          ? 'bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400 font-semibold'
+                          : 'bg-surface border-border text-foreground hover:border-primary/40'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleDropCol(colName)}
+                        className="rounded border-border text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                      />
+                      <span className="truncate font-mono">{colName}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Preview Trigger */}
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <p className="text-2xs text-muted-foreground">
+                Raw dataset is never modified. Preview simulates removal on a deep copy.
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handlePreviewDropColumns}
+                disabled={selectedDropCols.length === 0 || dropPreviewLoading || dropApplyLoading}
+                leftIcon={<Eye className="w-3.5 h-3.5" />}
+                className="text-xs shrink-0"
+              >
+                {dropPreviewLoading ? 'Simulating...' : `Preview Dropping (${selectedDropCols.length})`}
+              </Button>
+            </div>
+
+            {/* Preview Results Display */}
+            {dropPreviewResult && (
+              <div className="p-4 bg-surface-muted/30 border border-primary/30 rounded-lg space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">
+                      Column Drop Preview
+                    </span>
+                    <Badge variant="red" size="xs">
+                      {dropPreviewResult.columns_to_drop.length} Columns To Drop
+                    </Badge>
+                  </div>
+                  <button
+                    onClick={() => setDropPreviewResult(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Columns Before</span>
+                    <span className="font-bold text-foreground text-sm">
+                      {dropPreviewResult.original_column_count}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Columns After</span>
+                    <span className="font-bold text-rose-500 text-sm">
+                      {dropPreviewResult.resulting_column_count}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows Preserved</span>
+                    <span className="font-bold text-emerald-500 text-sm">
+                      {dropPreviewResult.resulting_row_count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Net Dropped</span>
+                    <span className="font-bold text-foreground text-sm">
+                      -{dropPreviewResult.columns_to_drop.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dropped Columns List */}
+                <div className="space-y-1.5">
+                  <span className="text-2xs font-semibold text-muted-foreground block">
+                    Dropped Columns:
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {dropPreviewResult.columns_to_drop.map((c) => (
+                      <Badge key={c} variant="red" size="xs">
+                        {c}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Confirmation Apply Button */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <span className="text-2xs text-muted-foreground">
+                    Explicit confirmation required to apply changes to in-memory cleaned dataset.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => setDropPreviewResult(null)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      onClick={handleApplyDropColumns}
+                      disabled={dropApplyLoading}
+                      leftIcon={<Play className="w-3.5 h-3.5" />}
+                      className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+                    >
+                      {dropApplyLoading ? 'Dropping Columns...' : 'Confirm & Apply Column Drop'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* SUBTAB 3: ROW FILTERING / REMOVAL                                   */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStructTab === 'FILTER_ROWS' && (
+          <div className="space-y-4">
+            {filterApplySuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-500 flex items-center justify-between">
+                <span>{filterApplySuccess}</span>
+                <button onClick={() => setFilterApplySuccess(null)} className="text-emerald-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {filterApplyError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{filterApplyError}</span>
+                <button onClick={() => setFilterApplyError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {filterPreviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{filterPreviewError}</span>
+                <button onClick={() => setFilterPreviewError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-foreground">
+                  Structured Filter Conditions (Rows matching will be REMOVED):
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xs text-muted-foreground font-medium">Connector:</span>
+                  <div className="flex rounded-md bg-surface-muted p-0.5 border border-border">
+                    <button
+                      type="button"
+                      onClick={() => { setFilterLogicalOp('AND'); setFilterPreviewResult(null); }}
+                      className={`px-2 py-0.5 text-2xs font-bold rounded ${
+                        filterLogicalOp === 'AND' ? 'bg-primary text-white shadow-2xs' : 'text-muted-foreground'
+                      }`}
+                    >
+                      AND
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setFilterLogicalOp('OR'); setFilterPreviewResult(null); }}
+                      className={`px-2 py-0.5 text-2xs font-bold rounded ${
+                        filterLogicalOp === 'OR' ? 'bg-amber-600 text-white shadow-2xs' : 'text-muted-foreground'
+                      }`}
+                    >
+                      OR
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conditions Builder List */}
+              <div className="space-y-2.5">
+                {filterConditions.map((cond, idx) => {
+                  const isMissingOp = cond.operator.includes('missing') || cond.operator.includes('null');
+                  return (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center p-3 bg-surface-muted/20 border border-border rounded-lg"
+                    >
+                      {/* Column Selector */}
+                      <div className="sm:col-span-4">
+                        <select
+                          value={cond.column}
+                          onChange={(e) => handleUpdateCondition(idx, 'column', e.target.value)}
+                          className="w-full text-xs font-mono bg-surface border border-border rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary"
+                        >
+                          {availableColumns.map((col) => (
+                            <option key={col} value={col}>
+                              {col}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Operator Dropdown */}
+                      <div className="sm:col-span-4">
+                        <select
+                          value={cond.operator}
+                          onChange={(e) => handleUpdateCondition(idx, 'operator', e.target.value)}
+                          className="w-full text-xs bg-surface border border-border rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="equals">equals (=)</option>
+                          <option value="not equals">not equals (!=)</option>
+                          <option value="greater than">greater than (&gt;)</option>
+                          <option value="less than">less than (&lt;)</option>
+                          <option value="greater than or equal">greater than or equal (&gt;=)</option>
+                          <option value="less than or equal">less than or equal (&lt;=)</option>
+                          <option value="is missing">is missing (NULL)</option>
+                          <option value="is not missing">is not missing (Not NULL)</option>
+                          <option value="contains">contains (substring)</option>
+                        </select>
+                      </div>
+
+                      {/* Value Input */}
+                      <div className="sm:col-span-3">
+                        <input
+                          type="text"
+                          value={cond.value || ''}
+                          disabled={isMissingOp}
+                          onChange={(e) => handleUpdateCondition(idx, 'value', e.target.value)}
+                          placeholder={isMissingOp ? 'N/A (missingness)' : 'Comparison value'}
+                          className={`w-full text-xs bg-surface border border-border rounded-md px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary ${
+                            isMissingOp ? 'opacity-40 cursor-not-allowed' : ''
+                          }`}
+                        />
+                      </div>
+
+                      {/* Delete Button */}
+                      <div className="sm:col-span-1 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={filterConditions.length <= 1}
+                          onClick={() => handleRemoveCondition(idx)}
+                          className="p-1.5 text-muted-foreground hover:text-rose-500 disabled:opacity-30 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Condition & Preview Action */}
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  onClick={handleAddCondition}
+                  leftIcon={<PlusCircle className="w-3.5 h-3.5" />}
+                  className="text-xs"
+                >
+                  Add Condition
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handlePreviewFilterRows}
+                  disabled={filterPreviewLoading || filterApplyLoading}
+                  leftIcon={<Eye className="w-3.5 h-3.5" />}
+                  className="text-xs shrink-0"
+                >
+                  {filterPreviewLoading ? 'Simulating...' : 'Preview Row Removal'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Preview Results Display */}
+            {filterPreviewResult && (
+              <div className="p-4 bg-surface-muted/30 border border-primary/30 rounded-lg space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">
+                      Row Removal Simulation
+                    </span>
+                    <Badge variant={filterPreviewResult.rows_removed > 0 ? 'amber' : 'slate'} size="xs">
+                      {filterPreviewResult.rows_removed.toLocaleString()} Rows Removed
+                    </Badge>
+                  </div>
+                  <button
+                    onClick={() => setFilterPreviewResult(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows Before</span>
+                    <span className="font-bold text-foreground text-sm">
+                      {filterPreviewResult.original_row_count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows After Removal</span>
+                    <span className="font-bold text-emerald-500 text-sm">
+                      {filterPreviewResult.resulting_row_count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows Filtered Out</span>
+                    <span className="font-bold text-rose-500 text-sm">
+                      -{filterPreviewResult.rows_removed.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sample Matching Rows Table */}
+                {filterPreviewResult.sample_matching_rows && filterPreviewResult.sample_matching_rows.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-2xs font-semibold text-rose-500 block">
+                      Sample Matching Records (Will be removed):
+                    </span>
+                    <div className="overflow-x-auto border border-border rounded-md bg-surface max-h-36 overflow-y-auto">
+                      <table className="w-full text-2xs text-left font-mono">
+                        <thead className="bg-surface-muted text-muted-foreground border-b border-border sticky top-0">
+                          <tr>
+                            {Object.keys(filterPreviewResult.sample_matching_rows[0]).map((k) => (
+                              <th key={k} className="p-1.5 font-medium">{k}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {filterPreviewResult.sample_matching_rows.map((row, rIdx) => (
+                            <tr key={rIdx} className="hover:bg-rose-500/10">
+                              {Object.values(row).map((v, cIdx) => (
+                                <td key={cIdx} className="p-1.5 text-rose-500 truncate max-w-[120px]">
+                                  {v === null ? 'NULL' : String(v)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirmation Apply Button */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <span className="text-2xs text-muted-foreground">
+                    Deterministic condition execution. Deep copy will be updated.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => setFilterPreviewResult(null)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      onClick={handleApplyFilterRows}
+                      disabled={filterApplyLoading}
+                      leftIcon={<Play className="w-3.5 h-3.5" />}
+                      className="text-xs bg-rose-600 hover:bg-rose-700 text-white"
+                    >
+                      {filterApplyLoading ? 'Filtering Rows...' : 'Confirm & Apply Row Removal'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* SUBTAB 4: DUPLICATE ROW REMOVAL                                     */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStructTab === 'DUPLICATES' && (
+          <div className="space-y-4">
+            {dupApplySuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-500 flex items-center justify-between">
+                <span>{dupApplySuccess}</span>
+                <button onClick={() => setDupApplySuccess(null)} className="text-emerald-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {dupApplyError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{dupApplyError}</span>
+                <button onClick={() => setDupApplyError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {dupPreviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{dupPreviewError}</span>
+                <button onClick={() => setDupPreviewError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="p-4 bg-surface-muted/20 border border-border rounded-lg space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h4 className="text-xs font-bold text-foreground">Exact Duplicate Rows Detection</h4>
+                  <p className="text-2xs text-muted-foreground mt-0.5">
+                    Identifies records where all column values are completely identical.
+                  </p>
+                </div>
+
+                {/* Strategy Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-2xs font-semibold text-muted-foreground">Keep Strategy:</span>
+                  <div className="flex rounded-md bg-surface p-0.5 border border-border">
+                    <button
+                      type="button"
+                      onClick={() => { setDupKeepStrategy('first'); setDupPreviewResult(null); }}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        dupKeepStrategy === 'first' ? 'bg-primary text-white font-bold shadow-2xs' : 'text-muted-foreground'
+                      }`}
+                    >
+                      Keep First
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDupKeepStrategy('last'); setDupPreviewResult(null); }}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        dupKeepStrategy === 'last' ? 'bg-primary text-white font-bold shadow-2xs' : 'text-muted-foreground'
+                      }`}
+                    >
+                      Keep Last
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handlePreviewRemoveDuplicates}
+                  disabled={dupPreviewLoading || dupApplyLoading}
+                  leftIcon={<Eye className="w-3.5 h-3.5" />}
+                  className="text-xs"
+                >
+                  {dupPreviewLoading ? 'Scanning...' : 'Preview Duplicate Removal'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Duplicate Preview Results Display */}
+            {dupPreviewResult && (
+              <div className="p-4 bg-surface-muted/30 border border-primary/30 rounded-lg space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">
+                      Duplicate Removal Simulation
+                    </span>
+                    <Badge variant={dupPreviewResult.rows_removed > 0 ? 'amber' : 'green'} size="xs">
+                      {dupPreviewResult.rows_removed} Duplicates Found (Keep: {dupPreviewResult.keep_strategy})
+                    </Badge>
+                  </div>
+                  <button
+                    onClick={() => setDupPreviewResult(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows Before</span>
+                    <span className="font-bold text-foreground text-sm">
+                      {dupPreviewResult.original_row_count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Rows After Deduplication</span>
+                    <span className="font-bold text-emerald-500 text-sm">
+                      {dupPreviewResult.resulting_row_count.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md">
+                    <span className="text-2xs text-muted-foreground block">Duplicates Removed</span>
+                    <span className="font-bold text-rose-500 text-sm">
+                      -{dupPreviewResult.rows_removed.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sample Duplicate Rows Table */}
+                {dupPreviewResult.sample_duplicate_rows && dupPreviewResult.sample_duplicate_rows.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-2xs font-semibold text-muted-foreground block">
+                      Sample Duplicate Records (First {dupPreviewResult.sample_duplicate_rows.length} rows):
+                    </span>
+                    <div className="overflow-x-auto border border-border rounded-md bg-surface max-h-36 overflow-y-auto">
+                      <table className="w-full text-2xs text-left font-mono">
+                        <thead className="bg-surface-muted text-muted-foreground border-b border-border sticky top-0">
+                          <tr>
+                            {Object.keys(dupPreviewResult.sample_duplicate_rows[0]).map((k) => (
+                              <th key={k} className="p-1.5 font-medium">{k}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {dupPreviewResult.sample_duplicate_rows.map((row, rIdx) => (
+                            <tr key={rIdx} className="hover:bg-surface-muted/30">
+                              {Object.values(row).map((v, cIdx) => (
+                                <td key={cIdx} className="p-1.5 truncate max-w-[120px]">
+                                  {v === null ? 'NULL' : String(v)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirmation Apply Button */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <span className="text-2xs text-muted-foreground">
+                    Deduplication will retain the {dupPreviewResult.keep_strategy} occurrence of each duplicate record.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => setDupPreviewResult(null)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      onClick={handleApplyRemoveDuplicates}
+                      disabled={dupApplyLoading || dupPreviewResult.rows_removed === 0}
+                      leftIcon={<Play className="w-3.5 h-3.5" />}
+                      className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      {dupApplyLoading ? 'Deduplicating...' : 'Confirm & Remove Duplicates'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------------- */}
+        {/* SUBTAB 5: USER-CONTROLLED SEMANTIC ROLE OVERRIDES                   */}
+        {/* ------------------------------------------------------------------- */}
+        {activeStructTab === 'SEMANTIC_ROLES' && (
+          <div className="space-y-4">
+            {roleApplySuccess && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-500 flex items-center justify-between">
+                <span>{roleApplySuccess}</span>
+                <button onClick={() => setRoleApplySuccess(null)} className="text-emerald-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {roleApplyError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{roleApplyError}</span>
+                <button onClick={() => setRoleApplyError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {rolePreviewError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-center justify-between">
+                <span>{rolePreviewError}</span>
+                <button onClick={() => setRolePreviewError(null)} className="text-rose-500 hover:text-foreground">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Informational Guidance on Physical Type vs Semantic Role Separation */}
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs flex items-start gap-2.5 text-blue-600 dark:text-blue-400">
+              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold block">Datatype vs. Semantic Role Distinction</span>
+                <p className="text-2xs text-muted-foreground leading-relaxed">
+                  Physical datatypes (e.g. <code className="text-primary font-mono">int64</code>, <code className="text-primary font-mono">float64</code>, <code className="text-primary font-mono">string</code>) define memory storage format. Semantic roles (<code className="text-primary font-mono">IDENTIFIER</code>, <code className="text-primary font-mono">DIMENSION</code>, <code className="text-primary font-mono">MEASURE</code>, <code className="text-primary font-mono">DATETIME</code>) define analytical purpose. Overriding a semantic role makes it authoritative for downstream queries without altering physical storage.
+                </p>
+              </div>
+            </div>
+
+            {/* Semantic Roles Columns Table */}
+            <div className="border border-border rounded-lg overflow-hidden bg-surface">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-surface-muted text-muted-foreground border-b border-border">
+                  <tr>
+                    <th className="p-3 font-semibold">Column Name</th>
+                    <th className="p-3 font-semibold">Physical Datatype</th>
+                    <th className="p-3 font-semibold">System Inferred Role</th>
+                    <th className="p-3 font-semibold">Authoritative Role Override</th>
+                    <th className="p-3 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {availableColumns.map((colName) => {
+                    const colMeta = Array.isArray(metadata?.columns)
+                      ? metadata.columns.find(
+                          (s: any) => (typeof s === 'object' && (s.original_name === colName || s.name === colName))
+                        )
+                      : null;
+                    const dtype = metadata?.dtypes?.[colName] || (colMeta && typeof colMeta === 'object' ? (colMeta as any).detected_datatype : 'string') || 'string';
+                    const semRole = (colMeta && typeof colMeta === 'object' ? (colMeta as any).semantic_role : 'UNKNOWN') || 'UNKNOWN';
+                    const currentOverride = userRoleOverrides[colName] || semRole;
+                    const isSelected = selectedRoleCol === colName;
+
+                    return (
+                      <tr
+                        key={colName}
+                        className={`hover:bg-surface-muted/30 transition-colors ${
+                          isSelected ? 'bg-primary/5' : ''
+                        }`}
+                      >
+                        <td className="p-3 font-mono font-bold text-foreground">
+                          {colName}
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="slate" size="xs">
+                            {dtype}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <Badge variant="blue" size="xs">
+                            {semRole}
+                          </Badge>
+                        </td>
+                        <td className="p-3">
+                          <select
+                            value={currentOverride}
+                            onChange={(e) => {
+                              const newRole = e.target.value;
+                              setSelectedRoleCol(colName);
+                              setSelectedRoleValue(newRole);
+                              handlePreviewSemanticRoleOverride(colName, newRole);
+                            }}
+                            className="text-xs bg-surface border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                          >
+                            <option value="IDENTIFIER">IDENTIFIER</option>
+                            <option value="DIMENSION">DIMENSION</option>
+                            <option value="MEASURE">MEASURE</option>
+                            <option value="DATETIME">DATETIME</option>
+                            <option value="UNKNOWN">UNKNOWN</option>
+                          </select>
+                        </td>
+                        <td className="p-3 text-right">
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => {
+                              setSelectedRoleCol(colName);
+                              setSelectedRoleValue(currentOverride);
+                              handlePreviewSemanticRoleOverride(colName, currentOverride);
+                            }}
+                            className="text-2xs"
+                          >
+                            Preview
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Semantic Override Preview Result */}
+            {rolePreviewResult && (
+              <div className="p-4 bg-surface-muted/30 border border-primary/30 rounded-lg space-y-3 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-border">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">
+                      Semantic Role Override Preview
+                    </span>
+                    <Badge variant="purple" size="xs">
+                      {rolePreviewResult.column_name}
+                    </Badge>
+                  </div>
+                  <button
+                    onClick={() => setRolePreviewResult(null)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-2.5 bg-surface border border-border rounded-md text-center">
+                    <span className="text-2xs text-muted-foreground block">Physical Type (Preserved)</span>
+                    <span className="font-mono font-bold text-foreground text-xs">
+                      {rolePreviewResult.physical_dtype}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md text-center">
+                    <span className="text-2xs text-muted-foreground block">System Inferred Role</span>
+                    <span className="font-bold text-muted-foreground text-xs line-through">
+                      {rolePreviewResult.system_role}
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-surface border border-border rounded-md text-center">
+                    <span className="text-2xs text-muted-foreground block">User Authoritative Role</span>
+                    <span className="font-bold text-primary text-xs">
+                      {rolePreviewResult.selected_role}
+                    </span>
+                  </div>
+                </div>
+
+                {rolePreviewResult.evidence && rolePreviewResult.evidence.length > 0 && (
+                  <div className="space-y-1 bg-surface-muted/40 p-2.5 rounded border border-border/60 text-2xs text-muted-foreground">
+                    {rolePreviewResult.evidence.map((ev, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                        <span>{ev}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Confirmation Apply Button */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/60">
+                  <span className="text-2xs text-muted-foreground">
+                    Authoritative override will persist for all subsequent analytical modules.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => setRolePreviewResult(null)}
+                    >
+                      Dismiss
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      onClick={() => handleApplySemanticRoleOverride(rolePreviewResult.column_name, rolePreviewResult.selected_role)}
+                      disabled={roleApplyLoading}
+                      leftIcon={<Check className="w-3.5 h-3.5" />}
+                      className="text-xs"
+                    >
+                      {roleApplyLoading ? 'Applying...' : 'Apply Authoritative Role Override'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </Card>
