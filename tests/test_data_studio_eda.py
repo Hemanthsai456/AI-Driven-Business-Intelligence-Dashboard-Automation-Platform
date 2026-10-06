@@ -474,3 +474,214 @@ def test_19_canonical_five_real_datasets_eda():
             assert "causes" not in obs["text"].lower()
             assert "evidence" in obs
 
+
+def test_20_numeric_distribution_valid_skew():
+    """Targeted Test 1: Numeric distribution with valid skew information and canonical fields."""
+    df = pd.DataFrame({
+        "skewed_right": [1, 2, 2, 3, 3, 3, 10, 50, 100],
+        "skewed_left": [100, 99, 98, 97, 95, 90, 50, 10, 1],
+        "symmetric": [10, 20, 30, 40, 50, 60, 70, 80, 90],
+    })
+    ds = make_test_dataset(data=df)
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    dist_map = {d["column_name"]: d for d in summary.numeric_distributions}
+
+    # Right skewed check
+    r = dist_map["skewed_right"]
+    assert r["skew_label"] == "Right-skewed"
+    assert r["distribution_shape"] == "Right-skewed"
+    assert r["skewness"] is not None and r["skewness"] > 0.5
+    assert r["q1"] is not None and r["q3"] is not None
+    assert r["q25"] == r["q1"] and r["q75"] == r["q3"]
+    assert r["row_count"] == 9
+    assert r["non_null_count"] == 9
+    assert len(r["histogram"]) > 0
+    assert "bin_label" in r["histogram"][0]
+    assert "percentage" in r["histogram"][0]
+
+    # Left skewed check
+    l = dist_map["skewed_left"]
+    assert l["skew_label"] == "Left-skewed"
+    assert l["distribution_shape"] == "Left-skewed"
+    assert l["skewness"] is not None and l["skewness"] < -0.5
+
+    # Symmetric check
+    s = dist_map["symmetric"]
+    assert "Symmetric" in s["skew_label"]
+    assert "Symmetric" in s["distribution_shape"]
+
+
+def test_21_numeric_distribution_unavailable_null_skew():
+    """Targeted Test 2: Numeric distribution where skew information is unavailable/null."""
+    df = pd.DataFrame({
+        "all_null": [np.nan, np.nan, np.nan, np.nan],
+        "constant": [42.0, 42.0, 42.0, 42.0],
+        "two_points": [10.0, 20.0, np.nan, np.nan],
+    })
+    ds = make_test_dataset(data=df)
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    dist_map = {d["column_name"]: d for d in summary.numeric_distributions}
+
+    # All null column
+    an = dist_map["all_null"]
+    assert an["skewness"] is None
+    assert an["skew_label"] == "All Null"
+    assert an["distribution_shape"] == "All Null"
+    assert an["mean"] is None
+    assert an["median"] is None
+    assert an["std"] is None
+    assert an["min"] is None
+    assert an["max"] is None
+    assert an["q1"] is None
+    assert an["q3"] is None
+    assert an["non_null_count"] == 0
+    assert an["histogram"] == []
+
+    # Constant column (zero variance, std = 0)
+    c = dist_map["constant"]
+    assert c["skewness"] is None
+    assert c["skew_label"] == "Symmetric"  # Zero variance fallback
+    assert c["std"] == 0.0
+    assert c["min"] == 42.0
+    assert c["max"] == 42.0
+    assert len(c["histogram"]) == 1
+    assert c["histogram"][0]["percentage"] == 100.0
+
+    # Two points (n < 3 for skew calculation)
+    tp = dist_map["two_points"]
+    assert tp["skewness"] is None
+    assert tp["skew_label"] == "Symmetric"
+    assert tp["non_null_count"] == 2
+
+
+def test_22_dataset_with_no_numeric_columns():
+    """Targeted Test 3: Dataset with zero numeric columns."""
+    df = pd.DataFrame({
+        "country": ["USA", "Canada", "Mexico", "UK"],
+        "is_active": [True, False, True, False],
+    })
+    ds = make_test_dataset(data=df)
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    assert summary.dataset_summary["numeric_columns_count"] == 0
+    assert len(summary.numeric_distributions) == 0
+    assert summary.correlation_analysis["is_available"] is False
+    assert summary.correlation_analysis["status"] == "INSUFFICIENT_NUMERIC_COLUMNS"
+    assert summary.correlation_analysis["columns"] == []
+    assert summary.correlation_analysis["matrix"] == {}
+
+
+def test_23_dataset_with_categorical_only_columns():
+    """Targeted Test 4: Dataset with categorical-only columns."""
+    df = pd.DataFrame({
+        "category": ["Alpha", "Beta", "Gamma", "Delta", "Alpha"],
+        "status": ["Active", "Pending", "Active", "Closed", "Active"],
+        "region": ["North", "South", "East", "West", "North"],
+    })
+    ds = make_test_dataset(data=df)
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    assert summary.dataset_summary["numeric_columns_count"] == 0
+    assert summary.dataset_summary["categorical_columns_count"] == 3
+    assert len(summary.categorical_distributions) == 3
+    for cat_dist in summary.categorical_distributions:
+        assert cat_dist["distinct_count"] > 0
+        assert len(cat_dist["top_categories"]) > 0
+        # Check both category and value fields exist
+        for top in cat_dist["top_categories"]:
+            assert "category" in top
+            assert "value" in top
+            assert "percentage" in top
+
+
+def test_24_dataset_with_datetime_columns():
+    """Targeted Test 5: Dataset with datetime columns and temporal analysis."""
+    df = pd.DataFrame({
+        "timestamp": ["2023-01-01", "2023-02-01", "2023-03-01", "2023-04-01"],
+        "metric": [100.0, 150.0, 200.0, 250.0],
+    })
+    ds = make_test_dataset(data=df)
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    assert summary.dataset_summary["datetime_columns_count"] == 1
+    temp = summary.temporal_analysis
+    assert temp is not None
+    assert temp["is_available"] is True
+    assert temp["datetime_column"] == "timestamp"
+    assert temp["measure_column"] == "metric"
+    assert temp["earliest_date"] == "2023-01-01"
+    assert temp["latest_date"] == "2023-04-01"
+    assert "date_range" in temp
+    assert temp["date_range"]["min_date"] == "2023-01-01"
+    assert temp["date_range"]["max_date"] == "2023-04-01"
+    assert "trend_direction" in temp
+    assert temp["trend_direction"] == "Upward"
+    assert len(temp["data_points"]) == 4
+    assert len(temp["series"]) == 4
+
+
+def test_25_normal_mixed_dataset():
+    """Targeted Test 6: Normal mixed dataset validating complete frontend/backend contract."""
+    ds = make_test_dataset()
+    engine = EDAEngine()
+    summary = engine.generate_summary(ds)
+
+    d = summary.to_dict()
+
+    # 1. Dataset summary
+    assert d["dataset_summary"]["row_count"] == 8
+    assert d["dataset_summary"]["column_count"] == 4
+    assert d["dataset_summary"]["numeric_columns_count"] == 2
+    assert d["dataset_summary"]["categorical_columns_count"] == 1
+    assert d["dataset_summary"]["datetime_columns_count"] == 1
+
+    # 2. Numeric distributions contract
+    for num in d["numeric_distributions"]:
+        assert isinstance(num["column_name"], str)
+        assert isinstance(num["skew_label"], str)
+        assert isinstance(num["distribution_shape"], str)
+        assert "q1" in num and "q3" in num
+        assert "q25" in num and "q75" in num
+        assert "row_count" in num and "non_null_count" in num
+        for bin_item in num["histogram"]:
+            assert "bin_label" in bin_item
+            assert "percentage" in bin_item
+
+    # 3. Categorical distributions contract
+    for cat in d["categorical_distributions"]:
+        assert isinstance(cat["column_name"], str)
+        assert isinstance(cat["distinct_count"], int)
+        for top in cat["top_categories"]:
+            assert "category" in top
+            assert "value" in top
+            assert "count" in top
+            assert "percentage" in top
+
+    # 4. Correlation contract
+    assert d["correlation_analysis"]["is_available"] is True
+    assert "top_correlated_pairs" in d["correlation_analysis"]
+    assert "strong_pairs" in d["correlation_analysis"]
+
+    # 5. Temporal contract
+    assert d["temporal_analysis"]["is_available"] is True
+    assert "date_range" in d["temporal_analysis"]
+    assert "data_points" in d["temporal_analysis"]
+    assert "total_points" in d["temporal_analysis"]
+
+    # 6. Observations contract
+    for obs in d["automated_observations"]:
+        assert "id" in obs
+        assert "category" in obs
+        assert "text" in obs
+        assert "observation" in obs
+        assert "severity" in obs
+        assert "evidence" in obs
+
+

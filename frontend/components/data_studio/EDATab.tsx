@@ -457,31 +457,35 @@ export const EDATab: React.FC<EDATabProps> = ({
                   padding="md"
                 >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {summary.automated_observations.map((obs: EDAObservation) => (
-                      <div
-                        key={obs.id}
-                        className="p-3 bg-surface-muted/60 border border-border rounded-lg flex items-start gap-3 hover:border-border-hover transition-colors"
-                      >
-                        {getObservationIcon(obs.type)}
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground leading-relaxed">
-                            {obs.observation}
-                          </p>
-                          {obs.evidence && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {Object.entries(obs.evidence).map(([k, v]) => (
-                                <span
-                                  key={k}
-                                  className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface border border-border text-3xs font-mono text-muted-foreground"
-                                >
-                                  {k}: {typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v)}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                    {summary.automated_observations.map((obs: EDAObservation, idx: number) => {
+                      const obsType = obs.type || obs.category || 'observation';
+                      const obsText = obs.observation || obs.text || '';
+                      return (
+                        <div
+                          key={obs.id || idx}
+                          className="p-3 bg-surface-muted/60 border border-border rounded-lg flex items-start gap-3 hover:border-border-hover transition-colors"
+                        >
+                          {getObservationIcon(obsType)}
+                          <div className="space-y-1 flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground leading-relaxed">
+                              {obsText}
+                            </p>
+                            {obs.evidence && typeof obs.evidence === 'object' && (
+                              <div className="flex flex-wrap gap-1.5 pt-1">
+                                {Object.entries(obs.evidence).map(([k, v]) => (
+                                  <span
+                                    key={k}
+                                    className="inline-flex items-center px-1.5 py-0.5 rounded bg-surface border border-border text-3xs font-mono text-muted-foreground"
+                                  >
+                                    {k}: {typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(2)) : String(v)}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </Card>
               )}
@@ -507,6 +511,7 @@ export const EDATab: React.FC<EDATabProps> = ({
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                       {summary.numeric_distributions.map((dist) => {
                         const isSel = activeNumericDist?.column_name === dist.column_name;
+                        const skewText = dist.skew_label || dist.distribution_shape || 'N/A';
                         return (
                           <button
                             key={dist.column_name}
@@ -519,125 +524,135 @@ export const EDATab: React.FC<EDATabProps> = ({
                           >
                             <Hash className="w-3 h-3" />
                             <span>{dist.column_name}</span>
-                            <span className="text-3xs opacity-80">({dist.skew_label})</span>
+                            <span className="text-3xs opacity-80">({skewText})</span>
                           </button>
                         );
                       })}
                     </div>
 
                     {/* Active Column Details */}
-                    {activeNumericDist && (
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
-                        {/* Left: Summary Metrics Grid */}
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-foreground font-mono">
-                              {activeNumericDist.column_name}
-                            </h4>
-                            <Badge
-                              variant={
-                                activeNumericDist.skew_label.includes('Symmetric')
-                                  ? 'green'
-                                  : activeNumericDist.skew_label.includes('Moderate')
-                                  ? 'amber'
-                                  : 'purple'
-                              }
-                              size="xs"
-                            >
-                              {activeNumericDist.skew_label}
-                            </Badge>
+                    {activeNumericDist && (() => {
+                      const skewText = activeNumericDist.skew_label || activeNumericDist.distribution_shape || 'Unknown';
+                      const q1Val = activeNumericDist.q1 ?? activeNumericDist.q25;
+                      const q3Val = activeNumericDist.q3 ?? activeNumericDist.q75;
+                      const validRowsCount = activeNumericDist.non_null_count ?? (activeNumericDist.row_count !== undefined ? activeNumericDist.row_count - (activeNumericDist.null_count ?? 0) : null) ?? 0;
+
+                      return (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-2">
+                          {/* Left: Summary Metrics Grid */}
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-bold text-foreground font-mono">
+                                {activeNumericDist.column_name}
+                              </h4>
+                              <Badge
+                                variant={
+                                  skewText.toLowerCase().includes('symmetric')
+                                    ? 'green'
+                                    : skewText.toLowerCase().includes('moderate')
+                                    ? 'amber'
+                                    : 'purple'
+                                }
+                                size="xs"
+                              >
+                                {skewText}
+                              </Badge>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-2xs">
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Mean</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.mean !== null && activeNumericDist.mean !== undefined ? activeNumericDist.mean.toFixed(2) : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Median</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.median !== null && activeNumericDist.median !== undefined ? activeNumericDist.median.toFixed(2) : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Std Dev</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.std !== null && activeNumericDist.std !== undefined ? activeNumericDist.std.toFixed(2) : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Skewness</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.skewness !== null && activeNumericDist.skewness !== undefined ? activeNumericDist.skewness.toFixed(3) : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Min</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.min !== null && activeNumericDist.min !== undefined ? activeNumericDist.min.toLocaleString() : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Max</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.max !== null && activeNumericDist.max !== undefined ? activeNumericDist.max.toLocaleString() : 'N/A'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Q1 (25%) / Q3 (75%)</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {q1Val !== null && q1Val !== undefined ? q1Val.toFixed(1) : '-'} / {q3Val !== null && q3Val !== undefined ? q3Val.toFixed(1) : '-'}
+                                </div>
+                              </div>
+                              <div className="p-2 bg-surface-muted rounded border border-border">
+                                <span className="text-muted-foreground">Zero / Negative</span>
+                                <div className="font-mono font-bold text-foreground text-xs">
+                                  {activeNumericDist.zero_count ?? 0} / {activeNumericDist.negative_count ?? 0}
+                                </div>
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-2 text-2xs">
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Mean</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.mean !== null ? activeNumericDist.mean.toFixed(2) : 'N/A'}
-                              </div>
+                          {/* Right: Histogram Chart */}
+                          <div className="lg:col-span-2 bg-surface-muted/40 p-3 rounded-lg border border-border">
+                            <div className="text-2xs font-semibold text-muted-foreground mb-2 flex items-center justify-between">
+                              <span>10-Bin Histogram</span>
+                              <span>Valid Rows: {validRowsCount.toLocaleString()}</span>
                             </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Median</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.median !== null ? activeNumericDist.median.toFixed(2) : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Std Dev</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.std !== null ? activeNumericDist.std.toFixed(2) : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Skewness</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.skewness !== null ? activeNumericDist.skewness.toFixed(3) : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Min</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.min !== null ? activeNumericDist.min.toLocaleString() : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Max</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.max !== null ? activeNumericDist.max.toLocaleString() : 'N/A'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Q1 (25%) / Q3 (75%)</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.q1 !== null ? activeNumericDist.q1.toFixed(1) : '-'} / {activeNumericDist.q3 !== null ? activeNumericDist.q3.toFixed(1) : '-'}
-                              </div>
-                            </div>
-                            <div className="p-2 bg-surface-muted rounded border border-border">
-                              <span className="text-muted-foreground">Zero / Negative</span>
-                              <div className="font-mono font-bold text-foreground text-xs">
-                                {activeNumericDist.zero_count} / {activeNumericDist.negative_count}
-                              </div>
+                            <div className="h-48 w-full">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={activeNumericDist.histogram || []} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
+                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
+                                  <XAxis
+                                    dataKey="bin_label"
+                                    tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
+                                    angle={-20}
+                                    textAnchor="end"
+                                    interval={0}
+                                  />
+                                  <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} />
+                                  <Tooltip
+                                    contentStyle={{
+                                      backgroundColor: 'var(--card)',
+                                      borderColor: 'var(--border)',
+                                      borderRadius: '0.5rem',
+                                      fontSize: '11px',
+                                    }}
+                                    formatter={(val: any, name: any, item: any) => {
+                                      const pct = item?.payload?.percentage ?? (validRowsCount > 0 ? (val / validRowsCount * 100) : 0);
+                                      return [
+                                        `${val} rows (${pct !== undefined && pct !== null ? Number(pct).toFixed(1) : '0.0'}%)`,
+                                        'Frequency',
+                                      ];
+                                    }}
+                                    labelFormatter={(l) => `Interval: ${l}`}
+                                  />
+                                  <Bar dataKey="count" fill="var(--chart-1, #3b82f6)" radius={[3, 3, 0, 0]} />
+                                </BarChart>
+                              </ResponsiveContainer>
                             </div>
                           </div>
                         </div>
-
-                        {/* Right: Histogram Chart */}
-                        <div className="lg:col-span-2 bg-surface-muted/40 p-3 rounded-lg border border-border">
-                          <div className="text-2xs font-semibold text-muted-foreground mb-2 flex items-center justify-between">
-                            <span>10-Bin Histogram</span>
-                            <span>Valid Rows: {activeNumericDist.non_null_count.toLocaleString()}</span>
-                          </div>
-                          <div className="h-48 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={activeNumericDist.histogram} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
-                                <XAxis
-                                  dataKey="bin_label"
-                                  tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
-                                  angle={-20}
-                                  textAnchor="end"
-                                  interval={0}
-                                />
-                                <YAxis tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }} />
-                                <Tooltip
-                                  contentStyle={{
-                                    backgroundColor: 'var(--card)',
-                                    borderColor: 'var(--border)',
-                                    borderRadius: '0.5rem',
-                                    fontSize: '11px',
-                                  }}
-                                  formatter={(val: any, name: any, item: any) => [
-                                    `${val} rows (${item.payload.percentage.toFixed(1)}%)`,
-                                    'Frequency',
-                                  ]}
-                                  labelFormatter={(l) => `Interval: ${l}`}
-                                />
-                                <Bar dataKey="count" fill="var(--chart-1, #3b82f6)" radius={[3, 3, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </Card>
@@ -712,7 +727,11 @@ export const EDATab: React.FC<EDATabProps> = ({
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart
                                 layout="vertical"
-                                data={activeCategoricalDist.top_categories}
+                                data={(activeCategoricalDist.top_categories || []).map(cat => ({
+                                  category: cat.category || cat.value || '<Empty>',
+                                  count: cat.count,
+                                  percentage: cat.percentage,
+                                }))}
                                 margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
                               >
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border)" opacity={0.5} />
@@ -730,10 +749,13 @@ export const EDATab: React.FC<EDATabProps> = ({
                                     borderRadius: '0.5rem',
                                     fontSize: '11px',
                                   }}
-                                  formatter={(val: any, name: any, item: any) => [
-                                    `${val} rows (${item.payload.percentage.toFixed(1)}%)`,
-                                    'Frequency',
-                                  ]}
+                                  formatter={(val: any, name: any, item: any) => {
+                                    const pct = item?.payload?.percentage ?? 0;
+                                    return [
+                                      `${val} rows (${Number(pct).toFixed(1)}%)`,
+                                      'Frequency',
+                                    ];
+                                  }}
                                 />
                                 <Bar dataKey="count" fill="var(--chart-2, #8b5cf6)" radius={[0, 3, 3, 0]} />
                               </BarChart>
@@ -751,16 +773,16 @@ export const EDATab: React.FC<EDATabProps> = ({
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border font-mono">
-                                {activeCategoricalDist.top_categories.map((cat, idx) => (
+                                {(activeCategoricalDist.top_categories || []).map((cat, idx) => (
                                   <tr key={idx} className="hover:bg-muted/30">
                                     <td className="px-3 py-1.5 font-sans font-medium text-foreground truncate max-w-[150px]">
-                                      {cat.category}
+                                      {cat.category || cat.value || '<Empty>'}
                                     </td>
                                     <td className="px-3 py-1.5 text-right text-muted-foreground">
-                                      {cat.count.toLocaleString()}
+                                      {(cat.count ?? 0).toLocaleString()}
                                     </td>
                                     <td className="px-3 py-1.5 text-right font-bold text-foreground">
-                                      {cat.percentage.toFixed(1)}%
+                                      {cat.percentage !== undefined && cat.percentage !== null ? cat.percentage.toFixed(1) : '0.0'}%
                                     </td>
                                   </tr>
                                 ))}
@@ -786,6 +808,7 @@ export const EDATab: React.FC<EDATabProps> = ({
                 padding="md"
               >
                 {!summary.correlation_analysis ||
+                summary.correlation_analysis.is_available === false ||
                 summary.correlation_analysis.status === 'INSUFFICIENT_NUMERIC_COLUMNS' ||
                 !summary.correlation_analysis.columns ||
                 summary.correlation_analysis.columns.length < 2 ? (
@@ -825,7 +848,7 @@ export const EDATab: React.FC<EDATabProps> = ({
                                 {rowCol}
                               </td>
                               {summary.correlation_analysis.columns.map((colCol) => {
-                                const val = summary.correlation_analysis.matrix[rowCol]?.[colCol];
+                                const val = summary.correlation_analysis?.matrix?.[rowCol]?.[colCol];
                                 const isSelected =
                                   selectedCorrCell &&
                                   ((selectedCorrCell.col1 === rowCol && selectedCorrCell.col2 === colCol) ||
@@ -885,7 +908,7 @@ export const EDATab: React.FC<EDATabProps> = ({
               </Card>
 
               {/* 6. Temporal Analysis (where applicable) */}
-              {summary.temporal_analysis && (
+              {summary.temporal_analysis && summary.temporal_analysis.is_available !== false && (
                 <Card
                   title={
                     <div className="flex items-center gap-2">
@@ -893,7 +916,7 @@ export const EDATab: React.FC<EDATabProps> = ({
                       <span>Temporal Trend Analysis</span>
                     </div>
                   }
-                  subtitle={`Chronological aggregation along ${summary.temporal_analysis.datetime_column} (${summary.temporal_analysis.granularity} granularity)`}
+                  subtitle={`Chronological aggregation along ${summary.temporal_analysis.datetime_column || 'date'} (${summary.temporal_analysis.granularity || summary.temporal_analysis.time_granularity || 'interval'} granularity)`}
                   padding="md"
                 >
                   <div className="space-y-3">
@@ -901,19 +924,19 @@ export const EDATab: React.FC<EDATabProps> = ({
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <span>Range:</span>
                         <span className="font-mono text-foreground font-semibold">
-                          {summary.temporal_analysis.date_range.min_date} → {summary.temporal_analysis.date_range.max_date}
+                          {summary.temporal_analysis.date_range?.min_date ?? summary.temporal_analysis.earliest_date ?? 'N/A'} → {summary.temporal_analysis.date_range?.max_date ?? summary.temporal_analysis.latest_date ?? 'N/A'}
                         </span>
-                        <span>• {summary.temporal_analysis.total_points} aggregated intervals</span>
+                        <span>• {summary.temporal_analysis.total_points ?? summary.temporal_analysis.series?.length ?? summary.temporal_analysis.data_points?.length ?? 0} aggregated intervals</span>
                       </div>
                       <Badge variant="teal" size="xs">
-                        Trend: {summary.temporal_analysis.trend_direction}
+                        Trend: {summary.temporal_analysis.trend_direction || 'Detected'}
                       </Badge>
                     </div>
 
                     <div className="h-60 w-full bg-surface-muted/40 p-3 rounded-lg border border-border">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart
-                          data={summary.temporal_analysis.data_points}
+                          data={summary.temporal_analysis.data_points || summary.temporal_analysis.series?.map(s => ({ period: s.period, metric_value: s.value, value: s.value, count: s.count })) || []}
                           margin={{ top: 10, right: 20, left: -10, bottom: 20 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />

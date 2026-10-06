@@ -168,16 +168,21 @@ class EDAEngine:
                             {
                                 "bin_start": sanitize_json_value(round(float(bin_edges[i]), 2)),
                                 "bin_end": sanitize_json_value(round(float(bin_edges[i+1]), 2)),
+                                "bin_label": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
                                 "count": int(counts[i]),
+                                "percentage": round(float(counts[i] / non_null_cnt * 100.0), 1) if non_null_cnt > 0 else 0.0,
                             }
                             for i in range(len(counts))
                         ]
                     elif len(finite_vals) > 0:
+                        single_val = float(finite_vals.iloc[0])
                         histogram = [
                             {
-                                "bin_start": sanitize_json_value(round(float(finite_vals.min()), 2)),
-                                "bin_end": sanitize_json_value(round(float(finite_vals.max()), 2)),
+                                "bin_start": sanitize_json_value(round(single_val, 2)),
+                                "bin_end": sanitize_json_value(round(single_val, 2)),
+                                "bin_label": f"{round(single_val, 1)}",
                                 "count": int(len(finite_vals)),
+                                "percentage": 100.0,
                             }
                         ]
                 except Exception:
@@ -185,11 +190,15 @@ class EDAEngine:
 
                 numeric_distributions.append({
                     "column_name": col_name,
+                    "row_count": row_cnt,
+                    "non_null_count": non_null_cnt,
                     "mean": sanitize_json_value(round(mean_val, 2)),
                     "median": sanitize_json_value(round(median_val, 2)),
                     "std": sanitize_json_value(round(std_val, 2)),
                     "min": sanitize_json_value(min_val),
                     "max": sanitize_json_value(max_val),
+                    "q1": sanitize_json_value(round(q25_val, 2)),
+                    "q3": sanitize_json_value(round(q75_val, 2)),
                     "q25": sanitize_json_value(round(q25_val, 2)),
                     "q75": sanitize_json_value(round(q75_val, 2)),
                     "zero_count": zero_cnt,
@@ -197,17 +206,22 @@ class EDAEngine:
                     "null_count": null_cnt,
                     "null_percentage": null_pct,
                     "skewness": skewness,
+                    "skew_label": distribution_shape,
                     "distribution_shape": distribution_shape,
                     "histogram": histogram,
                 })
             else:
                 numeric_distributions.append({
                     "column_name": col_name,
+                    "row_count": row_cnt,
+                    "non_null_count": 0,
                     "mean": None,
                     "median": None,
                     "std": None,
                     "min": None,
                     "max": None,
+                    "q1": None,
+                    "q3": None,
                     "q25": None,
                     "q75": None,
                     "zero_count": 0,
@@ -215,6 +229,7 @@ class EDAEngine:
                     "null_count": null_cnt,
                     "null_percentage": null_pct,
                     "skewness": None,
+                    "skew_label": "All Null",
                     "distribution_shape": "All Null",
                     "histogram": [],
                 })
@@ -235,18 +250,22 @@ class EDAEngine:
                 sorted_items = sorted(vc.items(), key=lambda x: (-x[1], str(x[0])))
                 for val, cnt in sorted_items[:10]:
                     pct = round(float((cnt / non_null_cnt) * 100.0), 1)
+                    val_str = str(val) if val != "" else "<Empty String>"
                     top_categories.append({
-                        "value": str(val) if val != "" else "<Empty String>",
+                        "category": val_str,
+                        "value": val_str,
                         "count": int(cnt),
                         "percentage": pct,
                     })
 
             categorical_distributions.append({
                 "column_name": col_name,
+                "row_count": row_cnt,
                 "distinct_count": distinct_cnt,
                 "null_count": null_cnt,
                 "null_percentage": null_pct,
                 "is_high_cardinality": bool(distinct_cnt > 10),
+                "cardinality_note": f"Column has {distinct_cnt} unique values ({round(distinct_cnt / max(non_null_cnt, 1) * 100, 1)}% unique ratio)." if distinct_cnt > 10 else None,
                 "top_categories": top_categories,
             })
 
@@ -262,10 +281,12 @@ class EDAEngine:
         if len(usable_numeric_cols) < 2:
             correlation_analysis = {
                 "is_available": False,
+                "status": "INSUFFICIENT_NUMERIC_COLUMNS",
                 "message": "Correlation analysis requires at least two usable numeric columns.",
                 "columns": usable_numeric_cols,
                 "matrix": {},
                 "strong_pairs": [],
+                "top_correlated_pairs": [],
             }
         else:
             try:
@@ -285,7 +306,6 @@ class EDAEngine:
 
                 # Identify notable correlation pairs (sorted by absolute correlation descending)
                 pairs: List[Dict[str, Any]] = []
-                seen_pairs = set()
                 for i in range(len(usable_numeric_cols)):
                     for j in range(i + 1, len(usable_numeric_cols)):
                         col1 = usable_numeric_cols[i]
@@ -314,18 +334,22 @@ class EDAEngine:
 
                 correlation_analysis = {
                     "is_available": True,
+                    "status": "SUCCESS",
                     "message": None,
                     "columns": usable_numeric_cols,
                     "matrix": matrix_dict,
                     "strong_pairs": pairs,
+                    "top_correlated_pairs": pairs,
                 }
             except Exception as e:
                 correlation_analysis = {
                     "is_available": False,
+                    "status": "ERROR",
                     "message": f"Correlation analysis could not be calculated: {e}",
                     "columns": usable_numeric_cols,
                     "matrix": {},
                     "strong_pairs": [],
+                    "top_correlated_pairs": [],
                 }
 
         # 5. Temporal Analysis
@@ -383,38 +407,74 @@ class EDAEngine:
                         for _, row in agg_series.iterrows()
                     ]
 
+                    # Trend direction calculation
+                    trend_direction = "Stable"
+                    if len(series_data) >= 2:
+                        first_val = series_data[0]["value"]
+                        last_val = series_data[-1]["value"]
+                        if first_val is not None and last_val is not None and first_val != 0:
+                            if last_val > first_val * 1.05:
+                                trend_direction = "Upward"
+                            elif last_val < first_val * 0.95:
+                                trend_direction = "Downward"
+
+                    data_points = [
+                        {
+                            "period": item["period"],
+                            "metric_value": item["value"],
+                            "value": item["value"],
+                            "count": item["count"],
+                        }
+                        for item in series_data
+                    ]
+
                     temporal_analysis = {
                         "is_available": True,
+                        "status": "SUCCESS",
                         "message": None,
                         "datetime_column": target_dt_col,
                         "measure_column": target_measure,
                         "time_granularity": granularity,
+                        "granularity": granularity,
                         "temporal_span_days": span_days,
                         "earliest_date": earliest_dt.strftime("%Y-%m-%d"),
                         "latest_date": latest_dt.strftime("%Y-%m-%d"),
+                        "date_range": {
+                            "min_date": earliest_dt.strftime("%Y-%m-%d"),
+                            "max_date": latest_dt.strftime("%Y-%m-%d"),
+                        },
+                        "total_points": len(series_data),
+                        "trend_direction": trend_direction,
                         "series": series_data,
+                        "data_points": data_points,
                     }
                 else:
                     temporal_analysis = {
                         "is_available": False,
+                        "status": "EMPTY_DATA",
                         "message": "No valid non-null datetime and numeric observations found.",
                         "datetime_column": target_dt_col,
                         "measure_column": target_measure,
                         "series": [],
+                        "data_points": [],
                     }
             except Exception as e:
                 temporal_analysis = {
                     "is_available": False,
+                    "status": "ERROR",
                     "message": f"Temporal analysis could not be computed: {e}",
                     "datetime_column": target_dt_col,
                     "series": [],
+                    "data_points": [],
                 }
         else:
             temporal_analysis = {
                 "is_available": False,
+                "status": "NO_DATETIME_COLUMN",
                 "message": "No datetime column detected in dataset for temporal exploration.",
                 "datetime_column": None,
                 "series": [],
+                "data_points": [],
             }
 
         # 6. Automated Observations (5-10 Evidence-Grounded Factual Insights)
@@ -424,10 +484,14 @@ class EDAEngine:
         cols_with_missing = [d for d in numeric_distributions + categorical_distributions if d["null_count"] > 0]
         if cols_with_missing:
             highest_missing = max(cols_with_missing, key=lambda x: x["null_percentage"])
+            obs_text = f"{highest_missing['column_name']} has {highest_missing['null_count']} missing values ({highest_missing['null_percentage']}% of rows)."
             automated_observations.append({
                 "id": "obs_missingness",
+                "type": "missing_values",
                 "category": "missingness",
-                "text": f"{highest_missing['column_name']} has {highest_missing['null_count']} missing values ({highest_missing['null_percentage']}% of rows).",
+                "text": obs_text,
+                "observation": obs_text,
+                "severity": "warning",
                 "evidence": {
                     "column": highest_missing["column_name"],
                     "missing_count": highest_missing["null_count"],
@@ -436,10 +500,14 @@ class EDAEngine:
                 }
             })
         elif row_cnt > 0:
+            obs_text = "The dataset contains 100% complete records with zero missing values across all columns."
             automated_observations.append({
                 "id": "obs_missingness",
+                "type": "missing_values",
                 "category": "missingness",
-                "text": "The dataset contains 100% complete records with zero missing values across all columns.",
+                "text": obs_text,
+                "observation": obs_text,
+                "severity": "info",
                 "evidence": {
                     "total_cells": total_cells,
                     "missing_cells": 0,
@@ -449,10 +517,14 @@ class EDAEngine:
 
         # Observation 2: Duplicate rows
         if dup_row_cnt > 0:
+            obs_text = f"Found {dup_row_cnt} duplicate rows ({dup_row_pct}% of total records)."
             automated_observations.append({
                 "id": "obs_duplicates",
+                "type": "duplicates",
                 "category": "duplicates",
-                "text": f"Found {dup_row_cnt} duplicate rows ({dup_row_pct}% of total records).",
+                "text": obs_text,
+                "observation": obs_text,
+                "severity": "warning",
                 "evidence": {
                     "duplicate_row_count": dup_row_cnt,
                     "duplicate_row_percentage": dup_row_pct,
@@ -464,10 +536,14 @@ class EDAEngine:
         if numeric_distributions:
             primary_num = numeric_distributions[0]
             if primary_num["min"] is not None and primary_num["max"] is not None:
+                obs_text = f"{primary_num['column_name']} ranges from {primary_num['min']} to {primary_num['max']} with a median of {primary_num['median']}."
                 automated_observations.append({
                     "id": f"obs_range_{primary_num['column_name']}",
+                    "type": "distribution",
                     "category": "distribution",
-                    "text": f"{primary_num['column_name']} ranges from {primary_num['min']} to {primary_num['max']} with a median of {primary_num['median']}.",
+                    "text": obs_text,
+                    "observation": obs_text,
+                    "severity": "info",
                     "evidence": {
                         "column": primary_num["column_name"],
                         "min": primary_num["min"],
@@ -482,10 +558,14 @@ class EDAEngine:
         skewed_cols = [d for d in numeric_distributions if d.get("skewness") is not None and abs(d["skewness"]) > 0.5]
         if skewed_cols:
             most_skewed = max(skewed_cols, key=lambda x: abs(x["skewness"]))
+            obs_text = f"{most_skewed['column_name']} exhibits a {most_skewed['distribution_shape'].lower()} distribution (skewness = {most_skewed['skewness']})."
             automated_observations.append({
                 "id": f"obs_skew_{most_skewed['column_name']}",
+                "type": "skewness",
                 "category": "distribution",
-                "text": f"{most_skewed['column_name']} exhibits a {most_skewed['distribution_shape'].lower()} distribution (skewness = {most_skewed['skewness']}).",
+                "text": obs_text,
+                "observation": obs_text,
+                "severity": "notice",
                 "evidence": {
                     "column": most_skewed["column_name"],
                     "skewness": most_skewed["skewness"],
@@ -499,8 +579,11 @@ class EDAEngine:
             if top_pair["absolute_correlation"] >= 0.4:
                 automated_observations.append({
                     "id": "obs_correlation",
+                    "type": "correlation",
                     "category": "correlation",
                     "text": top_pair["description"],
+                    "observation": top_pair["description"],
+                    "severity": "info",
                     "evidence": {
                         "column_1": top_pair["col1"],
                         "column_2": top_pair["col2"],
@@ -515,10 +598,14 @@ class EDAEngine:
             primary_cat = categorical_distributions[0]
             if primary_cat["top_categories"]:
                 top_item = primary_cat["top_categories"][0]
+                obs_text = f"{primary_cat['column_name']} contains {primary_cat['distinct_count']} distinct categories, with '{top_item['value']}' representing {top_item['percentage']}% of records."
                 automated_observations.append({
                     "id": f"obs_cat_{primary_cat['column_name']}",
+                    "type": "cardinality",
                     "category": "cardinality",
-                    "text": f"{primary_cat['column_name']} contains {primary_cat['distinct_count']} distinct categories, with '{top_item['value']}' representing {top_item['percentage']}% of records.",
+                    "text": obs_text,
+                    "observation": obs_text,
+                    "severity": "info",
                     "evidence": {
                         "column": primary_cat["column_name"],
                         "distinct_count": primary_cat["distinct_count"],
@@ -530,10 +617,14 @@ class EDAEngine:
 
         # Observation 7: Temporal Span
         if temporal_analysis and temporal_analysis.get("is_available"):
+            obs_text = f"Temporal records in {temporal_analysis['datetime_column']} span {temporal_analysis['temporal_span_days']} days from {temporal_analysis['earliest_date']} to {temporal_analysis['latest_date']}."
             automated_observations.append({
                 "id": "obs_temporal",
+                "type": "temporal",
                 "category": "temporal",
-                "text": f"Temporal records in {temporal_analysis['datetime_column']} span {temporal_analysis['temporal_span_days']} days from {temporal_analysis['earliest_date']} to {temporal_analysis['latest_date']}.",
+                "text": obs_text,
+                "observation": obs_text,
+                "severity": "info",
                 "evidence": {
                     "datetime_column": temporal_analysis["datetime_column"],
                     "temporal_span_days": temporal_analysis["temporal_span_days"],

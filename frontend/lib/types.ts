@@ -703,17 +703,17 @@ export interface RegisterCleanedDatasetResponse {
 // ----------------------------------------------------
 
 export interface HistogramBin {
-  bin_label: string;
+  bin_label?: string;
   bin_start: number;
   bin_end: number;
   count: number;
-  percentage: number;
+  percentage?: number;
 }
 
 export interface NumericDistribution {
   column_name: string;
-  row_count: number;
-  non_null_count: number;
+  row_count?: number;
+  non_null_count?: number;
   null_count: number;
   null_percentage: number;
   mean: number | null;
@@ -721,29 +721,33 @@ export interface NumericDistribution {
   std: number | null;
   min: number | null;
   max: number | null;
-  q1: number | null;
-  q3: number | null;
+  q1?: number | null;
+  q3?: number | null;
+  q25?: number | null;
+  q75?: number | null;
   zero_count: number;
   negative_count: number;
   skewness: number | null;
-  skew_label: string;
+  skew_label?: string;
+  distribution_shape?: string;
   histogram: HistogramBin[];
 }
 
 export interface CategoryFrequency {
-  category: string;
+  category?: string;
+  value?: string;
   count: number;
   percentage: number;
 }
 
 export interface CategoricalDistribution {
   column_name: string;
-  row_count: number;
+  row_count?: number;
   distinct_count: number;
   null_count: number;
   null_percentage: number;
   is_high_cardinality: boolean;
-  cardinality_note: string | null;
+  cardinality_note?: string | null;
   top_categories: CategoryFrequency[];
 }
 
@@ -751,37 +755,56 @@ export interface CorrelatedPair {
   col1: string;
   col2: string;
   correlation: number;
-  direction: 'positive' | 'negative';
-  strength: 'strong' | 'moderate' | 'weak' | 'none';
+  absolute_correlation?: number;
+  direction?: 'positive' | 'negative' | 'Positive' | 'Negative' | 'None' | string;
+  strength?: 'strong' | 'moderate' | 'weak' | 'none' | 'Strong' | 'Moderate' | 'Weak' | 'None' | string;
   description: string;
 }
 
 export interface CorrelationAnalysisData {
-  status: 'SUCCESS' | 'INSUFFICIENT_NUMERIC_COLUMNS' | 'EMPTY_DATA' | 'ERROR';
+  status?: 'SUCCESS' | 'INSUFFICIENT_NUMERIC_COLUMNS' | 'EMPTY_DATA' | 'ERROR' | string;
+  is_available?: boolean;
   columns: string[];
   matrix: Record<string, Record<string, number | null>>;
   message: string | null;
-  top_correlated_pairs: CorrelatedPair[];
+  top_correlated_pairs?: CorrelatedPair[];
+  strong_pairs?: CorrelatedPair[];
+}
+
+export interface TemporalDataPoint {
+  period: string;
+  metric_value?: number | null;
+  value?: number | null;
+  count?: number;
 }
 
 export interface TemporalAnalysisData {
-  status: string;
-  datetime_column: string;
-  measure_column: string | null;
-  granularity: string;
-  date_range: { min_date: string; max_date: string };
-  total_points: number;
-  trend_direction: string;
-  data_points: Record<string, any>[];
+  status?: string;
+  is_available?: boolean;
+  datetime_column: string | null;
+  measure_column?: string | null;
+  granularity?: string;
+  time_granularity?: string;
+  date_range?: { min_date: string; max_date: string };
+  earliest_date?: string;
+  latest_date?: string;
+  temporal_span_days?: number;
+  total_points?: number;
+  trend_direction?: string;
+  data_points?: TemporalDataPoint[];
+  series?: TemporalDataPoint[];
+  message?: string | null;
 }
 
 export interface EDAObservation {
   id: string;
-  type: string;
-  column: string | null;
-  observation: string;
-  evidence: Record<string, any>;
-  severity: 'info' | 'notice' | 'warning';
+  type?: string;
+  category?: string;
+  column?: string | null;
+  observation?: string;
+  text?: string;
+  evidence?: Record<string, any>;
+  severity?: 'info' | 'notice' | 'warning' | string;
 }
 
 export interface EDADatasetSummary {
