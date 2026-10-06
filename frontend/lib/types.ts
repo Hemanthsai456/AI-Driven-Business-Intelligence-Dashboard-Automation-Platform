@@ -356,6 +356,77 @@ export interface CustomColumnTransformation {
   source?: string;
 }
 
+export interface MultiValueCandidate {
+  column_name: string;
+  detected_delimiter: string;
+  affected_rows: number;
+  affected_percentage: number;
+  average_values_per_affected_row: number;
+  max_values_per_row: number;
+  examples: string[];
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'REVIEW';
+  recommendation: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP' | 'REVIEW';
+  reason: string;
+  evidence: string[];
+  column_dtype: string;
+  semantic_role: string;
+}
+
+export interface MultiValueCandidatesResponse {
+  dataset_id: string;
+  candidates_count: number;
+  candidates: MultiValueCandidate[];
+}
+
+export interface MultiValuePreviewRequest {
+  column_name: string;
+  action: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP';
+  delimiter?: string;
+}
+
+export interface MultiValuePreviewResult {
+  dataset_id: string;
+  column_name: string;
+  action: string;
+  delimiter_used: string;
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_added: number;
+  original_column_count: number;
+  resulting_column_count: number;
+  affected_rows: number;
+  generated_columns: string[];
+  warning_message?: string | null;
+  sample_before_after: Array<{
+    row_index?: number;
+    original_row_index?: number;
+    before?: any;
+    after?: any;
+    before_value?: any;
+    before_row?: Record<string, any>;
+    expanded_values?: string[];
+    resulting_rows_count?: number;
+    after_rows?: Array<Record<string, any>>;
+  }>;
+  warnings: string[];
+}
+
+export interface MultiValueApplyRequest {
+  column_name: string;
+  action: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP';
+  delimiter?: string;
+}
+
+export interface MultiValueApplyResponse {
+  dataset_id: string;
+  action: string;
+  column_name: string;
+  audit_info: Record<string, any>;
+  cleaned_row_count: number;
+  cleaned_column_count: number;
+  status: string;
+}
+
 export interface DatasetListItem {
   dataset_id: string;
   filename: string;

@@ -219,6 +219,12 @@ def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
             {"operation": "CONVERT_STRING", "label": "Convert to Text", "description": "Convert column values to text"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original data type"},
         ]
+    elif operation in ["SPLIT_COLUMNS", "EXPAND_ROWS"]:
+        return [
+            {"operation": "SPLIT_COLUMNS", "label": "Split into Columns", "description": "Split delimited tokens into distinct new columns"},
+            {"operation": "EXPAND_ROWS", "label": "Expand into Rows", "description": "Explode delimited values into multiple duplicated rows"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Keep As Is", "description": "Preserve original multi-valued cells as-is"},
+        ]
     return []
 
 

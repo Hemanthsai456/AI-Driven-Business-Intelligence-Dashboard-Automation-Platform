@@ -52,6 +52,11 @@ from api.schemas import (
     CleaningSelectionRequest,
     ColumnTransformPreviewRequest,
     ColumnTransformPreviewResponse,
+    MultiValueCandidatesResponse,
+    MultiValuePreviewRequest,
+    MultiValuePreviewResponse,
+    MultiValueApplyRequest,
+    MultiValueApplyResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
@@ -743,6 +748,146 @@ def preview_column_transformation(dataset_id: str, request: ColumnTransformPrevi
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate column transformation preview: {str(ex)}",
+        )
+
+
+@app.get(
+    "/api/datasets/{dataset_id}/cleaning/multivalue/candidates",
+    response_model=MultiValueCandidatesResponse,
+)
+def get_multivalue_candidates(dataset_id: str):
+    """Detect columns containing multi-valued cells inside the canonical dataset."""
+    from cleaning.multivalue import MultiValueDetector
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        detector = MultiValueDetector()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        candidates = detector.detect_candidates(
+            canonical=target_dataset,
+            semantic_profile=record.semantic_profile,
+        )
+        return {
+            "dataset_id": dataset_id,
+            "candidates_count": len(candidates),
+            "candidates": [c.to_dict() for c in candidates],
+        }
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to detect multi-valued column candidates: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/multivalue/preview",
+    response_model=MultiValuePreviewResponse,
+)
+def preview_multivalue_transformation(dataset_id: str, request: MultiValuePreviewRequest):
+    """Generate a non-mutating preview of splitting or expanding a multi-valued column."""
+    from cleaning.multivalue import MultiValueExecutionError, MultiValueHandler
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        handler = MultiValueHandler()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        delim = request.delimiter if request.delimiter else ","
+        preview_result = handler.preview(
+            canonical=target_dataset,
+            column_name=request.column_name,
+            action=request.action,
+            delimiter=delim,
+        )
+        return preview_result.to_dict()
+    except MultiValueExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate multi-value transformation preview: {str(ex)}",
+        )
+
+
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/multivalue/apply",
+    response_model=MultiValueApplyResponse,
+)
+def apply_multivalue_transformation(dataset_id: str, request: MultiValueApplyRequest):
+    """Apply a multi-valued column transformation on a copy, updating the in-memory cleaned dataset."""
+    from cleaning.multivalue import MultiValueExecutionError, MultiValueHandler
+    from intelligence.profiler import DataProfiler
+    from intelligence.semantic_analyzer import SemanticAnalyzer
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        handler = MultiValueHandler()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+        delim = request.delimiter if request.delimiter else ","
+        cleaned_canonical, audit_info = handler.apply(
+            canonical=target_dataset,
+            column_name=request.column_name,
+            action=request.action,
+            delimiter=delim,
+        )
+
+        # Store in-memory cleaned CanonicalDataset on record without mutating raw record.dataset
+        record.cleaned_dataset = cleaned_canonical
+        record.last_cleaning_result = {
+            "dataset_id": dataset_id,
+            "action": request.action,
+            "column_name": request.column_name,
+            "audit_info": audit_info,
+            "status": "APPLIED",
+        }
+
+        # Refresh profiler / semantic analyzer metadata on the newly created cleaned dataset
+        try:
+            profiler = DataProfiler()
+            record.profile = profiler.profile(cleaned_canonical, attach=True)
+            semantic_analyzer = SemanticAnalyzer()
+            record.semantic_profile = semantic_analyzer.analyze(cleaned_canonical)
+        except Exception:
+            pass  # Non-fatal metadata refresh
+
+        return {
+            "dataset_id": dataset_id,
+            "action": request.action,
+            "column_name": request.column_name,
+            "audit_info": audit_info,
+            "cleaned_row_count": len(cleaned_canonical.data),
+            "cleaned_column_count": len(cleaned_canonical.data.columns),
+            "status": "SUCCESS",
+        }
+    except MultiValueExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply multi-value transformation: {str(ex)}",
         )
 
 

@@ -10,6 +10,11 @@ import {
   DataProfile,
   DatasetListItem,
   DatasetMetadata,
+  MultiValueApplyRequest,
+  MultiValueApplyResponse,
+  MultiValueCandidatesResponse,
+  MultiValuePreviewRequest,
+  MultiValuePreviewResult,
   QualityAssessment,
   RegisterCleanedDatasetResponse,
   SemanticProfile,
@@ -149,6 +154,35 @@ export async function registerCleanedDataset(datasetId: string): Promise<Registe
 
 export function getDatasetDownloadUrl(datasetId: string, format: 'csv' | 'xlsx'): string {
   return `${API_BASE}/datasets/${datasetId}/download?format=${format}`;
+}
+
+export async function getMultiValueCandidates(datasetId: string): Promise<MultiValueCandidatesResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/candidates`);
+  return handleResponse<MultiValueCandidatesResponse>(res);
+}
+
+export async function previewMultiValue(
+  datasetId: string,
+  request: MultiValuePreviewRequest
+): Promise<MultiValuePreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<MultiValuePreviewResult>(res);
+}
+
+export async function applyMultiValue(
+  datasetId: string,
+  request: MultiValueApplyRequest
+): Promise<MultiValueApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<MultiValueApplyResponse>(res);
 }
 
 

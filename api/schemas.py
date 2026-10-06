@@ -307,5 +307,78 @@ class CleaningSelectionRequest(BaseModel):
     custom_transformations: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
 
 
+class MultiValueCandidateSchema(BaseModel):
+    """Structured result of multi-valued cell detection on a column."""
+
+    column_name: str
+    detected_delimiter: str
+    affected_rows: int
+    affected_percentage: float
+    average_values_per_affected_row: float
+    max_values_per_row: int
+    examples: List[str] = Field(default_factory=list)
+    confidence: str
+    recommendation: str
+    reason: str
+    evidence: List[str] = Field(default_factory=list)
+    column_dtype: str = "object"
+    semantic_role: str = "DIMENSION"
+
+
+class MultiValueCandidatesResponse(BaseModel):
+    """Response containing detected multi-valued cell candidates."""
+
+    dataset_id: str
+    candidates_count: int
+    candidates: List[MultiValueCandidateSchema]
+
+
+class MultiValuePreviewRequest(BaseModel):
+    """Request payload for multi-valued cell transformation preview."""
+
+    column_name: str
+    action: str  # "SPLIT_COLUMNS" | "EXPAND_ROWS" | "KEEP"
+    delimiter: Optional[str] = None
+
+
+class MultiValuePreviewResponse(BaseModel):
+    """Response payload for multi-valued cell transformation preview."""
+
+    dataset_id: str
+    column_name: str
+    action: str
+    delimiter_used: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_added: int
+    original_column_count: int
+    resulting_column_count: int
+    affected_rows: int
+    generated_columns: List[str] = Field(default_factory=list)
+    warning_message: Optional[str] = None
+    sample_before_after: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class MultiValueApplyRequest(BaseModel):
+    """Request payload for applying multi-valued cell transformation."""
+
+    column_name: str
+    action: str  # "SPLIT_COLUMNS" | "EXPAND_ROWS" | "KEEP"
+    delimiter: Optional[str] = None
+
+
+class MultiValueApplyResponse(BaseModel):
+    """Response payload after applying multi-valued cell transformation."""
+
+    dataset_id: str
+    action: str
+    column_name: str
+    audit_info: Dict[str, Any]
+    cleaned_row_count: int
+    cleaned_column_count: int
+    status: str = "SUCCESS"
+
+
 
 

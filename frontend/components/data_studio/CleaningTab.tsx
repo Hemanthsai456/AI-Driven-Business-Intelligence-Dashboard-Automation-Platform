@@ -41,6 +41,9 @@ import {
   ColumnTransformPreviewResult,
   CustomColumnTransformation,
   DatasetMetadata,
+  MultiValueApplyResponse,
+  MultiValueCandidate,
+  MultiValuePreviewResult,
   OperationExecutionResult,
   QualityAssessment,
   RegisterCleanedDatasetResponse,
@@ -49,9 +52,12 @@ import {
 } from '../../lib/types';
 import {
   applyCleaningPlan,
+  applyMultiValue,
   getDatasetDownloadUrl,
+  getMultiValueCandidates,
   previewCleaningPlan,
   previewColumnTransformation,
+  previewMultiValue,
   registerCleanedDataset,
 } from '../../lib/api';
 
@@ -122,6 +128,23 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [colPreviewResult, setColPreviewResult] = useState<ColumnTransformPreviewResult | null>(null);
   const [colPreviewError, setColPreviewError] = useState<string | null>(null);
   const [customTransformations, setCustomTransformations] = useState<CustomColumnTransformation[]>([]);
+
+  // Multi-Valued Cells State (Part 6.3)
+  const [mvCandidates, setMvCandidates] = useState<MultiValueCandidate[]>([]);
+  const [isLoadingMvCandidates, setIsLoadingMvCandidates] = useState<boolean>(false);
+  const [mvCandidatesError, setMvCandidatesError] = useState<string | null>(null);
+
+  const [mvSelectedActions, setMvSelectedActions] = useState<Record<string, 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP'>>({});
+  const [mvCustomDelimiters, setMvCustomDelimiters] = useState<Record<string, string>>({});
+
+  const [activeMvCol, setActiveMvCol] = useState<string | null>(null);
+  const [mvPreviewLoading, setMvPreviewLoading] = useState<boolean>(false);
+  const [mvPreviewResult, setMvPreviewResult] = useState<MultiValuePreviewResult | null>(null);
+  const [mvPreviewError, setMvPreviewError] = useState<string | null>(null);
+
+  const [mvApplyLoading, setMvApplyLoading] = useState<boolean>(false);
+  const [mvApplySuccess, setMvApplySuccess] = useState<string | null>(null);
+  const [mvApplyError, setMvApplyError] = useState<string | null>(null);
 
   // Preview & Execution State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -379,6 +402,107 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   const handleRemoveCustomTransform = (colName: string) => {
     setCustomTransformations((prev) => prev.filter((t) => t.column_name !== colName));
+  };
+
+  const fetchMvCandidates = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setIsLoadingMvCandidates(true);
+    setMvCandidatesError(null);
+    try {
+      const res = await getMultiValueCandidates(datasetId);
+      setMvCandidates(res.candidates || []);
+      const initialActions: Record<string, 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP'> = {};
+      const initialDelims: Record<string, string> = {};
+      for (const cand of res.candidates || []) {
+        initialActions[cand.column_name] =
+          cand.recommendation === 'EXPAND_ROWS'
+            ? 'EXPAND_ROWS'
+            : cand.recommendation === 'SPLIT_COLUMNS'
+            ? 'SPLIT_COLUMNS'
+            : 'KEEP';
+        initialDelims[cand.column_name] = cand.detected_delimiter || ',';
+      }
+      setMvSelectedActions((prev) => ({ ...initialActions, ...prev }));
+      setMvCustomDelimiters((prev) => ({ ...initialDelims, ...prev }));
+    } catch (err: any) {
+      setMvCandidatesError(err.message || 'Failed to detect multi-valued cell candidates.');
+    } finally {
+      setIsLoadingMvCandidates(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchMvCandidates();
+    setMvPreviewResult(null);
+    setMvPreviewError(null);
+    setActiveMvCol(null);
+    setMvApplySuccess(null);
+    setMvApplyError(null);
+  }, [metadata?.dataset_id]);
+
+  const handlePreviewMultiValue = async (colName: string) => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setActiveMvCol(colName);
+    setMvPreviewLoading(true);
+    setMvPreviewError(null);
+    setMvPreviewResult(null);
+    setMvApplySuccess(null);
+    setMvApplyError(null);
+
+    const action = mvSelectedActions[colName] || 'SPLIT_COLUMNS';
+    const delimiter = mvCustomDelimiters[colName] || ',';
+
+    try {
+      const res = await previewMultiValue(datasetId, {
+        column_name: colName,
+        action,
+        delimiter,
+      });
+      setMvPreviewResult(res);
+    } catch (err: any) {
+      setMvPreviewError(err.message || 'Failed to generate multi-value preview.');
+    } finally {
+      setMvPreviewLoading(false);
+    }
+  };
+
+  const handleApplyMultiValue = async (colName: string) => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setMvApplyLoading(true);
+    setMvApplyError(null);
+    setMvApplySuccess(null);
+
+    const action = mvSelectedActions[colName] || 'SPLIT_COLUMNS';
+    const delimiter = mvCustomDelimiters[colName] || ',';
+
+    try {
+      const res = await applyMultiValue(datasetId, {
+        column_name: colName,
+        action,
+        delimiter,
+      });
+      const actionLabel =
+        action === 'SPLIT_COLUMNS'
+          ? 'Split Columns'
+          : action === 'EXPAND_ROWS'
+          ? 'Expand Rows'
+          : 'Keep As Is';
+      setMvApplySuccess(
+        `Successfully applied ${actionLabel} on "${colName}". Cleaned dataset updated (${res.cleaned_row_count} rows, ${res.cleaned_column_count} columns).`
+      );
+      setMvPreviewResult(null);
+      await fetchMvCandidates();
+      if (onRetryPlan) {
+        onRetryPlan();
+      }
+    } catch (err: any) {
+      setMvApplyError(err.message || 'Failed to apply multi-value transformation.');
+    } finally {
+      setMvApplyLoading(false);
+    }
   };
 
   const filteredRecommendations = useMemo(() => {
@@ -1211,6 +1335,487 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+      </Card>
+
+      {/* 2.5 Multi-Valued Cells Card (Part 6.3) */}
+      <Card className="p-5 border border-border/80 bg-surface shadow-xs space-y-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-foreground">
+                  Multi-Valued Cells
+                </h3>
+                <Badge variant="purple" size="xs">
+                  Part 6.3
+                </Badge>
+                {mvCandidates.length > 0 && (
+                  <Badge variant="blue" size="xs">
+                    {mvCandidates.length} candidate{mvCandidates.length > 1 ? 's' : ''} detected
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Detect columns containing multiple logical values inside a single cell (e.g. "12,17", "Python;SQL;Java"). User-controlled split, row expansion, or keep as is.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            variant="secondary"
+            size="xs"
+            onClick={fetchMvCandidates}
+            disabled={isLoadingMvCandidates}
+            leftIcon={<RotateCcw className={`w-3.5 h-3.5 ${isLoadingMvCandidates ? 'animate-spin' : ''}`} />}
+          >
+            {isLoadingMvCandidates ? 'Scanning...' : 'Rescan Columns'}
+          </Button>
+        </div>
+
+        {/* Global Feedback Banners */}
+        {mvApplySuccess && (
+          <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-xs flex items-start justify-between gap-3 text-emerald-600 dark:text-emerald-400">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{mvApplySuccess}</span>
+            </div>
+            <button
+              onClick={() => setMvApplySuccess(null)}
+              className="text-emerald-600 dark:text-emerald-400 hover:text-foreground focus:outline-none"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {mvApplyError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs flex items-start justify-between gap-3 text-rose-500">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{mvApplyError}</span>
+            </div>
+            <button
+              onClick={() => setMvApplyError(null)}
+              className="text-rose-500 hover:text-foreground focus:outline-none"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {mvCandidatesError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs flex items-start gap-2.5 text-rose-500">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{mvCandidatesError}</span>
+          </div>
+        )}
+
+        {/* Loading Spinner */}
+        {isLoadingMvCandidates && (
+          <div className="p-8 text-center space-y-2">
+            <div className="w-6 h-6 mx-auto text-primary">
+              <svg className="animate-spin w-6 h-6" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+            <p className="text-xs text-muted-foreground">Scanning dataset for multi-valued cell patterns...</p>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!isLoadingMvCandidates && mvCandidates.length === 0 && !mvCandidatesError && (
+          <div className="p-6 bg-surface-muted/20 border border-border/60 rounded-lg text-center space-y-1.5">
+            <div className="w-8 h-8 rounded-full bg-surface-muted text-muted-foreground flex items-center justify-center mx-auto">
+              <Check className="w-4 h-4 text-emerald-500" />
+            </div>
+            <h4 className="text-xs font-bold text-foreground">No Multi-Valued Cells Detected</h4>
+            <p className="text-2xs text-muted-foreground max-w-md mx-auto">
+              All string and numeric columns have consistent scalar data formatting. Formatted numbers (e.g. "1,250.50") were verified and safely excluded.
+            </p>
+          </div>
+        )}
+
+        {/* Candidates List */}
+        {!isLoadingMvCandidates && mvCandidates.length > 0 && (
+          <div className="space-y-4">
+            {mvCandidates.map((cand) => {
+              const colName = cand.column_name;
+              const currentAction = mvSelectedActions[colName] || 'SPLIT_COLUMNS';
+              const currentDelim = mvCustomDelimiters[colName] ?? cand.detected_delimiter;
+              const isPreviewingThis = activeMvCol === colName && mvPreviewLoading;
+              const hasPreview = activeMvCol === colName && mvPreviewResult !== null;
+              const previewErr = activeMvCol === colName ? mvPreviewError : null;
+
+              return (
+                <div
+                  key={colName}
+                  className="p-4 bg-surface border border-border rounded-lg space-y-4 transition-all hover:border-primary/40"
+                >
+                  {/* Candidate Header & Metadata */}
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-border/60">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-foreground font-mono">
+                          {colName}
+                        </span>
+                        <Badge variant="slate" size="xs">
+                          {cand.column_dtype}
+                        </Badge>
+                        <Badge variant="blue" size="xs">
+                          {cand.semantic_role}
+                        </Badge>
+                        <Badge
+                          variant={cand.confidence === 'HIGH' ? 'green' : cand.confidence === 'MEDIUM' ? 'blue' : 'amber'}
+                          size="xs"
+                        >
+                          {cand.confidence} Confidence
+                        </Badge>
+                        <Badge variant="purple" size="xs">
+                          Rec: {cand.recommendation.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {cand.reason}
+                      </p>
+                    </div>
+
+                    {/* Stats Badges */}
+                    <div className="flex items-center gap-3 text-xs shrink-0 flex-wrap">
+                      <div className="px-2.5 py-1 bg-surface-muted/40 rounded border border-border text-center">
+                        <span className="text-2xs text-muted-foreground block">Affected Rows</span>
+                        <span className="font-bold text-foreground">
+                          {cand.affected_rows.toLocaleString()} ({cand.affected_percentage}%)
+                        </span>
+                      </div>
+                      <div className="px-2.5 py-1 bg-surface-muted/40 rounded border border-border text-center">
+                        <span className="text-2xs text-muted-foreground block">Tokens / Row</span>
+                        <span className="font-bold text-foreground">
+                          {cand.average_values_per_affected_row} avg (max {cand.max_values_per_row})
+                        </span>
+                      </div>
+                      <div className="px-2.5 py-1 bg-surface-muted/40 rounded border border-border text-center">
+                        <span className="text-2xs text-muted-foreground block">Delimiter</span>
+                        <span className="font-mono font-bold text-primary">
+                          '{cand.detected_delimiter}'
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Examples Pill List */}
+                  {cand.examples && cand.examples.length > 0 && (
+                    <div className="space-y-1">
+                      <span className="text-2xs font-semibold text-muted-foreground block">
+                        Representative Sample Values:
+                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {cand.examples.map((ex, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-surface-muted border border-border text-foreground font-mono text-2xs rounded truncate max-w-[240px]"
+                            title={ex}
+                          >
+                            {ex}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* User Control Form: Action Selector & Delimiter Override */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end pt-2 bg-surface-muted/20 p-3 rounded-md border border-border/60">
+                    {/* Action Selector */}
+                    <div className="sm:col-span-6 space-y-1">
+                      <label className="text-2xs font-semibold text-foreground block">
+                        Choose Action:
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMvSelectedActions((prev) => ({ ...prev, [colName]: 'KEEP' }));
+                            if (activeMvCol === colName) setMvPreviewResult(null);
+                          }}
+                          className={`px-2 py-1.5 text-xs rounded border transition-colors font-medium text-center ${
+                            currentAction === 'KEEP'
+                              ? 'bg-slate-700 text-white border-slate-600 shadow-2xs font-bold'
+                              : 'bg-surface border-border text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Keep As Is
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMvSelectedActions((prev) => ({ ...prev, [colName]: 'SPLIT_COLUMNS' }));
+                            if (activeMvCol === colName) setMvPreviewResult(null);
+                          }}
+                          className={`px-2 py-1.5 text-xs rounded border transition-colors font-medium text-center ${
+                            currentAction === 'SPLIT_COLUMNS'
+                              ? 'bg-primary text-primary-foreground border-primary shadow-2xs font-bold'
+                              : 'bg-surface border-border text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Split to Columns
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMvSelectedActions((prev) => ({ ...prev, [colName]: 'EXPAND_ROWS' }));
+                            if (activeMvCol === colName) setMvPreviewResult(null);
+                          }}
+                          className={`px-2 py-1.5 text-xs rounded border transition-colors font-medium text-center ${
+                            currentAction === 'EXPAND_ROWS'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-bold'
+                              : 'bg-surface border-border text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          Expand into Rows
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Delimiter Override */}
+                    <div className="sm:col-span-3 space-y-1">
+                      <label className="text-2xs font-semibold text-foreground block">
+                        Delimiter:
+                      </label>
+                      <input
+                        type="text"
+                        value={currentDelim}
+                        onChange={(e) => {
+                          setMvCustomDelimiters((prev) => ({ ...prev, [colName]: e.target.value }));
+                          if (activeMvCol === colName) setMvPreviewResult(null);
+                        }}
+                        className="w-full text-xs font-mono bg-surface border border-border rounded px-2.5 py-1.5 text-foreground focus:outline-none focus:border-primary"
+                        placeholder="e.g. , or ; or |"
+                      />
+                    </div>
+
+                    {/* Preview Button */}
+                    <div className="sm:col-span-3">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handlePreviewMultiValue(colName)}
+                        disabled={isPreviewingThis || mvApplyLoading}
+                        leftIcon={<Eye className="w-3.5 h-3.5" />}
+                        className="w-full text-xs"
+                      >
+                        {isPreviewingThis ? 'Simulating...' : 'Preview Change'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Preview Error */}
+                  {previewErr && (
+                    <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-md text-xs text-rose-500 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold block">Preview Failed</span>
+                        <p className="text-2xs text-rose-600 dark:text-rose-400">{previewErr}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Preview Result Display */}
+                  {hasPreview && mvPreviewResult && (
+                    <div className="p-4 bg-surface-muted/30 border border-primary/30 rounded-lg space-y-4">
+                      {/* Preview Top Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border/80">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-foreground">
+                            Preview: {mvPreviewResult.action.replace('_', ' ')}
+                          </span>
+                          <Badge variant="blue" size="xs">
+                            Delimiter: '{mvPreviewResult.delimiter_used}'
+                          </Badge>
+                          <Badge variant="slate" size="xs">
+                            {mvPreviewResult.affected_rows} rows affected
+                          </Badge>
+                        </div>
+                        <button
+                          onClick={() => setMvPreviewResult(null)}
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 focus:outline-none"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Close Preview</span>
+                        </button>
+                      </div>
+
+                      {/* Expanding Warning Notice (Mandatory Requirement) */}
+                      {mvPreviewResult.action === 'EXPAND_ROWS' && (
+                        <div className="p-3 bg-amber-500/15 border border-amber-500/40 rounded-md text-xs flex items-start gap-2.5 text-amber-700 dark:text-amber-300">
+                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                          <div className="space-y-0.5">
+                            <span className="font-bold block">Notice on Context Duplication:</span>
+                            <p className="text-2xs font-semibold">
+                              Expanding values duplicates the other fields in affected rows.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preview Metrics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-2.5 bg-surface border border-border rounded-md">
+                          <span className="text-2xs text-muted-foreground block">Row Count</span>
+                          <span className="font-bold text-foreground text-xs">
+                            {mvPreviewResult.original_row_count.toLocaleString()} →{' '}
+                            <span className={mvPreviewResult.rows_added > 0 ? 'text-amber-500 font-bold' : 'text-foreground'}>
+                              {mvPreviewResult.resulting_row_count.toLocaleString()}
+                            </span>
+                            {mvPreviewResult.rows_added > 0 && (
+                              <span className="text-2xs text-amber-500 ml-1 font-normal">
+                                (+{mvPreviewResult.rows_added})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-surface border border-border rounded-md">
+                          <span className="text-2xs text-muted-foreground block">Column Count</span>
+                          <span className="font-bold text-foreground text-xs">
+                            {mvPreviewResult.original_column_count} →{' '}
+                            <span className={mvPreviewResult.resulting_column_count !== mvPreviewResult.original_column_count ? 'text-primary font-bold' : 'text-foreground'}>
+                              {mvPreviewResult.resulting_column_count}
+                            </span>
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-surface border border-border rounded-md">
+                          <span className="text-2xs text-muted-foreground block">Affected Records</span>
+                          <span className="font-bold text-emerald-500 text-xs">
+                            {mvPreviewResult.affected_rows} rows
+                          </span>
+                        </div>
+
+                        <div className="p-2.5 bg-surface border border-border rounded-md">
+                          <span className="text-2xs text-muted-foreground block">Generated Columns</span>
+                          <span className="font-bold text-primary text-xs truncate block">
+                            {mvPreviewResult.generated_columns.length > 0
+                              ? mvPreviewResult.generated_columns.join(', ')
+                              : 'None'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Sample Before / After Table */}
+                      {mvPreviewResult.sample_before_after && mvPreviewResult.sample_before_after.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-2xs font-semibold text-muted-foreground block">
+                            Sample Changes (First {mvPreviewResult.sample_before_after.length} affected records):
+                          </span>
+                          <div className="overflow-x-auto border border-border rounded-md bg-surface">
+                            {mvPreviewResult.action === 'SPLIT_COLUMNS' ? (
+                              <table className="w-full text-2xs text-left">
+                                <thead className="bg-surface-muted text-muted-foreground border-b border-border">
+                                  <tr>
+                                    <th className="p-2 font-medium">Row</th>
+                                    <th className="p-2 font-medium">Original Value ({colName})</th>
+                                    {mvPreviewResult.generated_columns.map((gCol) => (
+                                      <th key={gCol} className="p-2 font-medium font-mono text-primary">
+                                        {gCol}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/60">
+                                  {mvPreviewResult.sample_before_after.map((sample: any, sIdx: number) => (
+                                    <tr key={sIdx} className="hover:bg-surface-muted/30">
+                                      <td className="p-2 font-mono text-muted-foreground">
+                                        #{sample.row_index}
+                                      </td>
+                                      <td className="p-2 font-mono text-rose-500 line-through truncate max-w-[160px]">
+                                        {String(sample.before)}
+                                      </td>
+                                      {mvPreviewResult.generated_columns.map((gCol) => (
+                                        <td key={gCol} className="p-2 font-mono text-emerald-500 font-bold truncate max-w-[140px]">
+                                          {sample.after?.[gCol] !== null && sample.after?.[gCol] !== undefined
+                                            ? String(sample.after[gCol])
+                                            : <span className="text-muted-foreground font-normal italic">null</span>}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : mvPreviewResult.action === 'EXPAND_ROWS' ? (
+                              <table className="w-full text-2xs text-left">
+                                <thead className="bg-surface-muted text-muted-foreground border-b border-border">
+                                  <tr>
+                                    <th className="p-2 font-medium">Original Row</th>
+                                    <th className="p-2 font-medium">Original Cell Value</th>
+                                    <th className="p-2 font-medium">Expanded Resulting Rows</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border/60">
+                                  {mvPreviewResult.sample_before_after.map((sample: any, sIdx: number) => (
+                                    <tr key={sIdx} className="hover:bg-surface-muted/30">
+                                      <td className="p-2 font-mono text-muted-foreground">
+                                        #{sample.original_row_index}
+                                      </td>
+                                      <td className="p-2 font-mono text-amber-500 font-medium truncate max-w-[180px]">
+                                        {String(sample.before_value)}
+                                      </td>
+                                      <td className="p-2 font-mono">
+                                        <div className="flex flex-col gap-1">
+                                          {sample.after_rows?.map((row: any, rIdx: number) => (
+                                            <div key={rIdx} className="flex items-center gap-2">
+                                              <Badge variant="green" size="xs">Row +{rIdx + 1}</Badge>
+                                              <span className="text-emerald-500 font-bold">{colName}: "{row[colName]}"</span>
+                                              <span className="text-2xs text-muted-foreground">
+                                                (context duplicated)
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            ) : (
+                              <div className="p-3 text-2xs text-muted-foreground text-center">
+                                Keep As Is selected. Data will remain unmodified.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Apply Transformation Button */}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          onClick={() => setMvPreviewResult(null)}
+                        >
+                          Dismiss
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="xs"
+                          onClick={() => handleApplyMultiValue(colName)}
+                          disabled={mvApplyLoading}
+                          leftIcon={<Play className="w-3.5 h-3.5" />}
+                          className="text-xs"
+                        >
+                          {mvApplyLoading ? 'Applying Transformation...' : 'Apply Transformation'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </Card>
