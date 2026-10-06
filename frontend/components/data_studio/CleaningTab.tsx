@@ -25,6 +25,7 @@ import {
   Table,
   Zap,
   Download,
+  Sliders,
 } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
@@ -103,7 +104,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [executionResult, setExecutionResult] = useState<CleaningExecutionResult | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
 
-  // Registration & Download State (Part 6)
+  // Registration & Download State
   const [registrationState, setRegistrationState] = useState<RegistrationState>('idle');
   const [registeredData, setRegisteredData] = useState<RegisterCleanedDatasetResponse | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
@@ -255,7 +256,6 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setRegistrationError(null);
 
     try {
-      // Simulate quick visual step transition to 'validating'
       const timer = setTimeout(() => {
         setExecutionState('validating');
       }, 400);
@@ -275,7 +275,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     }
   };
 
-  // Register Cleaned Dataset Action (Part 6)
+  // Register Cleaned Dataset Action
   const handleRegisterCleaned = async () => {
     const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
     if (!targetDatasetId) {
@@ -323,7 +323,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-bold text-foreground">Generating Cleaning Plan</h3>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto font-mono">
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
             Evaluating data profile and quality observations to generate deterministic cleaning recommendations...
           </p>
         </div>
@@ -340,7 +340,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         </div>
         <div className="space-y-1">
           <h3 className="text-sm font-bold text-foreground">Unable to Generate Cleaning Plan</h3>
-          <p className="text-xs text-muted-foreground font-mono">
+          <p className="text-xs text-muted-foreground">
             {planError || 'No cleaning plan could be generated for this dataset.'}
           </p>
         </div>
@@ -367,13 +367,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             </svg>
           </div>
           <div className="space-y-1">
-            <h4 className="text-sm font-bold font-mono text-foreground">
+            <h4 className="text-sm font-bold text-foreground">
               {executionState === 'applying'
                 ? 'Applying Selected Cleaning Operations...'
                 : 'Validating Invariants & Generating Cleaned In-Memory Dataset...'}
             </h4>
-            <p className="text-xs text-muted-foreground font-mono">
-              Operating safely on a deep copy. Raw session dataset remains 100% immutable.
+            <p className="text-xs text-muted-foreground">
+              Operating safely on a deep copy. Raw source dataset remains 100% immutable.
             </p>
           </div>
         </Card>
@@ -385,15 +385,15 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
+              <h4 className="text-xs font-bold text-rose-600 dark:text-rose-400">
                 Cleaning Execution Failed
               </h4>
-              <p className="text-xs text-muted-foreground font-mono">
+              <p className="text-xs text-muted-foreground">
                 {executionError || 'An unexpected error occurred during cleaning execution.'}
               </p>
             </div>
           </div>
-          <Button variant="secondary" size="xs" onClick={handleResetExecution} className="font-mono">
+          <Button variant="secondary" size="xs" onClick={handleResetExecution}>
             Dismiss
           </Button>
         </Card>
@@ -410,14 +410,14 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-foreground font-mono">
+                  <h3 className="text-base font-bold text-foreground">
                     Cleaning Execution Complete
                   </h3>
                   <Badge variant="green" size="xs">
                     Validation: {executionResult.validation?.overall_status || 'PASSED'}
                   </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Cleaned in-memory DataFrame generated successfully. Raw source dataset remains untouched.
                 </p>
               </div>
@@ -428,7 +428,6 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               size="xs"
               onClick={handleResetExecution}
               leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
-              className="font-mono"
             >
               Reconfigure Plan
             </Button>
@@ -436,46 +435,46 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
           {/* Metrics Summary */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-              <span className="text-3xs uppercase font-mono text-muted-foreground block">
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-1">
+              <span className="text-2xs font-medium text-muted-foreground block">
                 Row Count
               </span>
-              <div className="text-base font-bold font-mono text-foreground">
+              <div className="text-lg font-bold text-foreground">
                 {executionResult.cleaned_row_count.toLocaleString()}
-                <span className="text-3xs font-normal text-muted-foreground ml-1.5">
+                <span className="text-2xs font-normal text-muted-foreground ml-1.5">
                   ({executionResult.row_count_change <= 0 ? executionResult.row_count_change : `+${executionResult.row_count_change}`} rows)
                 </span>
               </div>
             </div>
 
-            <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-              <span className="text-3xs uppercase font-mono text-muted-foreground block">
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-1">
+              <span className="text-2xs font-medium text-muted-foreground block">
                 Operations Applied
               </span>
-              <div className="text-base font-bold font-mono text-emerald-500">
+              <div className="text-lg font-bold text-emerald-500">
                 {executionResult.operations_applied}
-                <span className="text-3xs font-normal text-muted-foreground ml-1.5">
+                <span className="text-2xs font-normal text-muted-foreground ml-1.5">
                   / {executionResult.operations_requested} requested
                 </span>
               </div>
             </div>
 
-            <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-              <span className="text-3xs uppercase font-mono text-muted-foreground block">
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-1">
+              <span className="text-2xs font-medium text-muted-foreground block">
                 Cells Modified
               </span>
-              <div className="text-base font-bold font-mono text-primary">
+              <div className="text-lg font-bold text-primary">
                 {executionResult.total_cells_affected.toLocaleString()}
               </div>
             </div>
 
-            <div className="p-3 bg-surface border border-border rounded-lg space-y-1">
-              <span className="text-3xs uppercase font-mono text-muted-foreground block">
+            <div className="p-3.5 bg-surface border border-border rounded-lg space-y-1">
+              <span className="text-2xs font-medium text-muted-foreground block">
                 Checks Passed
               </span>
-              <div className="text-base font-bold font-mono text-foreground">
+              <div className="text-lg font-bold text-foreground">
                 {executionResult.validation?.passed_checks || 0}
-                <span className="text-3xs font-normal text-muted-foreground ml-1.5">
+                <span className="text-2xs font-normal text-muted-foreground ml-1.5">
                   / {executionResult.validation?.total_checks || 0} invariant checks
                 </span>
               </div>
@@ -485,14 +484,14 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
           {/* Validation Checks Accordion/List */}
           {executionResult.validation && executionResult.validation.checks.length > 0 && (
             <div className="space-y-2 pt-2 border-t border-border">
-              <span className="text-xs font-bold font-mono text-foreground block">
+              <span className="text-xs font-semibold text-foreground block">
                 Post-Cleaning Invariant Verifications
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {executionResult.validation.checks.map((chk, i) => (
                   <div
                     key={i}
-                    className="p-2.5 bg-surface border border-border/80 rounded-md flex items-start gap-2.5 text-xs font-mono"
+                    className="p-3 bg-surface border border-border/80 rounded-md flex items-start gap-2.5 text-xs"
                   >
                     {chk.status === 'PASSED' ? (
                       <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
@@ -502,10 +501,10 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                       <X className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                     )}
                     <div className="space-y-0.5">
-                      <span className="font-bold text-foreground block text-3xs">
+                      <span className="font-semibold text-foreground block text-xs">
                         {chk.check_name}
                       </span>
-                      <p className="text-muted-foreground text-3xs leading-relaxed">
+                      <p className="text-muted-foreground text-2xs leading-relaxed">
                         {chk.message}
                       </p>
                     </div>
@@ -515,15 +514,15 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             </div>
           )}
 
-          {/* Registration and Download Section (Part 6) */}
-          <div className="pt-4 border-t border-border space-y-4 font-mono">
+          {/* Registration and Download Section */}
+          <div className="pt-4 border-t border-border space-y-4">
             {registrationState === 'idle' && (
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-surface rounded-lg border border-border">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-surface rounded-lg border border-border">
                 <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-foreground">
+                  <h4 className="text-sm font-semibold text-foreground">
                     Register Cleaned Dataset
                   </h4>
-                  <p className="text-3xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Register this validated in-memory DataFrame as a distinct first-class dataset in Data Studio.
                   </p>
                 </div>
@@ -532,7 +531,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                   size="sm"
                   onClick={handleRegisterCleaned}
                   leftIcon={<Sparkles className="w-3.5 h-3.5" />}
-                  className="font-mono text-xs shrink-0"
+                  className="text-xs shrink-0"
                 >
                   Register Cleaned Dataset
                 </Button>
@@ -549,7 +548,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 </div>
                 <div className="space-y-0.5">
                   <span className="text-xs font-bold text-foreground">Registering Cleaned Dataset...</span>
-                  <p className="text-3xs text-muted-foreground">
+                  <p className="text-2xs text-muted-foreground">
                     Generating schema, statistical profile, semantic intelligence, and readiness assessment.
                   </p>
                 </div>
@@ -560,7 +559,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start justify-between gap-3 text-xs">
                 <div className="space-y-1">
                   <span className="font-bold text-rose-600 dark:text-rose-400">Registration Failed</span>
-                  <p className="text-muted-foreground text-3xs">{registrationError}</p>
+                  <p className="text-muted-foreground text-2xs">{registrationError}</p>
                 </div>
                 <Button variant="secondary" size="xs" onClick={handleRegisterCleaned}>
                   Retry Registration
@@ -572,15 +571,15 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               <div className="p-4 bg-surface rounded-lg border border-emerald-500/30 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
                       <Check className="w-4 h-4" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground">Cleaned Dataset Registered</span>
+                        <span className="text-sm font-bold text-foreground">Cleaned Dataset Registered</span>
                         <Badge variant="green" size="xs">Ready in Selector</Badge>
                       </div>
-                      <p className="text-3xs text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         Available as an independent dataset with complete profiling and semantic intelligence.
                       </p>
                     </div>
@@ -593,7 +592,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                         size="xs"
                         onClick={() => onSelectDataset(registeredData.dataset_id)}
                         leftIcon={<ArrowRight className="w-3.5 h-3.5" />}
-                        className="font-mono text-xs"
+                        className="text-xs"
                       >
                         Use Cleaned Dataset
                       </Button>
@@ -602,7 +601,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     <a
                       href={getDatasetDownloadUrl(registeredData.dataset_id, 'csv')}
                       download={`${registeredData.filename}`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
                     >
                       <Download className="w-3.5 h-3.5 text-primary" />
                       <span>Download CSV</span>
@@ -611,7 +610,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     <a
                       href={getDatasetDownloadUrl(registeredData.dataset_id, 'xlsx')}
                       download={`${registeredData.filename.replace(/\.csv$/, '')}.xlsx`}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border bg-surface hover:bg-surface-muted text-foreground transition-colors"
                     >
                       <Download className="w-3.5 h-3.5 text-emerald-500" />
                       <span>Download XLSX</span>
@@ -620,22 +619,22 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 </div>
 
                 {/* Dataset Details Badge Summary */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border/60 text-3xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2.5 border-t border-border/60 text-xs">
                   <div>
-                    <span className="text-muted-foreground block">Cleaned Dataset Name:</span>
-                    <span className="text-foreground font-bold truncate block">{registeredData.filename}</span>
+                    <span className="text-2xs text-muted-foreground block">Cleaned Dataset Name</span>
+                    <span className="text-foreground font-semibold truncate block mt-0.5">{registeredData.filename}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block">New Dataset ID:</span>
-                    <span className="text-foreground font-bold truncate block">{registeredData.dataset_id}</span>
+                    <span className="text-2xs text-muted-foreground block">New Dataset ID</span>
+                    <span className="text-foreground font-mono font-medium truncate block mt-0.5">{registeredData.dataset_id}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block">Dimensions:</span>
-                    <span className="text-foreground font-bold block">{registeredData.row_count.toLocaleString()} rows × {registeredData.column_count} cols</span>
+                    <span className="text-2xs text-muted-foreground block">Dimensions</span>
+                    <span className="text-foreground font-semibold block mt-0.5">{registeredData.row_count.toLocaleString()} rows × {registeredData.column_count} cols</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground block">Source Dataset:</span>
-                    <span className="text-foreground font-bold truncate block">{registeredData.source_dataset_id}</span>
+                    <span className="text-2xs text-muted-foreground block">Source Dataset</span>
+                    <span className="text-foreground font-mono font-medium truncate block mt-0.5">{registeredData.source_dataset_id}</span>
                   </div>
                 </div>
               </div>
@@ -645,54 +644,65 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       )}
 
       {/* 1. Plan Summary Banner */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card className="p-4 space-y-1">
-          <span className="text-3xs uppercase tracking-wider text-muted-foreground font-mono">
-            Total Opportunities
-          </span>
-          <div className="text-xl font-bold font-mono text-foreground">
-            {cleaningPlan.total_recommendations}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Cleaning Plan</h2>
+            <p className="text-xs text-muted-foreground">
+              {cleaningPlan.total_recommendations} cleaning opportunities detected from profiling and quality checks.
+            </p>
           </div>
-          <span className="text-3xs text-muted-foreground font-mono">
-            Deterministic findings
-          </span>
-        </Card>
+        </div>
 
-        <Card className="p-4 space-y-1">
-          <span className="text-3xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">
-            Safe & Recommended
-          </span>
-          <div className="text-xl font-bold font-mono text-emerald-500">
-            {cleaningPlan.safe_count}
-          </div>
-          <span className="text-3xs text-muted-foreground font-mono">
-            Low risk • Preselected
-          </span>
-        </Card>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card className="p-4 space-y-1">
+            <span className="text-xs text-muted-foreground font-medium">
+              Issues found
+            </span>
+            <div className="text-xl font-bold text-foreground">
+              {cleaningPlan.total_recommendations}
+            </div>
+            <span className="text-2xs text-muted-foreground">
+              Deterministic opportunities
+            </span>
+          </Card>
 
-        <Card className="p-4 space-y-1">
-          <span className="text-3xs uppercase tracking-wider text-amber-600 dark:text-amber-400 font-mono">
-            Requires Review
-          </span>
-          <div className={`text-xl font-bold font-mono ${cleaningPlan.review_required_count > 0 ? 'text-amber-500' : 'text-foreground'}`}>
-            {cleaningPlan.review_required_count}
-          </div>
-          <span className="text-3xs text-muted-foreground font-mono">
-            User approval needed
-          </span>
-        </Card>
+          <Card className="p-4 space-y-1">
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+              Recommended
+            </span>
+            <div className="text-xl font-bold text-emerald-500">
+              {cleaningPlan.safe_count}
+            </div>
+            <span className="text-2xs text-muted-foreground">
+              Low risk · Preselected
+            </span>
+          </Card>
 
-        <Card className="p-4 space-y-1">
-          <span className="text-3xs uppercase tracking-wider text-primary font-mono">
-            Selected for Execution
-          </span>
-          <div className="text-xl font-bold font-mono text-primary">
-            {selectedCount} <span className="text-xs font-normal text-muted-foreground">/ {cleaningPlan.total_recommendations}</span>
-          </div>
-          <span className="text-3xs text-muted-foreground font-mono">
-            Configured batch actions
-          </span>
-        </Card>
+          <Card className="p-4 space-y-1">
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+              Requires decision
+            </span>
+            <div className={`text-xl font-bold ${cleaningPlan.review_required_count > 0 ? 'text-amber-500' : 'text-foreground'}`}>
+              {cleaningPlan.review_required_count}
+            </div>
+            <span className="text-2xs text-muted-foreground">
+              User approval needed
+            </span>
+          </Card>
+
+          <Card className="p-4 space-y-1">
+            <span className="text-xs text-primary font-medium">
+              Selected
+            </span>
+            <div className="text-xl font-bold text-primary">
+              {selectedCount} <span className="text-xs font-normal text-muted-foreground">/ {cleaningPlan.total_recommendations}</span>
+            </div>
+            <span className="text-2xs text-muted-foreground">
+              Configured batch actions
+            </span>
+          </Card>
+        </div>
       </div>
 
       {/* 2. Filter & Selection Management Bar */}
@@ -701,7 +711,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`px-3 py-1 text-xs font-mono rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeFilter === 'ALL'
                 ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
                 : 'bg-surface-muted text-muted-foreground hover:text-foreground'
@@ -712,7 +722,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
           <button
             onClick={() => setActiveFilter('RECOMMENDED')}
-            className={`px-3 py-1 text-xs font-mono rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeFilter === 'RECOMMENDED'
                 ? 'bg-emerald-600 text-white font-semibold shadow-2xs'
                 : 'bg-surface-muted text-muted-foreground hover:text-foreground'
@@ -723,18 +733,18 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
           <button
             onClick={() => setActiveFilter('REVIEW_REQUIRED')}
-            className={`px-3 py-1 text-xs font-mono rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeFilter === 'REVIEW_REQUIRED'
                 ? 'bg-amber-600 text-white font-semibold shadow-2xs'
                 : 'bg-surface-muted text-muted-foreground hover:text-foreground'
             }`}
           >
-            Review Required ({cleaningPlan.review_required_count})
+            Requires Decision ({cleaningPlan.review_required_count})
           </button>
 
           <button
             onClick={() => setActiveFilter('SELECTED')}
-            className={`px-3 py-1 text-xs font-mono rounded-md transition-colors ${
+            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
               activeFilter === 'SELECTED'
                 ? 'bg-blue-600 text-white font-semibold shadow-2xs'
                 : 'bg-surface-muted text-muted-foreground hover:text-foreground'
@@ -751,14 +761,14 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             placeholder="Filter recommendations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-xs bg-surface border border-border rounded px-2.5 py-1 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary font-mono w-44"
+            className="text-xs bg-surface border border-border rounded-md px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary w-48"
           />
 
           <Button
             variant="ghost"
             size="xs"
             onClick={selectAllSafe}
-            className="text-3xs font-mono"
+            className="text-xs"
           >
             Select All Safe
           </Button>
@@ -767,7 +777,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             variant="ghost"
             size="xs"
             onClick={deselectAll}
-            className="text-3xs font-mono text-muted-foreground hover:text-foreground"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             Deselect All
           </Button>
@@ -792,12 +802,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               ? 'amber'
               : 'red';
 
-          const confidenceVariant: 'green' | 'amber' | 'slate' =
-            rec.confidence_level === 'HIGH'
-              ? 'green'
-              : rec.confidence_level === 'MEDIUM'
-              ? 'amber'
-              : 'slate';
+          const riskLabel =
+            rec.risk_level === 'LOW'
+              ? 'Low Risk'
+              : rec.risk_level === 'MEDIUM'
+              ? 'Medium Risk'
+              : 'High Risk';
 
           const originalVariantLabel =
             rec.supported_variants?.find((v) => v.operation === rec.operation)?.label ||
@@ -807,22 +817,25 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             rec.supported_variants?.find((v) => v.operation === currentOp)?.label ||
             currentOp.replace(/_/g, ' ');
 
+          // Friendly Category / Problem Name
+          const problemTitle = rec.category.replace(/_/g, ' ');
+
           return (
             <Card
               key={rec.recommendation_id}
               className={`p-5 border transition-all ${
                 isSelected
                   ? 'border-primary/50 bg-primary-soft/10 shadow-xs'
-                  : 'border-border bg-surface opacity-85 hover:opacity-100'
+                  : 'border-border bg-surface opacity-90 hover:opacity-100'
               }`}
             >
-              <div className="space-y-3.5">
-                {/* Card Top Row: Checkbox, Target, Operation & Badges */}
+              <div className="space-y-4">
+                {/* 1. Header: Target Scope, Risk Badge, and Status */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <button
                       onClick={() => toggleSelection(rec.recommendation_id)}
-                      className="mt-0.5 text-primary hover:text-primary-hover focus:outline-none"
+                      className="mt-1 text-primary hover:text-primary-hover focus:outline-none"
                       title={isSelected ? 'Deselect from plan' : 'Select for plan'}
                     >
                       {isSelected ? (
@@ -833,129 +846,131 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     </button>
 
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-2.5 flex-wrap">
                         {rec.column_name ? (
-                          <span className="text-xs font-bold font-mono text-foreground px-2 py-0.5 bg-surface-muted border border-border rounded">
+                          <span className="text-base font-bold text-foreground">
                             {rec.column_name}
                           </span>
                         ) : (
-                          <Badge variant="blue" size="xs">
-                            DATASET-WIDE
+                          <span className="text-base font-bold text-foreground">
+                            Whole Dataset
+                          </span>
+                        )}
+
+                        <Badge variant={riskBadgeVariant} size="xs">
+                          {riskLabel}
+                        </Badge>
+
+                        {isDiagnostic ? (
+                          <Badge variant="amber" size="xs">
+                            Review Only
+                          </Badge>
+                        ) : isReviewRequired ? (
+                          <Badge variant="amber" size="xs">
+                            Requires your decision
+                          </Badge>
+                        ) : (
+                          <Badge variant="green" size="xs">
+                            Recommended
                           </Badge>
                         )}
 
-                        <span className="text-xs font-bold font-mono text-foreground">
-                          {currentOp.replace(/_/g, ' ')}
-                        </span>
-
-                        <Badge variant="slate" size="xs">
-                          {rec.category.replace(/_/g, ' ')}
-                        </Badge>
-
                         {isModified && (
                           <Badge variant="blue" size="xs">
-                            Modified (System: {originalVariantLabel})
+                            Modified
                           </Badge>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2 text-3xs font-mono text-muted-foreground">
+                      {/* Problem and Scope count */}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{problemTitle}</span>
+                        <span>·</span>
                         <span>
-                          Affected: <strong className="text-foreground">{rec.affected_rows.toLocaleString()} rows</strong> ({rec.affected_percentage}%)
-                        </span>
-                        <span>•</span>
-                        <span>
-                          ID: <span className="font-mono text-foreground">{rec.recommendation_id}</span>
+                          <strong className="text-foreground">{rec.affected_rows.toLocaleString()} values</strong> ({rec.affected_percentage}% of rows)
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Badges on Right */}
-                  <div className="flex items-center gap-2">
-                    <Badge variant={riskBadgeVariant} size="xs">
-                      Risk: {rec.risk_level}
-                    </Badge>
-                    <Badge variant={confidenceVariant} size="xs">
-                      Confidence: {Math.round(rec.confidence * 100)}% ({rec.confidence_level})
-                    </Badge>
-                    {isDiagnostic ? (
-                      <Badge variant="amber" size="xs">
-                        REVIEW ONLY
-                      </Badge>
-                    ) : isReviewRequired ? (
-                      <Badge variant="amber" size="xs">
-                        REQUIRES YOUR DECISION
-                      </Badge>
-                    ) : (
-                      <Badge variant="green" size="xs">
-                        RECOMMENDED
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-
-                {/* State Guidance Banner */}
-                {isDiagnostic && (
-                  <div
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-3xs font-mono border ${
+                  {/* Right side quick toggle button */}
+                  <button
+                    onClick={() => toggleSelection(rec.recommendation_id)}
+                    className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
                       isSelected
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
-                        : 'bg-surface-muted/80 border-border text-muted-foreground'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-surface-muted text-muted-foreground hover:text-foreground border-border'
                     }`}
                   >
-                    <Info className="w-3.5 h-3.5 shrink-0" />
+                    {isSelected ? 'Selected' : 'Include'}
+                  </button>
+                </div>
+
+                {/* 2. State Guidance / Diagnostic Banner */}
+                {isDiagnostic && (
+                  <div
+                    className={`flex items-center gap-2.5 px-3.5 py-2 rounded-lg text-xs border ${
+                      isSelected
+                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'
+                        : 'bg-surface-muted/70 border-border text-muted-foreground'
+                    }`}
+                  >
+                    <Info className="w-4 h-4 shrink-0" />
                     <span>
                       {isSelected
-                        ? 'Selected for review — no automatic transformation will be applied. Data remains unchanged.'
-                        : 'Review only — select to include in cleaning report. Data remains unchanged.'}
+                        ? 'Selected for review. No automatic transformation will be applied.'
+                        : 'Review only. Select to include in cleaning report summary.'}
                     </span>
                   </div>
                 )}
 
-                {isReviewRequired && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-3xs font-mono border bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    <span>
-                      The system cannot safely choose the final treatment automatically. Choose your preferred cleaning method below.
-                    </span>
-                  </div>
-                )}
-
-                {/* Method Selector (if executable variants exist) */}
+                {/* 3. Recommended Action & User Choice Controls */}
                 {!isDiagnostic && rec.supported_variants && rec.supported_variants.length > 0 && (
-                  <div className="pt-2 border-t border-border/60 space-y-2 text-xs font-mono">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-3xs uppercase tracking-wider text-muted-foreground font-semibold">
-                        Method:
-                      </span>
-                      <select
-                        value={currentOp}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setMethodOverrides((prev) => ({
-                            ...prev,
-                            [rec.recommendation_id]: val,
-                          }));
-                        }}
-                        className="text-xs bg-surface border border-border rounded px-2.5 py-1 text-foreground focus:outline-none focus:border-primary font-mono cursor-pointer"
-                      >
-                        {rec.supported_variants.map((v) => (
-                          <option key={v.operation} value={v.operation}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-3xs text-muted-foreground font-mono">
-                        (System Recommended: {originalVariantLabel})
-                      </span>
+                  <div className="p-3.5 bg-surface-muted/30 border border-border/80 rounded-lg space-y-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-foreground">
+                          {isReviewRequired ? 'Choose Action:' : 'Action:'}
+                        </span>
+                        {isModified && (
+                          <span className="text-2xs text-muted-foreground">
+                            System recommended: <strong className="text-foreground">{originalVariantLabel}</strong>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={currentOp}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setMethodOverrides((prev) => ({
+                              ...prev,
+                              [rec.recommendation_id]: val,
+                            }));
+                          }}
+                          className="text-xs bg-surface border border-border rounded-md px-3 py-1.5 text-foreground focus:outline-none focus:border-primary cursor-pointer min-w-[200px]"
+                        >
+                          {rec.supported_variants.map((v) => (
+                            <option key={v.operation} value={v.operation}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </select>
+
+                        {!isModified && (
+                          <span className="text-2xs text-muted-foreground">
+                            (Default recommendation)
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Specific Value Custom Input */}
                     {isSpecificValue && (
-                      <div className="flex items-center gap-2 pt-1.5 flex-wrap">
-                        <span className="text-3xs uppercase tracking-wider text-primary font-bold">
-                          Fill with:
+                      <div className="pt-2 border-t border-border/60 flex items-center gap-3 flex-wrap">
+                        <span className="text-xs font-semibold text-primary">
+                          Fill value:
                         </span>
                         <input
                           type={currentOp === 'IMPUTE_SPECIFIC_VALUE' ? 'number' : 'text'}
@@ -969,9 +984,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                             }));
                           }}
                           placeholder={currentOp === 'IMPUTE_SPECIFIC_VALUE' ? 'e.g. 15.0' : 'e.g. Unknown'}
-                          className="text-xs bg-surface border border-primary/40 focus:border-primary rounded px-2.5 py-1 text-foreground font-mono w-44"
+                          className="text-xs bg-surface border border-primary/40 focus:border-primary rounded-md px-3 py-1.5 text-foreground w-48"
                         />
-                        <span className="text-3xs text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           {currentOp === 'IMPUTE_SPECIFIC_VALUE'
                             ? 'Enter custom numeric constant'
                             : 'Enter custom text constant'}
@@ -981,37 +996,37 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                   </div>
                 )}
 
-                {/* Explanation & Rationale */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-border/60 text-xs">
+                {/* 4. Why & Expected Result in 2 Columns */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/60 text-xs">
                   <div className="space-y-1">
-                    <span className="text-3xs uppercase tracking-wider font-mono text-muted-foreground block">
-                      Rationale (Why recommended)
+                    <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Why this is recommended
                     </span>
-                    <p className="text-foreground leading-relaxed text-xs">
+                    <p className="text-foreground leading-relaxed">
                       {rec.rationale}
                     </p>
                   </div>
 
                   <div className="space-y-1">
-                    <span className="text-3xs uppercase tracking-wider font-mono text-muted-foreground block">
-                      Expected Effect (What will happen)
+                    <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                      Expected result
                     </span>
-                    <p className="text-muted-foreground leading-relaxed text-xs">
+                    <p className="text-foreground leading-relaxed">
                       {rec.expected_effect}
                     </p>
                   </div>
                 </div>
 
-                {/* Evidence Statements */}
+                {/* 5. Evidence Section */}
                 {rec.evidence && rec.evidence.length > 0 && (
                   <div className="pt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-3xs uppercase font-mono text-muted-foreground mr-1">
+                    <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider mr-1">
                       Evidence:
                     </span>
                     {rec.evidence.map((evStr, idx) => (
                       <span
                         key={idx}
-                        className="px-2 py-0.5 bg-surface-muted/70 border border-border/80 rounded text-3xs font-mono text-foreground"
+                        className="px-2.5 py-0.5 bg-surface-muted border border-border rounded-md text-2xs text-muted-foreground"
                       >
                         {evStr}
                       </span>
@@ -1024,12 +1039,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         })}
 
         {filteredRecommendations.length === 0 && (
-          <Card className="p-8 text-center space-y-2">
+          <Card className="p-10 text-center space-y-2">
             <div className="w-10 h-10 rounded-full bg-surface-muted flex items-center justify-center mx-auto text-muted-foreground">
               <CheckCircle2 className="w-5 h-5 text-emerald-500" />
             </div>
             <h4 className="text-sm font-bold text-foreground">No Recommendations Found</h4>
-            <p className="text-xs text-muted-foreground font-mono">
+            <p className="text-xs text-muted-foreground">
               No cleaning recommendations match the current filter or search criteria.
             </p>
           </Card>
@@ -1044,16 +1059,16 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h4 className="text-xs font-bold text-foreground font-mono">
+              <h4 className="text-sm font-bold text-foreground">
                 Cleaning Plan Execution
               </h4>
               <Badge variant={selectedCount > 0 ? 'blue' : 'slate'} size="xs">
                 {selectedCount} of {cleaningPlan.total_recommendations} Operations Selected
-                {modifiedCount > 0 ? ` • ${modifiedCount} Modified` : ''}
+                {modifiedCount > 0 ? ` · ${modifiedCount} Modified` : ''}
               </Badge>
             </div>
-            <p className="text-3xs text-muted-foreground mt-0.5">
-              Review changes safely before applying. Cleaned DataFrame will be stored separately in-memory.
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Review simulated changes before applying. Cleaned DataFrame is stored separately in-memory.
             </p>
           </div>
         </div>
@@ -1065,7 +1080,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             onClick={handleGeneratePreview}
             disabled={selectedCount === 0 || isLoadingPreview || executionState === 'applying' || executionState === 'validating'}
             leftIcon={<Eye className="w-3.5 h-3.5" />}
-            className="font-mono text-xs"
+            className="text-xs"
           >
             {isLoadingPreview ? 'Simulating...' : 'Preview Changes'}
           </Button>
@@ -1076,7 +1091,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             onClick={handleApplyCleaning}
             disabled={selectedCount === 0 || executionState === 'applying' || executionState === 'validating'}
             leftIcon={<Play className="w-3.5 h-3.5" />}
-            className="font-mono text-xs"
+            className="text-xs"
           >
             Apply Cleaning ({selectedCount})
           </Button>
@@ -1094,10 +1109,10 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                   <Eye className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-foreground font-mono">
+                  <h3 className="text-sm font-bold text-foreground">
                     Cleaning Operations Preview
                   </h3>
-                  <p className="text-3xs text-muted-foreground font-mono">
+                  <p className="text-xs text-muted-foreground">
                     Deterministic simulation across {selectedCount} selected operations. Raw data is untouched.
                   </p>
                 </div>
@@ -1112,7 +1127,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             </div>
 
             {/* Modal Body */}
-            <div className="p-5 overflow-y-auto space-y-5 flex-1 font-mono text-xs">
+            <div className="p-5 overflow-y-auto space-y-5 flex-1 text-xs">
               {previewError && (
                 <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-500 text-xs">
                   {previewError}
@@ -1124,7 +1139,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                   {/* Summary Comparison Grid */}
                   <div className="grid grid-cols-3 gap-3">
                     <div className="p-3 bg-surface-muted/40 border border-border rounded-lg space-y-1">
-                      <span className="text-3xs uppercase text-muted-foreground block">
+                      <span className="text-2xs text-muted-foreground block font-medium">
                         Rows Before
                       </span>
                       <div className="text-sm font-bold text-foreground">
@@ -1133,7 +1148,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     </div>
 
                     <div className="p-3 bg-surface-muted/40 border border-border rounded-lg space-y-1">
-                      <span className="text-3xs uppercase text-muted-foreground block">
+                      <span className="text-2xs text-muted-foreground block font-medium">
                         Rows After Preview
                       </span>
                       <div className="text-sm font-bold text-emerald-500">
@@ -1142,7 +1157,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     </div>
 
                     <div className="p-3 bg-surface-muted/40 border border-border rounded-lg space-y-1">
-                      <span className="text-3xs uppercase text-muted-foreground block">
+                      <span className="text-2xs text-muted-foreground block font-medium">
                         Net Row Change
                       </span>
                       <div className="text-sm font-bold text-foreground">
@@ -1167,7 +1182,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               {op.column_name ? (
-                                <span className="font-bold text-foreground px-1.5 py-0.5 bg-surface-muted rounded text-3xs border border-border">
+                                <span className="font-semibold text-foreground px-2 py-0.5 bg-surface-muted rounded text-xs border border-border">
                                   {op.column_name}
                                 </span>
                               ) : (
@@ -1175,7 +1190,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                                   DATASET-WIDE
                                 </Badge>
                               )}
-                              <span className="font-bold text-foreground text-3xs">
+                              <span className="font-semibold text-foreground text-xs">
                                 {op.operation.replace(/_/g, ' ')}
                               </span>
                             </div>
@@ -1192,20 +1207,20 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                               }
                               size="xs"
                             >
-                              {op.status === 'REVIEW_ONLY' ? 'REVIEW ONLY' : op.status}
+                              {op.status === 'REVIEW_ONLY' ? 'Review Only' : op.status}
                             </Badge>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/60 text-3xs">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 border-t border-border/60 text-2xs">
                             <div>
                               <span className="text-muted-foreground block">Before:</span>
-                              <span className={op.status === 'REVIEW_ONLY' ? 'text-muted-foreground font-bold' : 'text-rose-500 font-bold'}>
+                              <span className={op.status === 'REVIEW_ONLY' ? 'text-muted-foreground font-semibold' : 'text-rose-500 font-semibold'}>
                                 {op.before_statistic}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block">After:</span>
-                              <span className={op.status === 'REVIEW_ONLY' ? 'text-blue-500 dark:text-blue-400 font-bold' : 'text-emerald-500 font-bold'}>
+                              <span className={op.status === 'REVIEW_ONLY' ? 'text-blue-500 dark:text-blue-400 font-semibold' : 'text-emerald-500 font-semibold'}>
                                 {op.after_statistic}
                               </span>
                             </div>
@@ -1226,7 +1241,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                         Sample Cell Modifications (First {previewResult.sample_changes.length} changed items)
                       </span>
                       <div className="border border-border rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-                        <table className="w-full text-3xs text-left">
+                        <table className="w-full text-2xs text-left">
                           <thead className="bg-surface-muted text-muted-foreground border-b border-border">
                             <tr>
                               <th className="p-2">Row</th>
@@ -1236,18 +1251,18 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                               <th className="p-2">Operation</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-border">
+                          <tbody className="divide-y divide-border font-mono">
                             {previewResult.sample_changes.map((sample, idx) => (
                               <tr key={idx} className="hover:bg-surface-muted/30">
-                                <td className="p-2 font-bold text-muted-foreground">#{sample.row_index}</td>
-                                <td className="p-2 font-bold text-foreground">{sample.column_name}</td>
+                                <td className="p-2 font-semibold text-muted-foreground">#{sample.row_index}</td>
+                                <td className="p-2 font-semibold text-foreground">{sample.column_name}</td>
                                 <td className="p-2 text-rose-500 line-through truncate max-w-[120px]">
                                   {sample.before_value === null ? 'NULL' : String(sample.before_value)}
                                 </td>
                                 <td className="p-2 text-emerald-500 font-bold truncate max-w-[120px]">
                                   {sample.after_value === null ? 'NULL' : String(sample.after_value)}
                                 </td>
-                                <td className="p-2 text-muted-foreground truncate max-w-[100px]">{sample.operation}</td>
+                                <td className="p-2 text-muted-foreground truncate max-w-[100px] font-sans">{sample.operation}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1265,7 +1280,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsPreviewOpen(false)}
-                className="font-mono text-xs"
+                className="text-xs"
               >
                 Close Preview
               </Button>
@@ -1275,7 +1290,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                 size="sm"
                 onClick={handleApplyCleaning}
                 leftIcon={<Play className="w-3.5 h-3.5" />}
-                className="font-mono text-xs"
+                className="text-xs"
               >
                 Apply Cleaning Now
               </Button>
@@ -1286,3 +1301,4 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     </div>
   );
 };
+
