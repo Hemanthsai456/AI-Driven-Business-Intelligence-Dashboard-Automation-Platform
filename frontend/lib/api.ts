@@ -3,6 +3,9 @@ import {
   CleaningExecutionResult,
   CleaningPlan,
   CleaningPreviewResult,
+  ColumnTransformPreviewRequest,
+  ColumnTransformPreviewResult,
+  CustomColumnTransformation,
   DataPreviewResponse,
   DataProfile,
   DatasetListItem,
@@ -85,11 +88,24 @@ export async function getDatasetCleaningPlan(datasetId: string): Promise<Cleanin
   return handleResponse<CleaningPlan>(res);
 }
 
+export async function previewColumnTransformation(
+  datasetId: string,
+  request: ColumnTransformPreviewRequest
+): Promise<ColumnTransformPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/column-transform/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<ColumnTransformPreviewResult>(res);
+}
+
 export async function previewCleaningPlan(
   datasetId: string,
   selectedRecommendationIds: string[],
   operationOverrides?: Record<string, string>,
-  operationValues?: Record<string, any>
+  operationValues?: Record<string, any>,
+  customTransformations?: CustomColumnTransformation[]
 ): Promise<CleaningPreviewResult> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/preview`, {
     method: 'POST',
@@ -98,6 +114,7 @@ export async function previewCleaningPlan(
       selected_recommendation_ids: selectedRecommendationIds,
       operation_overrides: operationOverrides || {},
       operation_values: operationValues || {},
+      custom_transformations: customTransformations || [],
     }),
   });
   return handleResponse<CleaningPreviewResult>(res);
@@ -107,7 +124,8 @@ export async function applyCleaningPlan(
   datasetId: string,
   selectedRecommendationIds: string[],
   operationOverrides?: Record<string, string>,
-  operationValues?: Record<string, any>
+  operationValues?: Record<string, any>,
+  customTransformations?: CustomColumnTransformation[]
 ): Promise<CleaningExecutionResult> {
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/apply`, {
     method: 'POST',
@@ -116,6 +134,7 @@ export async function applyCleaningPlan(
       selected_recommendation_ids: selectedRecommendationIds,
       operation_overrides: operationOverrides || {},
       operation_values: operationValues || {},
+      custom_transformations: customTransformations || [],
     }),
   });
   return handleResponse<CleaningExecutionResult>(res);
@@ -304,6 +323,26 @@ export async function clearChatConversation(
   });
   return handleResponse<any>(res);
 }
+
+export async function getDatasetEDASummary(
+  datasetId: string
+): Promise<import('./types').EDASummary> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/eda`);
+  return handleResponse<import('./types').EDASummary>(res);
+}
+
+export async function exploreDatasetEDA(
+  datasetId: string,
+  request: import('./types').EDAExploreRequest
+): Promise<import('./types').EDAExploreResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/eda/explore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<import('./types').EDAExploreResult>(res);
+}
+
 
 
 

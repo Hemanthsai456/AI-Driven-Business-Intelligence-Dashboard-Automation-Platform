@@ -48,6 +48,10 @@ from api.schemas import (
     TileFilter,
     TileQueryRequest,
     TileQueryResponse,
+    EDAExploreRequest,
+    CleaningSelectionRequest,
+    ColumnTransformPreviewRequest,
+    ColumnTransformPreviewResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
@@ -335,7 +339,52 @@ def get_dataset_quality_assessment(dataset_id: str):
     return assessment.to_dict()
 
 
+@app.get("/api/datasets/{dataset_id}/eda")
+def get_dataset_eda(dataset_id: str):
+    """Generate or retrieve deterministic automated Exploratory Data Analysis (EDA) summary."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    from intelligence.eda import EDAEngine
+    engine = EDAEngine()
+    summary = engine.generate_summary(
+        canonical=record.dataset,
+        profile=record.profile,
+        semantic_profile=record.semantic_profile,
+    )
+    return summary.to_dict()
+
+
+@app.post("/api/datasets/{dataset_id}/eda/explore")
+def explore_dataset_eda(dataset_id: str, req: EDAExploreRequest):
+    """Execute manual bivariate or univariate exploratory query on dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    from intelligence.eda import EDAEngine
+    engine = EDAEngine()
+    result = engine.explore(
+        canonical=record.dataset,
+        chart_type=req.chart_type,
+        x_column=req.x_column,
+        y_column=req.y_column,
+        group_by=req.group_by,
+        aggregation=req.aggregation or "mean",
+        time_granularity=req.time_granularity,
+    )
+    return result
+
+
+
+
 @app.post(
+
     "/api/orchestrator/validate-plan",
     response_model=Pass1aResult,
 )
@@ -659,10 +708,42 @@ def get_dataset_cleaning_plan(dataset_id: str):
     return plan.to_dict()
 
 
-class CleaningSelectionRequest(BaseModel):
-    selected_recommendation_ids: List[str] = Field(default_factory=list)
-    operation_overrides: Optional[Dict[str, str]] = Field(default_factory=dict)
-    operation_values: Optional[Dict[str, Any]] = Field(default_factory=dict)
+@app.post(
+    "/api/datasets/{dataset_id}/cleaning/column-transform/preview",
+    response_model=ColumnTransformPreviewResponse,
+)
+def preview_column_transformation(dataset_id: str, request: ColumnTransformPreviewRequest):
+    """Generate a non-mutating preview of a single user-controlled column transformation."""
+    from cleaning.executor import CleaningExecutionError, CleaningExecutor
+
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    try:
+        executor = CleaningExecutor()
+        preview_result = executor.preview_column_transformation(
+            canonical=record.dataset,
+            column_name=request.column_name,
+            operation=request.operation,
+            target_type=request.target_type,
+            custom_value=request.custom_value,
+            allow_fractional_truncation=request.allow_fractional_truncation,
+        )
+        return preview_result.to_dict()
+    except CleaningExecutionError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        )
+    except Exception as ex:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate column transformation preview: {str(ex)}",
+        )
 
 
 @app.post("/api/datasets/{dataset_id}/cleaning/preview")
@@ -693,6 +774,7 @@ def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest)
             plan=plan,
             operation_overrides=request.operation_overrides,
             operation_values=request.operation_values,
+            custom_transformations=request.custom_transformations,
         )
         return preview_result.to_dict()
     except CleaningExecutionError as ex:
@@ -735,9 +817,10 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
             plan=plan,
             operation_overrides=request.operation_overrides,
             operation_values=request.operation_values,
+            custom_transformations=request.custom_transformations,
         )
 
-        # Store in-memory cleaned CanonicalDataset on record for Part 6 without mutating record.dataset
+        # Store in-memory cleaned CanonicalDataset on record without mutating raw record.dataset
         record.cleaned_dataset = cleaned_canonical
         record.last_cleaning_result = exec_result.to_dict()
 
@@ -893,7 +976,46 @@ def download_dataset(dataset_id: str, format: str = "csv"):
         )
 
 
+@app.get("/api/datasets/{dataset_id}/eda")
+def get_dataset_eda_summary(dataset_id: str):
+    """Retrieve deterministic automated Exploratory Data Analysis (EDA) summary for a dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    from intelligence.eda import EDAEngine
+    engine = EDAEngine()
+    summary = engine.generate_summary(
+        canonical=record.dataset,
+        profile=record.profile,
+        semantic_profile=record.semantic_profile,
+    )
+    return summary.to_dict()
 
+
+@app.post("/api/datasets/{dataset_id}/eda/explore")
+def explore_dataset_eda(dataset_id: str, request: EDAExploreRequest):
+    """Execute interactive, type-aware bivariate/multivariate exploration on dataset."""
+    record = session_store.get(dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+    from intelligence.eda import EDAEngine
+    engine = EDAEngine()
+    result = engine.explore(
+        canonical=record.dataset,
+        chart_type=request.chart_type,
+        x_column=request.x_column,
+        y_column=request.y_column,
+        group_by=request.group_by,
+        aggregation=request.aggregation,
+        time_granularity=request.time_granularity,
+    )
+    return result
 @app.get("/api/providers/status")
 def get_providers_status():
     """Retrieve live availability and diagnostic status for configured LLM providers."""

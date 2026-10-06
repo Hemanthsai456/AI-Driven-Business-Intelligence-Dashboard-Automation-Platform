@@ -183,11 +183,25 @@ def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
     elif operation == "NORMALIZE_EMPTY_STRINGS":
         return [
             {"operation": "NORMALIZE_EMPTY_STRINGS", "label": "Normalize to Null", "description": "Convert empty/whitespace strings to null"},
+            {"operation": "TRIM_WHITESPACE", "label": "Trim Whitespace", "description": "Strip leading and trailing spaces"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Keep whitespace strings as-is"},
         ]
-    elif operation == "CONVERT_NUMERIC":
+    elif operation == "TRIM_WHITESPACE":
         return [
-            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric"},
+            {"operation": "TRIM_WHITESPACE", "label": "Trim Whitespace", "description": "Strip leading and trailing spaces"},
+            {"operation": "NORMALIZE_EMPTY_STRINGS", "label": "Normalize to Null", "description": "Convert empty/whitespace strings to null"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Keep whitespace as-is"},
+        ]
+    elif operation in ["CONVERT_NUMERIC", "CONVERT_FLOAT"]:
+        return [
+            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric (float)"},
+            {"operation": "CONVERT_INTEGER", "label": "Convert to Integer", "description": "Convert whole numbers to integer"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation == "CONVERT_INTEGER":
+        return [
+            {"operation": "CONVERT_INTEGER", "label": "Convert to Integer", "description": "Convert whole numbers to integer"},
+            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric (float)"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
         ]
     elif operation == "CONVERT_DATETIME":
@@ -195,40 +209,22 @@ def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
             {"operation": "CONVERT_DATETIME", "label": "Convert to Datetime", "description": "Parse timestamps into datetime"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
         ]
-    elif operation == "NORMALIZE_BOOLEAN":
+    elif operation in ["NORMALIZE_BOOLEAN", "CONVERT_BOOLEAN"]:
         return [
             {"operation": "NORMALIZE_BOOLEAN", "label": "Normalize Boolean", "description": "Standardize yes/no/true/false to bool"},
             {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text representations"},
+        ]
+    elif operation in ["CONVERT_STRING", "CONVERT_TEXT"]:
+        return [
+            {"operation": "CONVERT_STRING", "label": "Convert to Text", "description": "Convert column values to text"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original data type"},
         ]
     return []
 
 
 @dataclass
 class CleaningRecommendation:
-    """Structured deterministic cleaning proposal for a dataset column or whole dataset.
-
-    Attributes:
-        recommendation_id: Unique deterministic identifier for the recommendation.
-        column_name: Name of the target column, or None for whole-dataset operations (e.g. deduplication).
-        operation: Standardized recommended operation name (e.g. 'REMOVE_DUPLICATES', 'IMPUTE_MEDIAN', 'FILL_MODE').
-        user_selected_operation: User-chosen operation variant (e.g. 'IMPUTE_MEAN', 'FILL_UNKNOWN', 'LEAVE_UNCHANGED').
-        supported_variants: List of valid alternate operation choices available to the user.
-        category: Broad category ('duplicates', 'missing_values', 'empty_values', 'type_conversion',
-                  'datetime_conversion', 'boolean_normalization', 'invalid_values', 'outliers').
-        evidence: Deterministic evidence statements backing the recommendation.
-        affected_rows: Number of rows affected by this operation.
-        affected_percentage: Percentage of total rows affected (0.0 to 100.0).
-        confidence: Deterministic confidence score from 0.0 to 1.0.
-        confidence_level: Categorical confidence ('HIGH', 'MEDIUM', 'LOW').
-        risk_level: Risk classification ('LOW', 'MEDIUM', 'HIGH').
-        default_selected: Whether this operation is preselected by default (safe + high confidence).
-        user_selected: Current selection state for user approval/modification.
-        rationale: Clear human-readable explanation of why this cleaning step is recommended.
-        expected_effect: Clear human-readable description of what will happen if executed.
-        requires_review: Whether this operation requires explicit user inspection before execution.
-        status: Recommendation status ('RECOMMENDED', 'REVIEW_REQUIRED', 'NOT_RECOMMENDED').
-        params: Contextual parameters (e.g., fill_value, strategy, target_dtype).
-    """
+    """Structured deterministic cleaning proposal for a dataset column or whole dataset."""
 
     recommendation_id: str
     column_name: Optional[str]
@@ -246,6 +242,7 @@ class CleaningRecommendation:
     expected_effect: str
     requires_review: bool
     status: str
+    source: str = "RECOMMENDATION"  # "RECOMMENDATION" | "USER"
     user_selected_operation: Optional[str] = None
     supported_variants: List[Dict[str, str]] = field(default_factory=list)
     params: Dict[str, Any] = field(default_factory=dict)
@@ -277,6 +274,7 @@ class CleaningRecommendation:
             "expected_effect": self.expected_effect,
             "requires_review": bool(self.requires_review),
             "status": self.status,
+            "source": self.source,
             "params": sanitize_json_value(self.params),
         }
 
@@ -343,6 +341,48 @@ class SampleCellChange:
             "before_value": sanitize_json_value(self.before_value),
             "after_value": sanitize_json_value(self.after_value),
             "operation": self.operation,
+        }
+
+
+@dataclass
+class ColumnTransformPreviewResult:
+    """Deterministic conversion preview for a user-controlled column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: str
+    original_dtype: str
+    target_dtype: str
+    total_rows: int
+    non_null_count: int
+    converted_count: int
+    unparseable_count: int
+    unparseable_samples: List[Any] = field(default_factory=list)
+    fractional_loss_count: int = 0
+    original_missing_count: int = 0
+    new_missing_count: int = 0
+    is_valid: bool = True
+    error_message: Optional[str] = None
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "column_name": self.column_name,
+            "operation": self.operation,
+            "target_type": self.target_type,
+            "original_dtype": self.original_dtype,
+            "target_dtype": self.target_dtype,
+            "total_rows": int(self.total_rows),
+            "non_null_count": int(self.non_null_count),
+            "converted_count": int(self.converted_count),
+            "unparseable_count": int(self.unparseable_count),
+            "unparseable_samples": [sanitize_json_value(s) for s in self.unparseable_samples],
+            "fractional_loss_count": int(self.fractional_loss_count),
+            "original_missing_count": int(self.original_missing_count),
+            "new_missing_count": int(self.new_missing_count),
+            "is_valid": bool(self.is_valid),
+            "error_message": self.error_message,
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
         }
 
 

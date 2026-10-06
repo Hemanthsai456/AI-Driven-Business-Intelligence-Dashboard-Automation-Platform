@@ -46,15 +46,23 @@ class CleaningExecutor:
     SUPPORTED_TRANSFORM_OPERATIONS: Set[str] = {
         "REMOVE_DUPLICATES",
         "NORMALIZE_EMPTY_STRINGS",
+        "TRIM_WHITESPACE",
         "IMPUTE_MEDIAN",
         "IMPUTE_MEAN",
+        "IMPUTE_MODE",
+        "IMPUTE_UNKNOWN",
         "IMPUTE_SPECIFIC_VALUE",
         "FILL_MODE",
         "FILL_UNKNOWN",
         "FILL_SPECIFIC_VALUE",
         "CONVERT_NUMERIC",
+        "CONVERT_FLOAT",
+        "CONVERT_INTEGER",
         "CONVERT_DATETIME",
         "NORMALIZE_BOOLEAN",
+        "CONVERT_BOOLEAN",
+        "CONVERT_STRING",
+        "CONVERT_TEXT",
         "LEAVE_UNCHANGED",
     }
 
@@ -77,9 +85,11 @@ class CleaningExecutor:
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
         operation_values: Optional[Dict[str, Any]] = None,
+        custom_transformations: Optional[List[Dict[str, Any]]] = None,
     ) -> List[CleaningRecommendation]:
         """Resolve recommendation IDs against the canonical dataset's deterministic plan,
-        applying and validating any user-selected operation overrides and specific custom values.
+        applying and validating any user-selected operation overrides, custom values,
+        and explicit user-defined column transformations.
         """
         if plan is None:
             plan = self.planner.generate_plan(canonical=canonical)
@@ -113,6 +123,17 @@ class CleaningExecutor:
 
                 # Clone recommendation params
                 rec_params = dict(base_rec.params)
+
+                # If converting to integer, guard against silent fractional truncation
+                if user_chosen_op == "CONVERT_INTEGER" and base_rec.column_name in canonical.data.columns:
+                    col_series = canonical.data[base_rec.column_name]
+                    num_series = pd.to_numeric(col_series.dropna(), errors="coerce").dropna()
+                    if len(num_series) > 0 and ((num_series % 1) != 0).any():
+                        if not rec_params.get("allow_fractional_truncation", False):
+                            raise CleaningExecutionError(
+                                f"Integer conversion on '{base_rec.column_name}' rejected: "
+                                f"column contains fractional numbers. Integer conversion would truncate fractional values."
+                            )
 
                 # Validate specific custom values if chosen
                 if user_chosen_op == "IMPUTE_SPECIFIC_VALUE":
@@ -160,6 +181,7 @@ class CleaningExecutor:
                     expected_effect=base_rec.expected_effect,
                     requires_review=base_rec.requires_review,
                     status=base_rec.status,
+                    source=base_rec.source or "RECOMMENDATION",
                     user_selected_operation=user_chosen_op,
                     supported_variants=list(variants),
                     params=rec_params,
@@ -173,25 +195,111 @@ class CleaningExecutor:
                 f"Invalid recommendation IDs not found in dataset plan: {unknown_ids}"
             )
 
+        # Process explicit user-defined column transformations (source="USER")
+        if custom_transformations:
+            for item in custom_transformations:
+                col = item.get("column_name")
+                op = item.get("operation")
+                if not col or col not in canonical.data.columns:
+                    raise CleaningExecutionError(f"Target column '{col}' does not exist in dataset.")
+                if not op or op not in self.SUPPORTED_TRANSFORM_OPERATIONS:
+                    raise CleaningExecutionError(f"Unsupported cleaning operation '{op}' for column '{col}'.")
+
+                # Normalize aliases
+                if op == "IMPUTE_MODE":
+                    op = "FILL_MODE"
+                elif op == "IMPUTE_UNKNOWN":
+                    op = "FILL_UNKNOWN"
+                elif op == "CONVERT_TEXT":
+                    op = "CONVERT_STRING"
+
+                params = dict(item)
+                # Fractional check for user-defined integer conversion
+                if op == "CONVERT_INTEGER":
+                    col_series = canonical.data[col]
+                    num_series = pd.to_numeric(col_series.dropna(), errors="coerce").dropna()
+                    if len(num_series) > 0 and ((num_series % 1) != 0).any():
+                        if not item.get("allow_fractional_truncation", False):
+                            raise CleaningExecutionError(
+                                f"Integer conversion on '{col}' rejected: "
+                                f"column contains fractional numbers. Integer conversion would truncate fractional values."
+                            )
+
+                # Validate specific value
+                if op in ["IMPUTE_SPECIFIC_VALUE", "FILL_SPECIFIC_VALUE"]:
+                    val = item.get("custom_value")
+                    if val is None or str(val).strip() == "":
+                        raise CleaningExecutionError(f"A specific constant value must be provided for column '{col}'.")
+                    col_series = canonical.data[col]
+                    if pd.api.types.is_numeric_dtype(col_series):
+                        try:
+                            numeric_val = float(val)
+                            if math.isnan(numeric_val) or math.isinf(numeric_val):
+                                raise ValueError()
+                            params["custom_value"] = numeric_val
+                            op = "IMPUTE_SPECIFIC_VALUE"
+                        except (ValueError, TypeError):
+                            raise CleaningExecutionError(
+                                f"Specific value for numeric column '{col}' must be a valid number, got: '{val}'"
+                            )
+                    else:
+                        val_str = str(val).strip()
+                        forbidden = ["DROP ", "DELETE ", "SELECT ", ";", "<script>"]
+                        if any(tok.lower() in val_str.lower() for tok in forbidden):
+                            raise CleaningExecutionError(f"Specific value for column '{col}' contains invalid code patterns: '{val}'")
+                        params["custom_value"] = val_str
+                        op = "FILL_SPECIFIC_VALUE"
+
+                user_rec = CleaningRecommendation(
+                    recommendation_id=f"user_custom_{col}_{op.lower()}",
+                    column_name=col,
+                    operation=op,
+                    user_selected_operation=op,
+                    category="USER_TRANSFORMATION",
+                    evidence=[f"Direct user-configured transformation on column '{col}'"],
+                    affected_rows=int(canonical.data[col].notna().sum()) if col in canonical.data.columns else len(canonical.data),
+                    affected_percentage=100.0,
+                    confidence=1.0,
+                    confidence_level="HIGH",
+                    risk_level="LOW",
+                    default_selected=True,
+                    user_selected=True,
+                    rationale=f"User-requested {op.replace('_', ' ').lower()} on '{col}'",
+                    expected_effect=f"Transform column '{col}' using {op}",
+                    requires_review=False,
+                    status="RECOMMENDED",
+                    source="USER",
+                    params=params,
+                )
+                resolved.append(user_rec)
+
         return resolved
 
     def _order_operations(
         self, recommendations: List[CleaningRecommendation]
     ) -> List[CleaningRecommendation]:
         """Order recommendations deterministically:
-        1. Empty string normalization
-        2. Type conversions (Numeric, Datetime, Boolean)
+        1. Empty string normalization & string whitespace trimming
+        2. Type conversions (Numeric, Integer, Float, Datetime, Boolean, Text/String)
         3. Missing value handling (Median, Mean, Specific Value, Mode, Unknown)
         4. Duplicate removal
         5. Review / Diagnostic items / Leave Unchanged (last / skipped)
         """
         phase_map = {
             "NORMALIZE_EMPTY_STRINGS": 1,
+            "TRIM_WHITESPACE": 1,
             "CONVERT_NUMERIC": 2,
+            "CONVERT_FLOAT": 2,
+            "CONVERT_INTEGER": 2,
             "CONVERT_DATETIME": 2,
             "NORMALIZE_BOOLEAN": 2,
+            "CONVERT_BOOLEAN": 2,
+            "CONVERT_STRING": 2,
+            "CONVERT_TEXT": 2,
             "IMPUTE_MEDIAN": 3,
             "IMPUTE_MEAN": 3,
+            "IMPUTE_MODE": 3,
+            "IMPUTE_UNKNOWN": 3,
             "IMPUTE_SPECIFIC_VALUE": 3,
             "FILL_MODE": 3,
             "FILL_UNKNOWN": 3,
@@ -456,19 +564,78 @@ class CleaningExecutor:
                 continue
 
             # -------------------------------------------------------------
-            # 3. CONVERT_NUMERIC
+            # 2B. TRIM_WHITESPACE
             # -------------------------------------------------------------
-            if op == "CONVERT_NUMERIC" and col is not None:
+            if op == "TRIM_WHITESPACE" and col is not None:
+                series = working_df[col]
+                if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
+                    trimmed = series.map(lambda x: x.strip() if isinstance(x, str) else x)
+                    changed_mask = series.notna() & (series != trimmed)
+                    changed_indices = working_df.index[changed_mask].tolist()
+                    cells_mod = len(changed_indices)
+
+                    for idx in changed_indices[:max_sample_changes]:
+                        if len(sample_changes) < max_sample_changes:
+                            sample_changes.append(
+                                SampleCellChange(
+                                    row_index=idx,
+                                    column_name=col,
+                                    before_value=working_df.loc[idx, col],
+                                    after_value=trimmed.loc[idx],
+                                    operation=op,
+                                )
+                            )
+
+                    working_df[col] = trimmed
+                    total_cells_affected += cells_mod
+                    for idx in changed_indices:
+                        total_rows_affected_set.add(idx)
+
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="APPLIED",
+                            rows_affected=cells_mod,
+                            cells_affected=cells_mod,
+                            method_used="Trim leading and trailing whitespace",
+                            before_statistic=f"Modified: {cells_mod} cells",
+                            after_statistic="Whitespace trimmed",
+                            details={"trimmed_count": cells_mod},
+                        )
+                    )
+                else:
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="SKIPPED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Trim leading and trailing whitespace",
+                            before_statistic=f"Dtype: {working_df[col].dtype}",
+                            after_statistic=f"Dtype: {working_df[col].dtype}",
+                            details={"note": "Column is not string/object dtype."},
+                        )
+                    )
+                continue
+
+            # -------------------------------------------------------------
+            # 3. CONVERT_NUMERIC / CONVERT_FLOAT
+            # -------------------------------------------------------------
+            if op in ["CONVERT_NUMERIC", "CONVERT_FLOAT"] and col is not None:
                 series = working_df[col]
                 non_null_cnt = int(series.dropna().shape[0])
-                converted = pd.to_numeric(series, errors="coerce")
+                converted = pd.to_numeric(series, errors="coerce").astype("float64")
                 parsed_cnt = int(converted.dropna().shape[0])
                 unparseable_cnt = non_null_cnt - parsed_cnt
 
                 # Safety check: if review required and unparseable data exists, do not silently destroy
                 if rec.requires_review and unparseable_cnt > 0:
                     warn_msg = (
-                        f"Skipped CONVERT_NUMERIC on '{col}': column has {unparseable_cnt} unparseable values "
+                        f"Skipped {op} on '{col}': column has {unparseable_cnt} unparseable values "
                         f"and requires review. Coercion was rejected to prevent data loss."
                     )
                     warnings.append(warn_msg)
@@ -519,6 +686,81 @@ class CleaningExecutor:
                         rows_affected=cells_mod,
                         cells_affected=cells_mod,
                         method_used="Safe numeric coercion (pd.to_numeric)",
+                        before_statistic=f"Dtype: {series.dtype}",
+                        after_statistic=f"Dtype: {working_df[col].dtype}",
+                        details={"target_dtype": str(working_df[col].dtype), "converted_count": parsed_cnt},
+                    )
+                )
+                continue
+
+            # -------------------------------------------------------------
+            # 3B. CONVERT_INTEGER
+            # -------------------------------------------------------------
+            if op == "CONVERT_INTEGER" and col is not None:
+                series = working_df[col]
+                num_series = pd.to_numeric(series, errors="coerce")
+                fractional_mask = num_series.notna() & ((num_series % 1) != 0)
+                fractional_cnt = int(fractional_mask.sum())
+
+                if fractional_cnt > 0 and not rec.params.get("allow_fractional_truncation", False):
+                    warn_msg = (
+                        f"Skipped CONVERT_INTEGER on '{col}': column contains {fractional_cnt} fractional values "
+                        f"(e.g. {num_series[fractional_mask].iloc[0]}). Integer conversion would truncate fractional values."
+                    )
+                    warnings.append(warn_msg)
+                    operation_results.append(
+                        OperationExecutionResult(
+                            recommendation_id=rec.recommendation_id,
+                            operation=op,
+                            column_name=col,
+                            status="FAILED",
+                            rows_affected=0,
+                            cells_affected=0,
+                            method_used="Integer conversion (rejected due to fractional numbers)",
+                            before_statistic=f"Dtype: {series.dtype} ({fractional_cnt} fractional values)",
+                            after_statistic=f"Dtype: {series.dtype}",
+                            details={"fractional_loss_count": fractional_cnt, "error": warn_msg},
+                            warnings=[warn_msg],
+                        )
+                    )
+                    continue
+
+                valid_nums = num_series.dropna()
+                truncated_map = valid_nums.apply(lambda x: int(math.trunc(x)))
+                converted_int = pd.Series(pd.NA, index=series.index, dtype="Int64")
+                if len(truncated_map) > 0:
+                    converted_int.loc[truncated_map.index] = truncated_map.values
+                parsed_cnt = int(converted_int.dropna().shape[0])
+
+                changed_mask = series.notna()
+                changed_indices = working_df.index[changed_mask].tolist()
+                for idx in changed_indices[:max_sample_changes]:
+                    if len(sample_changes) < max_sample_changes:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=col,
+                                before_value=working_df.loc[idx, col],
+                                after_value=int(converted_int.loc[idx]) if pd.notna(converted_int.loc[idx]) else None,
+                                operation=op,
+                            )
+                        )
+
+                working_df[col] = converted_int
+                cells_mod = len(changed_indices)
+                total_cells_affected += cells_mod
+                for idx in changed_indices:
+                    total_rows_affected_set.add(idx)
+
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="APPLIED",
+                        rows_affected=cells_mod,
+                        cells_affected=cells_mod,
+                        method_used="Deterministic integer conversion (Int64)",
                         before_statistic=f"Dtype: {series.dtype}",
                         after_statistic=f"Dtype: {working_df[col].dtype}",
                         details={"target_dtype": str(working_df[col].dtype), "converted_count": parsed_cnt},
@@ -616,9 +858,9 @@ class CleaningExecutor:
                 continue
 
             # -------------------------------------------------------------
-            # 5. NORMALIZE_BOOLEAN
+            # 5. NORMALIZE_BOOLEAN / CONVERT_BOOLEAN
             # -------------------------------------------------------------
-            if op == "NORMALIZE_BOOLEAN" and col is not None:
+            if op in ["NORMALIZE_BOOLEAN", "CONVERT_BOOLEAN"] and col is not None:
                 series = working_df[col]
                 true_set = {"true", "yes", "1", "t", "y"}
                 false_set = {"false", "no", "0", "f", "n"}
@@ -664,6 +906,49 @@ class CleaningExecutor:
                         rows_affected=cells_mod,
                         cells_affected=cells_mod,
                         method_used="Normalize boolean representations (True/False)",
+                        before_statistic=f"Dtype: {series.dtype}",
+                        after_statistic=f"Dtype: {working_df[col].dtype}",
+                        details={"target_dtype": str(working_df[col].dtype)},
+                    )
+                )
+                continue
+
+            # -------------------------------------------------------------
+            # 5B. CONVERT_STRING / CONVERT_TEXT
+            # -------------------------------------------------------------
+            if op in ["CONVERT_STRING", "CONVERT_TEXT"] and col is not None:
+                series = working_df[col]
+                converted_str = series.map(lambda x: None if pd.isna(x) else str(x))
+                changed_mask = series.notna() & (series != converted_str)
+                changed_indices = working_df.index[changed_mask].tolist()
+                cells_mod = len(changed_indices)
+
+                for idx in changed_indices[:max_sample_changes]:
+                    if len(sample_changes) < max_sample_changes:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=col,
+                                before_value=working_df.loc[idx, col],
+                                after_value=converted_str.loc[idx],
+                                operation=op,
+                            )
+                        )
+
+                working_df[col] = converted_str
+                total_cells_affected += cells_mod
+                for idx in changed_indices:
+                    total_rows_affected_set.add(idx)
+
+                operation_results.append(
+                    OperationExecutionResult(
+                        recommendation_id=rec.recommendation_id,
+                        operation=op,
+                        column_name=col,
+                        status="APPLIED",
+                        rows_affected=cells_mod,
+                        cells_affected=cells_mod,
+                        method_used="Convert column to text/string",
                         before_statistic=f"Dtype: {series.dtype}",
                         after_statistic=f"Dtype: {working_df[col].dtype}",
                         details={"target_dtype": str(working_df[col].dtype)},
@@ -1350,7 +1635,7 @@ class CleaningExecutor:
                             )
                         )
 
-            elif op == "CONVERT_NUMERIC" and col in cleaned_df.columns:
+            elif op in ["CONVERT_NUMERIC", "CONVERT_FLOAT"] and col in cleaned_df.columns:
                 if pd.api.types.is_numeric_dtype(cleaned_df[col]):
                     checks.append(
                         CleaningValidationCheck(
@@ -1382,6 +1667,28 @@ class CleaningExecutor:
                         )
                     )
 
+            elif op == "CONVERT_INTEGER" and col in cleaned_df.columns:
+                if pd.api.types.is_integer_dtype(cleaned_df[col]) or pd.api.types.is_numeric_dtype(cleaned_df[col]):
+                    checks.append(
+                        CleaningValidationCheck(
+                            check_name=f"INTEGER_DTYPE_VALID_{col}",
+                            status="PASSED",
+                            message=f"Column '{col}' successfully converted to integer ({cleaned_df[col].dtype}).",
+                            column_name=col,
+                            details={"dtype": str(cleaned_df[col].dtype)},
+                        )
+                    )
+                else:
+                    checks.append(
+                        CleaningValidationCheck(
+                            check_name=f"INTEGER_DTYPE_VALID_{col}",
+                            status="FAILED",
+                            message=f"Column '{col}' failed integer conversion ({cleaned_df[col].dtype}).",
+                            column_name=col,
+                            details={"dtype": str(cleaned_df[col].dtype)},
+                        )
+                    )
+
             elif op == "CONVERT_DATETIME" and col in cleaned_df.columns:
                 if pd.api.types.is_datetime64_any_dtype(cleaned_df[col]):
                     checks.append(
@@ -1393,6 +1700,33 @@ class CleaningExecutor:
                             details={"dtype": str(cleaned_df[col].dtype)},
                         )
                     )
+
+            elif op in ["CONVERT_STRING", "CONVERT_TEXT"] and col in cleaned_df.columns:
+                if pd.api.types.is_string_dtype(cleaned_df[col]) or pd.api.types.is_object_dtype(cleaned_df[col]):
+                    checks.append(
+                        CleaningValidationCheck(
+                            check_name=f"STRING_DTYPE_VALID_{col}",
+                            status="PASSED",
+                            message=f"Column '{col}' successfully converted to string/text.",
+                            column_name=col,
+                            details={"dtype": str(cleaned_df[col].dtype)},
+                        )
+                    )
+
+            elif op == "TRIM_WHITESPACE" and col in cleaned_df.columns:
+                series = cleaned_df[col]
+                if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
+                    has_untrimmed = (series.dropna().astype(str) != series.dropna().astype(str).str.strip()).any()
+                    if not has_untrimmed:
+                        checks.append(
+                            CleaningValidationCheck(
+                                check_name=f"WHITESPACE_TRIMMED_{col}",
+                                status="PASSED",
+                                message=f"Column '{col}' verified free of untrimmed leading/trailing whitespace.",
+                                column_name=col,
+                                details={"untrimmed": False},
+                            )
+                        )
 
         # Aggregate status
         total_checks = len(checks)
@@ -1416,6 +1750,354 @@ class CleaningExecutor:
             checks=checks,
         )
 
+    def preview_column_transformation(
+        self,
+        canonical: CanonicalDataset,
+        column_name: str,
+        operation: str,
+        target_type: Optional[str] = None,
+        custom_value: Optional[Any] = None,
+        allow_fractional_truncation: bool = False,
+    ) -> Any:
+        """Deterministic non-mutating conversion preview for a single user-controlled column transformation."""
+        from cleaning.models import ColumnTransformPreviewResult
+        df = canonical.data
+        if column_name not in df.columns:
+            return ColumnTransformPreviewResult(
+                column_name=column_name,
+                operation=operation,
+                target_type=target_type or "Unknown",
+                original_dtype="unknown",
+                target_dtype="unknown",
+                total_rows=len(df),
+                non_null_count=0,
+                converted_count=0,
+                unparseable_count=0,
+                is_valid=False,
+                error_message=f"Column '{column_name}' does not exist in dataset.",
+            )
+
+        if operation not in self.SUPPORTED_TRANSFORM_OPERATIONS:
+            return ColumnTransformPreviewResult(
+                column_name=column_name,
+                operation=operation,
+                target_type=target_type or "Unknown",
+                original_dtype=str(df[column_name].dtype),
+                target_dtype="unknown",
+                total_rows=len(df),
+                non_null_count=int(df[column_name].notna().sum()),
+                converted_count=0,
+                unparseable_count=0,
+                is_valid=False,
+                error_message=f"Unsupported cleaning operation '{operation}'.",
+            )
+
+        series = df[column_name]
+        total_rows = len(df)
+        orig_dtype = str(series.dtype)
+        non_null_cnt = int(series.notna().sum())
+        orig_missing_cnt = int(series.isna().sum())
+        target_dtype = orig_dtype
+        converted_cnt = 0
+        unparseable_cnt = 0
+        unparseable_samples: List[Any] = []
+        fractional_loss_cnt = 0
+        new_missing_cnt = orig_missing_cnt
+        is_valid = True
+        error_msg: Optional[str] = None
+        sample_changes: List[SampleCellChange] = []
+
+        # Datatype conversions
+        if operation in ["CONVERT_NUMERIC", "CONVERT_FLOAT"]:
+            target_dtype = "float64"
+            converted = pd.to_numeric(series, errors="coerce")
+            parsed_cnt = int(converted.notna().sum())
+            converted_cnt = parsed_cnt
+            unparseable_mask = series.notna() & converted.isna()
+            unparseable_cnt = int(unparseable_mask.sum())
+            if unparseable_cnt > 0:
+                unparseable_samples = [
+                    sanitize_json_value(x)
+                    for x in series[unparseable_mask].unique()[:5].tolist()
+                ]
+            new_missing_cnt = orig_missing_cnt + unparseable_cnt
+            changed_mask = series.notna() & (series != converted)
+            for idx in df.index[changed_mask][:10]:
+                sample_changes.append(
+                    SampleCellChange(
+                        row_index=idx,
+                        column_name=column_name,
+                        before_value=series.loc[idx],
+                        after_value=converted.loc[idx],
+                        operation=operation,
+                    )
+                )
+
+        elif operation == "CONVERT_INTEGER":
+            target_dtype = "Int64"
+            num_series = pd.to_numeric(series, errors="coerce")
+            parsed_cnt = int(num_series.notna().sum())
+            converted_cnt = parsed_cnt
+            unparseable_mask = series.notna() & num_series.isna()
+            unparseable_cnt = int(unparseable_mask.sum())
+            if unparseable_cnt > 0:
+                unparseable_samples = [
+                    sanitize_json_value(x)
+                    for x in series[unparseable_mask].unique()[:5].tolist()
+                ]
+            new_missing_cnt = orig_missing_cnt + unparseable_cnt
+            fractional_mask = num_series.notna() & ((num_series % 1) != 0)
+            fractional_loss_cnt = int(fractional_mask.sum())
+            if fractional_loss_cnt > 0 and not allow_fractional_truncation:
+                is_valid = False
+                error_msg = f"Integer conversion would truncate {fractional_loss_cnt} fractional values."
+
+            valid_nums = num_series.dropna()
+            truncated_map = valid_nums.apply(lambda x: int(math.trunc(x)))
+            converted_int = pd.Series(pd.NA, index=series.index, dtype="Int64")
+            if len(truncated_map) > 0:
+                converted_int.loc[truncated_map.index] = truncated_map.values
+
+            changed_mask = series.notna()
+            for idx in df.index[changed_mask][:10]:
+                sample_changes.append(
+                    SampleCellChange(
+                        row_index=idx,
+                        column_name=column_name,
+                        before_value=series.loc[idx],
+                        after_value=int(converted_int.loc[idx]) if pd.notna(converted_int.loc[idx]) else None,
+                        operation=operation,
+                    )
+                )
+
+        elif operation == "CONVERT_DATETIME":
+            target_dtype = "datetime64[ns]"
+            try:
+                converted_dt = pd.to_datetime(series, errors="coerce", format="mixed")
+                parsed_cnt = int(converted_dt.notna().sum())
+                converted_cnt = parsed_cnt
+                unparseable_mask = series.notna() & converted_dt.isna()
+                unparseable_cnt = int(unparseable_mask.sum())
+                if unparseable_cnt > 0:
+                    unparseable_samples = [
+                        sanitize_json_value(x)
+                        for x in series[unparseable_mask].unique()[:5].tolist()
+                    ]
+                new_missing_cnt = orig_missing_cnt + unparseable_cnt
+                changed_mask = series.notna()
+                for idx in df.index[changed_mask][:10]:
+                    sample_changes.append(
+                        SampleCellChange(
+                            row_index=idx,
+                            column_name=column_name,
+                            before_value=series.loc[idx],
+                            after_value=converted_dt.loc[idx].isoformat() if pd.notna(converted_dt.loc[idx]) else None,
+                            operation=operation,
+                        )
+                    )
+            except Exception as ex:
+                is_valid = False
+                error_msg = f"Datetime conversion failed: {str(ex)}"
+
+        elif operation in ["NORMALIZE_BOOLEAN", "CONVERT_BOOLEAN"]:
+            target_dtype = "bool"
+            true_set = {"true", "yes", "1", "t", "y"}
+            false_set = {"false", "no", "0", "f", "n"}
+
+            def _map_b(val: Any) -> Any:
+                if pd.isna(val):
+                    return np.nan
+                s = str(val).strip().lower()
+                if s in true_set:
+                    return True
+                if s in false_set:
+                    return False
+                return np.nan
+
+            converted_b = series.apply(_map_b)
+            converted_cnt = int(converted_b.notna().sum())
+            unparseable_mask = series.notna() & converted_b.isna()
+            unparseable_cnt = int(unparseable_mask.sum())
+            if unparseable_cnt > 0:
+                unparseable_samples = [
+                    sanitize_json_value(x)
+                    for x in series[unparseable_mask].unique()[:5].tolist()
+                ]
+            new_missing_cnt = orig_missing_cnt + unparseable_cnt
+            changed_mask = series.notna() & (series != converted_b)
+            for idx in df.index[changed_mask][:10]:
+                sample_changes.append(
+                    SampleCellChange(
+                        row_index=idx,
+                        column_name=column_name,
+                        before_value=series.loc[idx],
+                        after_value=converted_b.loc[idx],
+                        operation=operation,
+                    )
+                )
+
+        elif operation in ["CONVERT_STRING", "CONVERT_TEXT"]:
+            target_dtype = "string"
+            converted_s = series.map(lambda x: None if pd.isna(x) else str(x))
+            converted_cnt = int(converted_s.notna().sum())
+            changed_mask = series.notna() & (series != converted_s)
+            for idx in df.index[changed_mask][:10]:
+                sample_changes.append(
+                    SampleCellChange(
+                        row_index=idx,
+                        column_name=column_name,
+                        before_value=series.loc[idx],
+                        after_value=converted_s.loc[idx],
+                        operation=operation,
+                    )
+                )
+
+        elif operation == "TRIM_WHITESPACE":
+            if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
+                trimmed = series.map(lambda x: x.strip() if isinstance(x, str) else x)
+                changed_mask = series.notna() & (series != trimmed)
+                converted_cnt = int(changed_mask.sum())
+                for idx in df.index[changed_mask][:10]:
+                    sample_changes.append(
+                        SampleCellChange(
+                            row_index=idx,
+                            column_name=column_name,
+                            before_value=series.loc[idx],
+                            after_value=trimmed.loc[idx],
+                            operation=operation,
+                        )
+                    )
+            else:
+                is_valid = False
+                error_msg = f"Column '{column_name}' is not text/string; whitespace trim not applicable."
+
+        elif operation == "NORMALIZE_EMPTY_STRINGS":
+            if pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
+                empty_mask = series.notna() & (series.astype(str).str.strip() == "")
+                converted_cnt = int(empty_mask.sum())
+                new_missing_cnt = orig_missing_cnt + converted_cnt
+                for idx in df.index[empty_mask][:10]:
+                    sample_changes.append(
+                        SampleCellChange(
+                            row_index=idx,
+                            column_name=column_name,
+                            before_value=series.loc[idx],
+                            after_value=None,
+                            operation=operation,
+                        )
+                    )
+            else:
+                is_valid = False
+                error_msg = f"Column '{column_name}' is not text/string; empty string normalization not applicable."
+
+        elif operation in ["IMPUTE_MEDIAN", "IMPUTE_MEAN", "IMPUTE_SPECIFIC_VALUE"]:
+            if orig_missing_cnt == 0:
+                converted_cnt = 0
+                new_missing_cnt = 0
+            else:
+                num_s = pd.to_numeric(series.dropna(), errors="coerce").dropna()
+                if len(num_s) == 0 and operation in ["IMPUTE_MEDIAN", "IMPUTE_MEAN"]:
+                    is_valid = False
+                    error_msg = f"No valid numeric data in '{column_name}' to compute {operation}."
+                else:
+                    if operation == "IMPUTE_MEDIAN":
+                        fill_val = round(float(num_s.median()), 2)
+                    elif operation == "IMPUTE_MEAN":
+                        fill_val = round(float(num_s.mean()), 2)
+                    else:
+                        if custom_value is None or str(custom_value).strip() == "":
+                            is_valid = False
+                            error_msg = "Specific numeric value is required."
+                            fill_val = 0.0
+                        else:
+                            try:
+                                fill_val = float(custom_value)
+                                if math.isnan(fill_val) or math.isinf(fill_val):
+                                    raise ValueError()
+                                if fill_val.is_integer():
+                                    fill_val = int(fill_val)
+                            except (ValueError, TypeError):
+                                is_valid = False
+                                error_msg = f"Invalid specific numeric value: {custom_value}"
+                                fill_val = 0.0
+
+                    if is_valid:
+                        converted_cnt = orig_missing_cnt
+                        new_missing_cnt = 0
+                        null_indices = df.index[series.isna()][:10]
+                        for idx in null_indices:
+                            sample_changes.append(
+                                SampleCellChange(
+                                    row_index=idx,
+                                    column_name=column_name,
+                                    before_value=None,
+                                    after_value=fill_val,
+                                    operation=operation,
+                                )
+                            )
+
+        elif operation in ["FILL_MODE", "IMPUTE_MODE", "FILL_UNKNOWN", "IMPUTE_UNKNOWN", "FILL_SPECIFIC_VALUE"]:
+            if orig_missing_cnt == 0:
+                converted_cnt = 0
+                new_missing_cnt = 0
+            else:
+                if operation in ["FILL_MODE", "IMPUTE_MODE"]:
+                    non_nulls = series.dropna()
+                    modes = non_nulls.mode() if len(non_nulls) > 0 else []
+                    if len(modes) == 0:
+                        is_valid = False
+                        error_msg = f"No valid non-null entries to compute mode on '{column_name}'."
+                        fill_val = "Unknown"
+                    else:
+                        fill_val = modes.iloc[0]
+                elif operation in ["FILL_UNKNOWN", "IMPUTE_UNKNOWN"]:
+                    fill_val = "Unknown"
+                else:
+                    if custom_value is None or str(custom_value).strip() == "":
+                        is_valid = False
+                        error_msg = "Specific text value is required."
+                        fill_val = "Unknown"
+                    else:
+                        fill_val = str(custom_value).strip()
+
+                if is_valid:
+                    converted_cnt = orig_missing_cnt
+                    new_missing_cnt = 0
+                    null_indices = df.index[series.isna()][:10]
+                    for idx in null_indices:
+                        sample_changes.append(
+                            SampleCellChange(
+                                row_index=idx,
+                                column_name=column_name,
+                                before_value=None,
+                                after_value=fill_val,
+                                operation=operation,
+                            )
+                        )
+
+        elif operation == "LEAVE_UNCHANGED":
+            converted_cnt = 0
+            new_missing_cnt = orig_missing_cnt
+
+        return ColumnTransformPreviewResult(
+            column_name=column_name,
+            operation=operation,
+            target_type=target_type or target_dtype,
+            original_dtype=orig_dtype,
+            target_dtype=target_dtype,
+            total_rows=total_rows,
+            non_null_count=non_null_cnt,
+            converted_count=converted_cnt,
+            unparseable_count=unparseable_cnt,
+            unparseable_samples=unparseable_samples,
+            fractional_loss_count=fractional_loss_cnt,
+            original_missing_count=orig_missing_cnt,
+            new_missing_count=new_missing_cnt,
+            is_valid=is_valid,
+            error_message=error_msg,
+            sample_changes=sample_changes,
+        )
+
     def preview(
         self,
         canonical: CanonicalDataset,
@@ -1423,8 +2105,10 @@ class CleaningExecutor:
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
         operation_values: Optional[Dict[str, Any]] = None,
+        custom_transformations: Optional[List[Dict[str, Any]]] = None,
     ) -> CleaningPreviewResult:
-        """Pure non-mutating preview of selected cleaning operations with optional user overrides and custom values.
+        """Pure non-mutating preview of selected cleaning operations with optional user overrides,
+        custom values, and explicit user-defined column transformations.
         Never mutates canonical.data or session store.
         """
         raw_rows, raw_cols = len(canonical.data), len(canonical.data.columns)
@@ -1435,6 +2119,7 @@ class CleaningExecutor:
             plan=plan,
             operation_overrides=operation_overrides,
             operation_values=operation_values,
+            custom_transformations=custom_transformations,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1452,6 +2137,8 @@ class CleaningExecutor:
         app_cnt = sum(1 for r in op_results if r.status == "APPLIED")
         skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING", "REVIEW_ONLY"])
 
+        total_requested = len(selected_recommendation_ids) + len(custom_transformations or [])
+
         return CleaningPreviewResult(
             dataset_id=canonical.metadata.dataset_id,
             original_row_count=raw_rows,
@@ -1459,7 +2146,7 @@ class CleaningExecutor:
             row_count_change=len(working_df) - raw_rows,
             original_column_count=raw_cols,
             preview_column_count=len(working_df.columns),
-            operations_requested=len(selected_recommendation_ids),
+            operations_requested=total_requested,
             operations_applicable=app_cnt,
             operations_skipped=skip_cnt,
             total_cells_affected=cells_aff,
@@ -1475,9 +2162,10 @@ class CleaningExecutor:
         plan: Optional[CleaningPlan] = None,
         operation_overrides: Optional[Dict[str, str]] = None,
         operation_values: Optional[Dict[str, Any]] = None,
+        custom_transformations: Optional[List[Dict[str, Any]]] = None,
     ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
         """Execute selected cleaning operations on an explicit copy of raw data,
-        applying any user-selected operation overrides and specific custom values.
+        applying any user-selected operation overrides, custom values, and custom column transformations.
         Returns the structured CleaningExecutionResult and the new cleaned CanonicalDataset.
         The input CanonicalDataset is guaranteed untouched.
         """
@@ -1501,6 +2189,7 @@ class CleaningExecutor:
             plan=plan,
             operation_overrides=operation_overrides,
             operation_values=operation_values,
+            custom_transformations=custom_transformations,
         )
         ordered_recs = self._order_operations(resolved_recs)
 
@@ -1574,9 +2263,18 @@ class CleaningExecutor:
         # Profile cleaned dataset
         cleaned_canonical.profile = self.profiler.profile(cleaned_canonical, attach=True)
 
+        # Rerun Semantic Intelligence on the transformed dataset so semantic roles reflect the new dtypes/distributions
+        from intelligence.semantic_analyzer import SemanticAnalyzer
+        cleaned_canonical.semantic_profile = SemanticAnalyzer().analyze(
+            cleaned_canonical,
+            profile=cleaned_canonical.profile,
+            apply_roles=True,
+        )
+
         app_cnt = sum(1 for r in op_results if r.status == "APPLIED")
         skip_cnt = sum(1 for r in op_results if r.status in ["SKIPPED", "WARNING", "REVIEW_ONLY"])
         fail_cnt = sum(1 for r in op_results if r.status == "FAILED")
+        total_requested = len(selected_recommendation_ids) + len(custom_transformations or [])
 
         execution_result = CleaningExecutionResult(
             dataset_id=canonical.metadata.dataset_id,
@@ -1585,7 +2283,7 @@ class CleaningExecutor:
             row_count_change=len(cleaned_df) - raw_rows,
             original_column_count=raw_cols,
             cleaned_column_count=len(cleaned_df.columns),
-            operations_requested=len(selected_recommendation_ids),
+            operations_requested=total_requested,
             operations_applied=app_cnt,
             operations_skipped=skip_cnt,
             operations_failed=fail_cnt,
@@ -1608,6 +2306,7 @@ def preview_cleaning_plan(
     plan: Optional[CleaningPlan] = None,
     operation_overrides: Optional[Dict[str, str]] = None,
     operation_values: Optional[Dict[str, Any]] = None,
+    custom_transformations: Optional[List[Dict[str, Any]]] = None,
 ) -> CleaningPreviewResult:
     """Convenience helper for non-mutating preview of cleaning operations."""
     executor = CleaningExecutor()
@@ -1617,6 +2316,7 @@ def preview_cleaning_plan(
         plan=plan,
         operation_overrides=operation_overrides,
         operation_values=operation_values,
+        custom_transformations=custom_transformations,
     )
 
 
@@ -1626,6 +2326,7 @@ def execute_cleaning_plan(
     plan: Optional[CleaningPlan] = None,
     operation_overrides: Optional[Dict[str, str]] = None,
     operation_values: Optional[Dict[str, Any]] = None,
+    custom_transformations: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[CleaningExecutionResult, CanonicalDataset]:
     """Convenience helper for batch cleaning execution on CanonicalDataset copy."""
     executor = CleaningExecutor()
@@ -1635,4 +2336,5 @@ def execute_cleaning_plan(
         plan=plan,
         operation_overrides=operation_overrides,
         operation_values=operation_values,
+        custom_transformations=custom_transformations,
     )

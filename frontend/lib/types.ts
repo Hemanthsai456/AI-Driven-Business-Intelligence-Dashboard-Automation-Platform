@@ -320,7 +320,41 @@ export interface CleaningExecutionResult {
   executed_at: string;
 }
 
+export interface ColumnTransformPreviewRequest {
+  column_name: string;
+  operation: string;
+  target_type?: string;
+  custom_value?: any;
+  allow_fractional_truncation?: boolean;
+}
 
+export interface ColumnTransformPreviewResult {
+  column_name: string;
+  operation: string;
+  target_type: string;
+  original_dtype: string;
+  target_dtype: string;
+  total_rows: number;
+  non_null_count: number;
+  converted_count: number;
+  unparseable_count: number;
+  unparseable_samples: any[];
+  fractional_loss_count: number;
+  original_missing_count: number;
+  new_missing_count: number;
+  is_valid: boolean;
+  error_message?: string | null;
+  sample_changes: SampleCellChange[];
+}
+
+export interface CustomColumnTransformation {
+  column_name: string;
+  operation: string;
+  target_type?: string;
+  custom_value?: any;
+  allow_fractional_truncation?: boolean;
+  source?: string;
+}
 
 export interface DatasetListItem {
   dataset_id: string;
@@ -663,4 +697,146 @@ export interface RegisterCleanedDatasetResponse {
   already_registered?: boolean;
   metadata: DatasetMetadata;
 }
+
+// ----------------------------------------------------
+// PART 7 — DATA STUDIO: AUTOMATED + INTERACTIVE EDA
+// ----------------------------------------------------
+
+export interface HistogramBin {
+  bin_label: string;
+  bin_start: number;
+  bin_end: number;
+  count: number;
+  percentage: number;
+}
+
+export interface NumericDistribution {
+  column_name: string;
+  row_count: number;
+  non_null_count: number;
+  null_count: number;
+  null_percentage: number;
+  mean: number | null;
+  median: number | null;
+  std: number | null;
+  min: number | null;
+  max: number | null;
+  q1: number | null;
+  q3: number | null;
+  zero_count: number;
+  negative_count: number;
+  skewness: number | null;
+  skew_label: string;
+  histogram: HistogramBin[];
+}
+
+export interface CategoryFrequency {
+  category: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CategoricalDistribution {
+  column_name: string;
+  row_count: number;
+  distinct_count: number;
+  null_count: number;
+  null_percentage: number;
+  is_high_cardinality: boolean;
+  cardinality_note: string | null;
+  top_categories: CategoryFrequency[];
+}
+
+export interface CorrelatedPair {
+  col1: string;
+  col2: string;
+  correlation: number;
+  direction: 'positive' | 'negative';
+  strength: 'strong' | 'moderate' | 'weak' | 'none';
+  description: string;
+}
+
+export interface CorrelationAnalysisData {
+  status: 'SUCCESS' | 'INSUFFICIENT_NUMERIC_COLUMNS' | 'EMPTY_DATA' | 'ERROR';
+  columns: string[];
+  matrix: Record<string, Record<string, number | null>>;
+  message: string | null;
+  top_correlated_pairs: CorrelatedPair[];
+}
+
+export interface TemporalAnalysisData {
+  status: string;
+  datetime_column: string;
+  measure_column: string | null;
+  granularity: string;
+  date_range: { min_date: string; max_date: string };
+  total_points: number;
+  trend_direction: string;
+  data_points: Record<string, any>[];
+}
+
+export interface EDAObservation {
+  id: string;
+  type: string;
+  column: string | null;
+  observation: string;
+  evidence: Record<string, any>;
+  severity: 'info' | 'notice' | 'warning';
+}
+
+export interface EDADatasetSummary {
+  row_count: number;
+  column_count: number;
+  numeric_columns_count: number;
+  categorical_columns_count: number;
+  datetime_columns_count: number;
+  boolean_columns_count: number;
+  total_cells: number;
+  missing_cells_count: number;
+  missing_cells_percentage: number;
+  duplicate_rows_count: number;
+  duplicate_rows_percentage: number;
+}
+
+export interface EDASummary {
+  dataset_id: string;
+  dataset_summary: EDADatasetSummary;
+  numeric_distributions: NumericDistribution[];
+  categorical_distributions: CategoricalDistribution[];
+  correlation_analysis: CorrelationAnalysisData;
+  temporal_analysis: TemporalAnalysisData | null;
+  automated_observations: EDAObservation[];
+}
+
+export interface EDAExploreRequest {
+  chart_type: 'scatter' | 'line' | 'bar' | 'distribution';
+  x_column: string;
+  y_column?: string;
+  group_by?: string;
+  aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max' | 'mean';
+  time_granularity?: 'day' | 'month' | 'quarter' | 'year';
+}
+
+
+export interface EDAExploreResult {
+  chart_type: string;
+  is_supported: boolean;
+  error_message?: string | null;
+  x_column?: string;
+  y_column?: string;
+  group_by?: string | null;
+  aggregation?: string;
+  granularity?: string;
+  total_points?: number;
+  rendered_points?: number;
+  is_sampled?: boolean;
+  correlation?: number | null;
+  total_categories?: number;
+  rendered_categories?: number;
+  distribution_type?: string;
+  summary?: Record<string, any>;
+  data: Record<string, any>[];
+}
+
+
 

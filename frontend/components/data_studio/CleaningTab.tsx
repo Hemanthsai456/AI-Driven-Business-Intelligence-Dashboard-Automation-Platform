@@ -26,6 +26,9 @@ import {
   Zap,
   Download,
   Sliders,
+  Wand2,
+  PlusCircle,
+  Trash2,
 } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
@@ -35,6 +38,8 @@ import {
   CleaningPlan,
   CleaningPreviewResult,
   CleaningRecommendation,
+  ColumnTransformPreviewResult,
+  CustomColumnTransformation,
   DatasetMetadata,
   OperationExecutionResult,
   QualityAssessment,
@@ -46,6 +51,7 @@ import {
   applyCleaningPlan,
   getDatasetDownloadUrl,
   previewCleaningPlan,
+  previewColumnTransformation,
   registerCleanedDataset,
 } from '../../lib/api';
 
@@ -94,6 +100,29 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [activeFilter, setActiveFilter] = useState<FilterStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // User-Controlled Column Transformations State
+  const availableColumns = useMemo<string[]>(() => {
+    if (metadata?.columns && Array.isArray(metadata.columns) && metadata.columns.length > 0) {
+      return metadata.columns.map((c) => (typeof c === 'string' ? c : c.original_name));
+    }
+    return [];
+  }, [metadata]);
+
+  const [selectedCol, setSelectedCol] = useState<string>(() => {
+    if (metadata?.columns && Array.isArray(metadata.columns) && metadata.columns.length > 0) {
+      const first = metadata.columns[0];
+      return typeof first === 'string' ? first : first.original_name;
+    }
+    return '';
+  });
+  const [selectedTransformType, setSelectedTransformType] = useState<string>('CONVERT_NUMERIC');
+  const [customTransformVal, setCustomTransformVal] = useState<string>('');
+  const [allowFractional, setAllowFractional] = useState<boolean>(false);
+  const [colPreviewLoading, setColPreviewLoading] = useState<boolean>(false);
+  const [colPreviewResult, setColPreviewResult] = useState<ColumnTransformPreviewResult | null>(null);
+  const [colPreviewError, setColPreviewError] = useState<string | null>(null);
+  const [customTransformations, setCustomTransformations] = useState<CustomColumnTransformation[]>([]);
+
   // Preview & Execution State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -115,6 +144,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       setSelections({});
       setMethodOverrides({});
       setCustomValues({});
+      setCustomTransformations([]);
+      setColPreviewResult(null);
+      setColPreviewError(null);
       setPreviewResult(null);
       setExecutionResult(null);
       setExecutionState('idle');
@@ -130,6 +162,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setSelections(initial);
     setMethodOverrides({});
     setCustomValues({});
+    setCustomTransformations([]);
+    setColPreviewResult(null);
+    setColPreviewError(null);
     setPreviewResult(null);
     setExecutionResult(null);
     setExecutionState('idle');
@@ -137,6 +172,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setRegisteredData(null);
     setRegistrationError(null);
   }, [cleaningPlan?.dataset_id]);
+
+  React.useEffect(() => {
+    if (availableColumns.length > 0 && (!selectedCol || !availableColumns.includes(selectedCol))) {
+      setSelectedCol(availableColumns[0]);
+    }
+  }, [availableColumns, selectedCol]);
 
   const toggleSelection = (recId: string) => {
     setSelections((prev) => ({
@@ -198,6 +239,148 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     );
   };
 
+  const selectedColInfo = useMemo(() => {
+    if (!selectedCol) return null;
+    const colMeta = metadata?.columns?.find(
+      (c) => (typeof c === 'string' ? c : c.original_name) === selectedCol
+    );
+    const semCol = semanticProfile?.column_evidences?.[selectedCol];
+    const dtype = (typeof colMeta === 'object' ? colMeta?.detected_datatype : null) || 'Unknown';
+    const role = semCol?.candidate_role || (typeof colMeta === 'object' ? colMeta?.semantic_role : null) || 'UNKNOWN';
+    const nullCount = (typeof colMeta === 'object' ? colMeta?.null_count : null) ?? 0;
+    const nullPct =
+      (typeof colMeta === 'object' ? colMeta?.null_percentage : null) ??
+      (metadata?.row_count && metadata.row_count > 0 ? (nullCount / metadata.row_count) * 100 : 0);
+    return {
+      dtype,
+      role,
+      nullCount,
+      nullPct: Math.round(nullPct * 10) / 10,
+    };
+  }, [selectedCol, semanticProfile, metadata]);
+
+  const getTransformExplanation = () => {
+    if (!selectedColInfo) return '';
+    const { nullCount } = selectedColInfo;
+
+    switch (selectedTransformType) {
+      case 'CONVERT_NUMERIC':
+      case 'CONVERT_FLOAT':
+        return `${nullCount > 0 ? `${nullCount} values are missing and the ` : 'The '}column contains numeric-looking values. Converting to numeric parses numbers and converts unparseable tokens to missing (null). Semantic role refreshes to MEASURE.`;
+      case 'CONVERT_INTEGER':
+        return `Converts values to whole integers. If fractional values exist, conversion safely halts to prevent data loss unless explicitly confirmed.`;
+      case 'CONVERT_DATETIME':
+        return `Parses date and timestamp strings using standard patterns. Unparseable formats become missing.`;
+      case 'NORMALIZE_BOOLEAN':
+      case 'CONVERT_BOOLEAN':
+        return `Standardizes boolean representations (true/false, yes/no, 1/0) into strict boolean booleans.`;
+      case 'CONVERT_STRING':
+        return `Casts column values to clean text/string representation.`;
+      case 'TRIM_WHITESPACE':
+        return `Strips leading and trailing spaces, tabs, and newline characters from string values.`;
+      case 'NORMALIZE_EMPTY_STRINGS':
+        return `Converts empty ("") and whitespace-only text cells into true null/missing values.`;
+      case 'IMPUTE_MEDIAN':
+        return `Fills ${nullCount} missing values with the median of valid numeric values.`;
+      case 'IMPUTE_MEAN':
+        return `Fills ${nullCount} missing values with the arithmetic mean of valid numeric values.`;
+      case 'IMPUTE_MODE':
+        return `Fills ${nullCount} missing values with the most frequent value.`;
+      case 'IMPUTE_UNKNOWN':
+        return `Fills ${nullCount} missing values with the standard placeholder "Unknown".`;
+      case 'IMPUTE_SPECIFIC_VALUE':
+        return `Fills ${nullCount} missing values with user-provided constant "${customTransformVal || '...'}" after type validation.`;
+      case 'LEAVE_UNCHANGED':
+        return `Preserves missing values without modification.`;
+      default:
+        return 'Apply deterministic transformation to column.';
+    }
+  };
+
+  // Preview Action for Single User Column Transformation
+  const handlePreviewColumnTransform = async () => {
+    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    if (!targetDatasetId || !selectedCol) return;
+    setColPreviewLoading(true);
+    setColPreviewError(null);
+    try {
+      const res = await previewColumnTransformation(targetDatasetId, {
+        column_name: selectedCol,
+        operation: selectedTransformType,
+        custom_value: customTransformVal,
+        allow_fractional_truncation: allowFractional,
+      });
+      setColPreviewResult(res);
+      if (!res.is_valid && res.error_message) {
+        setColPreviewError(res.error_message);
+      }
+    } catch (err: any) {
+      setColPreviewError(err.message || 'Failed to preview column transformation.');
+      setColPreviewResult(null);
+    } finally {
+      setColPreviewLoading(false);
+    }
+  };
+
+  // Direct Apply for Single User Column Transformation
+  const handleApplySingleTransform = async () => {
+    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    if (!targetDatasetId || !selectedCol) return;
+    setIsPreviewOpen(false);
+    setExecutionState('applying');
+    setExecutionError(null);
+    setRegistrationState('idle');
+    setRegisteredData(null);
+    setRegistrationError(null);
+
+    const singleTransform: CustomColumnTransformation = {
+      column_name: selectedCol,
+      operation: selectedTransformType,
+      custom_value: customTransformVal,
+      allow_fractional_truncation: allowFractional,
+      source: 'USER',
+    };
+
+    try {
+      const timer = setTimeout(() => {
+        setExecutionState('validating');
+      }, 400);
+
+      const res = await applyCleaningPlan(
+        targetDatasetId,
+        [],
+        {},
+        {},
+        [singleTransform]
+      );
+      clearTimeout(timer);
+      setExecutionResult(res);
+      setExecutionState('complete');
+    } catch (err: any) {
+      setExecutionError(err.message || 'Failed to execute column transformation.');
+      setExecutionState('error');
+    }
+  };
+
+  const handleQueueCustomTransform = () => {
+    if (!selectedCol) return;
+    const newTransform: CustomColumnTransformation = {
+      column_name: selectedCol,
+      operation: selectedTransformType,
+      custom_value: customTransformVal,
+      allow_fractional_truncation: allowFractional,
+      source: 'USER',
+    };
+    setCustomTransformations((prev) => {
+      const filtered = prev.filter((t) => t.column_name !== selectedCol);
+      return [...filtered, newTransform];
+    });
+  };
+
+  const handleRemoveCustomTransform = (colName: string) => {
+    setCustomTransformations((prev) => prev.filter((t) => t.column_name !== colName));
+  };
+
   const filteredRecommendations = useMemo(() => {
     return allRecs.filter((rec) => {
       const isSelected = !!selections[rec.recommendation_id];
@@ -223,17 +406,19 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     });
   }, [allRecs, selections, activeFilter, searchQuery]);
 
-  // Preview Action
+  // Preview Action for Batch Plan
   const handleGeneratePreview = async () => {
-    if (!cleaningPlan || selectedIds.length === 0) return;
+    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    if (!targetDatasetId || (selectedIds.length === 0 && customTransformations.length === 0)) return;
     setIsLoadingPreview(true);
     setPreviewError(null);
     try {
       const res = await previewCleaningPlan(
-        cleaningPlan.dataset_id,
+        targetDatasetId,
         selectedIds,
         methodOverrides,
-        customValues
+        customValues,
+        customTransformations
       );
       setPreviewResult(res);
       setIsPreviewOpen(true);
@@ -245,9 +430,10 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     }
   };
 
-  // Apply Action
+  // Apply Action for Batch Plan
   const handleApplyCleaning = async () => {
-    if (!cleaningPlan || selectedIds.length === 0) return;
+    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    if (!targetDatasetId || (selectedIds.length === 0 && customTransformations.length === 0)) return;
     setIsPreviewOpen(false);
     setExecutionState('applying');
     setExecutionError(null);
@@ -261,10 +447,11 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }, 400);
 
       const res = await applyCleaningPlan(
-        cleaningPlan.dataset_id,
+        targetDatasetId,
         selectedIds,
         methodOverrides,
-        customValues
+        customValues,
+        customTransformations
       );
       clearTimeout(timer);
       setExecutionResult(res);
@@ -705,7 +892,330 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         </div>
       </div>
 
-      {/* 2. Filter & Selection Management Bar */}
+      {/* 2. User-Controlled Column Transformations Card */}
+      <Card className="p-5 border border-border/80 bg-surface shadow-xs space-y-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+              <Sliders className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-foreground">
+                  Column Transformations
+                </h3>
+                <Badge variant="blue" size="xs">
+                  User Controlled
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Directly configure datatype conversion, string normalization, or missing-value strategies for any column.
+              </p>
+            </div>
+          </div>
+
+          {customTransformations.length > 0 && (
+            <Badge variant="blue" size="xs">
+              {customTransformations.length} manual operation{customTransformations.length > 1 ? 's' : ''} queued
+            </Badge>
+          )}
+        </div>
+
+        {/* Column Selection & Action Form */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+          {/* Column Selector & Details */}
+          <div className="md:col-span-4 space-y-2">
+            <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+              <span>Select Column</span>
+              {selectedColInfo && (
+                <span className="text-2xs font-normal text-muted-foreground">
+                  {selectedColInfo.nullCount > 0 ? `${selectedColInfo.nullCount} missing (${selectedColInfo.nullPct}%)` : 'No missing values'}
+                </span>
+              )}
+            </label>
+            <select
+              value={selectedCol}
+              onChange={(e) => {
+                setSelectedCol(e.target.value);
+                setColPreviewResult(null);
+                setColPreviewError(null);
+              }}
+              className="w-full text-xs bg-surface-muted/40 border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:border-primary font-medium"
+            >
+              {availableColumns.map((col) => (
+                <option key={col} value={col}>
+                  {col}
+                </option>
+              ))}
+            </select>
+
+            {/* Column Metadata Badges */}
+            {selectedColInfo && (
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <Badge variant="slate" size="xs">
+                  Current Type: <span className="font-semibold ml-1">{selectedColInfo.dtype}</span>
+                </Badge>
+                <Badge variant="blue" size="xs">
+                  Semantic Role: <span className="font-semibold ml-1">{selectedColInfo.role}</span>
+                </Badge>
+              </div>
+            )}
+          </div>
+
+          {/* Transformation Selection */}
+          <div className="md:col-span-5 space-y-2">
+            <label className="text-xs font-semibold text-foreground block">
+              Transformation Action
+            </label>
+            <select
+              value={selectedTransformType}
+              onChange={(e) => {
+                setSelectedTransformType(e.target.value);
+                setColPreviewResult(null);
+                setColPreviewError(null);
+              }}
+              className="w-full text-xs bg-surface-muted/40 border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:border-primary font-medium"
+            >
+              <optgroup label="Datatype Conversions">
+                <option value="CONVERT_NUMERIC">Convert to Numeric / Float</option>
+                <option value="CONVERT_INTEGER">Convert to Integer (Safe Check)</option>
+                <option value="CONVERT_DATETIME">Convert to Datetime (ISO Parse)</option>
+                <option value="NORMALIZE_BOOLEAN">Convert to Boolean</option>
+                <option value="CONVERT_STRING">Convert to Text / String</option>
+              </optgroup>
+              <optgroup label="String Normalization">
+                <option value="TRIM_WHITESPACE">Trim Leading / Trailing Whitespace</option>
+                <option value="NORMALIZE_EMPTY_STRINGS">Normalize Empty Strings to Missing</option>
+              </optgroup>
+              <optgroup label="Missing-Value Strategies">
+                <option value="IMPUTE_MEDIAN">Impute with Median (Numeric)</option>
+                <option value="IMPUTE_MEAN">Impute with Mean (Numeric)</option>
+                <option value="IMPUTE_MODE">Impute with Most Frequent / Mode</option>
+                <option value="IMPUTE_UNKNOWN">Impute with 'Unknown' (Text)</option>
+                <option value="IMPUTE_SPECIFIC_VALUE">Impute with Specific Constant Value</option>
+                <option value="LEAVE_UNCHANGED">Leave Missing Unchanged</option>
+              </optgroup>
+            </select>
+
+            {/* Custom Value Input (if specific value selected) */}
+            {selectedTransformType === 'IMPUTE_SPECIFIC_VALUE' && (
+              <div className="pt-1">
+                <input
+                  type="text"
+                  placeholder="Enter constant value (e.g. 0.0 or N/A)..."
+                  value={customTransformVal}
+                  onChange={(e) => setCustomTransformVal(e.target.value)}
+                  className="w-full text-xs bg-surface border border-border rounded-md px-3 py-1.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Action Trigger */}
+          <div className="md:col-span-3 space-y-2 flex flex-col justify-end pt-5 md:pt-0">
+            <span className="text-2xs text-muted-foreground hidden md:block">
+              Simulate before applying
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handlePreviewColumnTransform}
+              disabled={colPreviewLoading || !selectedCol}
+              leftIcon={<Eye className="w-3.5 h-3.5" />}
+              className="w-full text-xs"
+            >
+              {colPreviewLoading ? 'Simulating...' : 'Preview Change'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Dynamic Contextual Explanation */}
+        <div className="p-3 bg-surface-muted/30 border border-border/60 rounded-lg text-xs flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            {getTransformExplanation()}
+          </p>
+        </div>
+
+        {/* Error Display */}
+        {colPreviewError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs flex items-start gap-2.5 text-rose-500">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-semibold block">Transformation Validation Error</span>
+              <p className="text-2xs text-rose-600 dark:text-rose-400">{colPreviewError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Fractional Warning & Truncation Confirmation */}
+        {colPreviewResult && colPreviewResult.fractional_loss_count > 0 && (
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs space-y-2 text-amber-600 dark:text-amber-400">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold block">Fractional Truncation Notice</span>
+                <p className="text-2xs mt-0.5">
+                  Integer conversion would truncate fractional values across {colPreviewResult.fractional_loss_count} rows (e.g. 12.5 → 12).
+                </p>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer pt-1 text-2xs font-semibold text-foreground">
+              <input
+                type="checkbox"
+                checked={allowFractional}
+                onChange={(e) => setAllowFractional(e.target.checked)}
+                className="rounded text-primary focus:ring-primary h-3.5 w-3.5 border-border bg-surface"
+              />
+              <span>Explicitly allow truncation of fractional values to integer</span>
+            </label>
+          </div>
+        )}
+
+        {/* Deterministic Preview Result Panel */}
+        {colPreviewResult && colPreviewResult.is_valid && (
+          <div className="p-4 bg-surface-muted/20 border border-primary/20 rounded-lg space-y-3.5">
+            <div className="flex items-center justify-between pb-2 border-b border-border/60">
+              <span className="text-xs font-bold text-foreground">
+                Conversion Preview: {colPreviewResult.column_name}
+              </span>
+              <Badge variant="green" size="xs">
+                {colPreviewResult.target_type}
+              </Badge>
+            </div>
+
+            {/* Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div className="p-2.5 bg-surface border border-border rounded-md">
+                <span className="text-2xs text-muted-foreground block">Data Type</span>
+                <span className="font-semibold text-foreground text-xs">
+                  {colPreviewResult.original_dtype} → <span className="text-primary font-bold">{colPreviewResult.target_dtype}</span>
+                </span>
+              </div>
+              <div className="p-2.5 bg-surface border border-border rounded-md">
+                <span className="text-2xs text-muted-foreground block">Converted</span>
+                <span className="font-bold text-emerald-500 text-xs">
+                  {colPreviewResult.converted_count} rows
+                </span>
+              </div>
+              <div className="p-2.5 bg-surface border border-border rounded-md">
+                <span className="text-2xs text-muted-foreground block">Unparseable / Failed</span>
+                <span className={`font-bold text-xs ${colPreviewResult.unparseable_count > 0 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                  {colPreviewResult.unparseable_count} {colPreviewResult.unparseable_count > 0 ? '(coerced to null)' : ''}
+                </span>
+              </div>
+              <div className="p-2.5 bg-surface border border-border rounded-md">
+                <span className="text-2xs text-muted-foreground block">Missing Values</span>
+                <span className="font-semibold text-foreground text-xs">
+                  {colPreviewResult.original_missing_count} → {colPreviewResult.new_missing_count}
+                </span>
+              </div>
+            </div>
+
+            {/* Unparseable values badges */}
+            {colPreviewResult.unparseable_samples && colPreviewResult.unparseable_samples.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap text-2xs pt-1">
+                <span className="text-muted-foreground font-medium">Unparseable tokens coerced to null:</span>
+                {colPreviewResult.unparseable_samples.slice(0, 5).map((s, idx) => (
+                  <Badge key={idx} variant="amber" size="xs">
+                    "{String(s)}"
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Sample Changes Table */}
+            {colPreviewResult.sample_changes && colPreviewResult.sample_changes.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <span className="text-2xs font-semibold text-foreground block">
+                  Sample Value Changes (First {colPreviewResult.sample_changes.length} rows)
+                </span>
+                <div className="border border-border rounded-md overflow-hidden max-h-36 overflow-y-auto">
+                  <table className="w-full text-2xs text-left">
+                    <thead className="bg-surface-muted text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="p-1.5">Row</th>
+                        <th className="p-1.5">Before Value</th>
+                        <th className="p-1.5">Cleaned / Target Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border font-mono">
+                      {colPreviewResult.sample_changes.map((change, idx) => (
+                        <tr key={idx} className="hover:bg-surface-muted/30">
+                          <td className="p-1.5 text-muted-foreground font-sans">#{change.row_index}</td>
+                          <td className="p-1.5 text-rose-500 line-through truncate max-w-[150px]">
+                            {change.before_value === null ? 'NULL' : String(change.before_value)}
+                          </td>
+                          <td className="p-1.5 text-emerald-500 font-bold truncate max-w-[150px]">
+                            {change.after_value === null ? 'NULL' : String(change.after_value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons for Previewed Transformation */}
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-border/60">
+              <Button
+                variant="secondary"
+                size="xs"
+                onClick={handleQueueCustomTransform}
+                leftIcon={<PlusCircle className="w-3.5 h-3.5 text-primary" />}
+                className="text-xs"
+              >
+                Add to Cleaning Plan
+              </Button>
+              <Button
+                variant="primary"
+                size="xs"
+                onClick={handleApplySingleTransform}
+                leftIcon={<Play className="w-3.5 h-3.5" />}
+                className="text-xs"
+              >
+                Apply Transformation Directly
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Queued Custom Transformations List */}
+        {customTransformations.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <span className="text-xs font-semibold text-foreground block">
+              Queued User Transformations ({customTransformations.length})
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {customTransformations.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 p-2 bg-primary/5 border border-primary/20 rounded-md text-xs"
+                >
+                  <span className="font-semibold text-foreground font-mono">{t.column_name}</span>
+                  <Badge variant="blue" size="xs">
+                    {t.operation.replace(/_/g, ' ')}
+                  </Badge>
+                  {t.custom_value && (
+                    <span className="text-2xs text-muted-foreground font-mono">val="{t.custom_value}"</span>
+                  )}
+                  <button
+                    onClick={() => handleRemoveCustomTransform(t.column_name)}
+                    className="text-muted-foreground hover:text-rose-500 focus:outline-none ml-1"
+                    title="Remove transformation"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* 3. Filter & Selection Management Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-border">
         {/* Filter Pills */}
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -1062,8 +1572,8 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
               <h4 className="text-sm font-bold text-foreground">
                 Cleaning Plan Execution
               </h4>
-              <Badge variant={selectedCount > 0 ? 'blue' : 'slate'} size="xs">
-                {selectedCount} of {cleaningPlan.total_recommendations} Operations Selected
+              <Badge variant={(selectedCount + customTransformations.length) > 0 ? 'blue' : 'slate'} size="xs">
+                {selectedCount} Plan Ops {customTransformations.length > 0 ? `+ ${customTransformations.length} Manual` : ''}
                 {modifiedCount > 0 ? ` · ${modifiedCount} Modified` : ''}
               </Badge>
             </div>
@@ -1078,7 +1588,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             variant="secondary"
             size="sm"
             onClick={handleGeneratePreview}
-            disabled={selectedCount === 0 || isLoadingPreview || executionState === 'applying' || executionState === 'validating'}
+            disabled={(selectedCount + customTransformations.length) === 0 || isLoadingPreview || executionState === 'applying' || executionState === 'validating'}
             leftIcon={<Eye className="w-3.5 h-3.5" />}
             className="text-xs"
           >
@@ -1089,11 +1599,11 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
             variant="primary"
             size="sm"
             onClick={handleApplyCleaning}
-            disabled={selectedCount === 0 || executionState === 'applying' || executionState === 'validating'}
+            disabled={(selectedCount + customTransformations.length) === 0 || executionState === 'applying' || executionState === 'validating'}
             leftIcon={<Play className="w-3.5 h-3.5" />}
             className="text-xs"
           >
-            Apply Cleaning ({selectedCount})
+            Apply Cleaning ({selectedCount + customTransformations.length})
           </Button>
         </div>
       </Card>
@@ -1113,7 +1623,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                     Cleaning Operations Preview
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    Deterministic simulation across {selectedCount} selected operations. Raw data is untouched.
+                    Deterministic simulation across {selectedCount + customTransformations.length} selected and manual operations. Raw data is untouched.
                   </p>
                 </div>
               </div>

@@ -256,4 +256,56 @@ class TileQueryResponse(BaseModel):
     message: Optional[str] = None
 
 
+class EDAExploreRequest(BaseModel):
+    """Request payload for interactive exploratory data analysis."""
+
+    chart_type: str = "scatter"  # "scatter" | "line" | "bar" | "distribution"
+    x_column: str
+    y_column: Optional[str] = None
+    group_by: Optional[str] = None
+    aggregation: str = "mean"  # "mean" | "sum" | "median" | "count" | "min" | "max"
+    time_granularity: Optional[str] = None  # "day" | "month" | "quarter" | "year"
+
+
+class ColumnTransformPreviewRequest(BaseModel):
+    """Request payload for deterministic preview of a single column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: Optional[str] = None
+    custom_value: Optional[Any] = None
+    allow_fractional_truncation: bool = False
+
+
+class ColumnTransformPreviewResponse(BaseModel):
+    """Response payload with preview metrics for a column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: str
+    original_dtype: str
+    target_dtype: str
+    total_rows: int
+    non_null_count: int
+    converted_count: int
+    unparseable_count: int
+    unparseable_samples: List[Any] = Field(default_factory=list)
+    fractional_loss_count: int = 0
+    original_missing_count: int = 0
+    new_missing_count: int = 0
+    is_valid: bool = True
+    error_message: Optional[str] = None
+    sample_changes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class CleaningSelectionRequest(BaseModel):
+    """Request payload for cleaning preview or apply."""
+
+    selected_recommendation_ids: List[str] = Field(default_factory=list)
+    operation_overrides: Optional[Dict[str, str]] = Field(default_factory=dict)
+    operation_values: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    custom_transformations: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+
+
+
 

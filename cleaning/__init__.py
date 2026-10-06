@@ -23,6 +23,7 @@ from cleaning.models import (
     CleaningResult,
     CleaningValidationCheck,
     CleaningValidationResult,
+    ColumnTransformPreviewResult,
     OperationExecutionResult,
     SampleCellChange,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "CleaningPreviewResult",
     "CleaningValidationCheck",
     "CleaningValidationResult",
+    "ColumnTransformPreviewResult",
     "OperationExecutionResult",
     "SampleCellChange",
 ]
