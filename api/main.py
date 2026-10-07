@@ -715,9 +715,10 @@ def get_dataset_cleaning_plan(dataset_id: str):
             detail=f"Dataset '{dataset_id}' not found in current session.",
         )
 
+    target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
     planner = CleaningPlanner()
     plan = planner.generate_plan(
-        canonical=record.dataset,
+        canonical=target_dataset,
         profile=record.profile,
         semantic_profile=record.semantic_profile,
         quality_assessment=getattr(record, "quality_assessment", None),
@@ -742,8 +743,9 @@ def preview_column_transformation(dataset_id: str, request: ColumnTransformPrevi
 
     try:
         executor = CleaningExecutor()
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
         preview_result = executor.preview_column_transformation(
-            canonical=record.dataset,
+            canonical=target_dataset,
             column_name=request.column_name,
             operation=request.operation,
             target_type=request.target_type,
@@ -872,13 +874,26 @@ def apply_multivalue_transformation(dataset_id: str, request: MultiValueApplyReq
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        record.registered_cleaned_dataset_id = None  # Invalidate previous registration
 
         # Refresh profiler / semantic analyzer metadata on the newly created cleaned dataset
         try:
             profiler = DataProfiler()
             record.profile = profiler.profile(cleaned_canonical, attach=True)
             semantic_analyzer = SemanticAnalyzer()
-            record.semantic_profile = semantic_analyzer.analyze(cleaned_canonical)
+            sem_profile = semantic_analyzer.analyze(cleaned_canonical)
+            if hasattr(record, "user_semantic_role_overrides") and record.user_semantic_role_overrides:
+                for col_name, role_str in record.user_semantic_role_overrides.items():
+                    if col_name in cleaned_canonical.data.columns:
+                        ev = sem_profile.get_evidence(col_name)
+                        if ev is not None:
+                            if not hasattr(ev, "system_role") or getattr(ev, "system_role") is None:
+                                ev.system_role = ev.candidate_role
+                            ev.user_override_role = ColumnRole(role_str)
+                            ev.candidate_role = ColumnRole(role_str)
+                            ev.is_user_overridden = True
+                            ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {role_str}."]
+            record.semantic_profile = sem_profile
         except Exception:
             pass  # Non-fatal metadata refresh
 
@@ -1010,6 +1025,7 @@ def apply_drop_columns(dataset_id: str, request: DropColumnsRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        record.registered_cleaned_dataset_id = None  # Invalidate cached registration
 
         # Refresh profiler and semantics
         try:
@@ -1129,6 +1145,7 @@ def apply_filter_rows(dataset_id: str, request: RowFilterRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        record.registered_cleaned_dataset_id = None  # Invalidate cached registration
 
         try:
             profiler = DataProfiler()
@@ -1237,6 +1254,7 @@ def apply_duplicate_removal(dataset_id: str, request: DuplicateRemovalRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        record.registered_cleaned_dataset_id = None  # Invalidate cached registration
 
         try:
             profiler = DataProfiler()
@@ -1344,6 +1362,7 @@ def apply_semantic_role_override(dataset_id: str, request: SemanticRoleOverrideR
             user_role_overrides_dict=record.user_semantic_role_overrides,
         )
         record.semantic_profile = updated_sem_profile
+        record.registered_cleaned_dataset_id = None  # Invalidate cached registration
 
         # Also update column metadata schema if present
         for col in target_dataset.metadata.schema:
@@ -1379,7 +1398,7 @@ def apply_semantic_role_override(dataset_id: str, request: SemanticRoleOverrideR
 
 @app.post("/api/datasets/{dataset_id}/cleaning/preview")
 def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
-    """Generate a non-mutating preview of selected cleaning operations against raw dataset."""
+    """Generate a non-mutating preview of selected cleaning operations against canonical cleaned dataset."""
     from cleaning.executor import CleaningExecutionError, CleaningExecutor
     from cleaning.planner import CleaningPlanner
 
@@ -1391,16 +1410,17 @@ def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest)
         )
 
     try:
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
         planner = CleaningPlanner()
         plan = planner.generate_plan(
-            canonical=record.dataset,
+            canonical=target_dataset,
             profile=record.profile,
             semantic_profile=record.semantic_profile,
             quality_assessment=getattr(record, "quality_assessment", None),
         )
         executor = CleaningExecutor(planner=planner)
         preview_result = executor.preview(
-            canonical=record.dataset,
+            canonical=target_dataset,
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
             operation_overrides=request.operation_overrides,
@@ -1422,9 +1442,11 @@ def preview_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest)
 
 @app.post("/api/datasets/{dataset_id}/cleaning/apply")
 def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
-    """Execute selected cleaning operations on a copy of raw dataset, validating results."""
+    """Execute selected cleaning operations on a copy of current cleaned/raw dataset, validating results."""
     from cleaning.executor import CleaningExecutionError, CleaningExecutor
     from cleaning.planner import CleaningPlanner
+    from intelligence.profiler import DataProfiler
+    from intelligence.semantic_analyzer import SemanticAnalyzer
 
     record = session_store.get(dataset_id)
     if not record:
@@ -1434,16 +1456,17 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
         )
 
     try:
+        target_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
         planner = CleaningPlanner()
         plan = planner.generate_plan(
-            canonical=record.dataset,
+            canonical=target_dataset,
             profile=record.profile,
             semantic_profile=record.semantic_profile,
             quality_assessment=getattr(record, "quality_assessment", None),
         )
         executor = CleaningExecutor(planner=planner)
         exec_result, cleaned_canonical = executor.execute(
-            canonical=record.dataset,
+            canonical=target_dataset,
             selected_recommendation_ids=request.selected_recommendation_ids,
             plan=plan,
             operation_overrides=request.operation_overrides,
@@ -1454,6 +1477,28 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
         # Store in-memory cleaned CanonicalDataset on record without mutating raw record.dataset
         record.cleaned_dataset = cleaned_canonical
         record.last_cleaning_result = exec_result.to_dict()
+        record.registered_cleaned_dataset_id = None  # Invalidate cached registration
+
+        # Refresh profiler and semantics on record
+        try:
+            profiler = DataProfiler()
+            record.profile = profiler.profile(cleaned_canonical, attach=True)
+            semantic_analyzer = SemanticAnalyzer()
+            sem_profile = semantic_analyzer.analyze(cleaned_canonical)
+            if hasattr(record, "user_semantic_role_overrides") and record.user_semantic_role_overrides:
+                for col_name, role_str in record.user_semantic_role_overrides.items():
+                    if col_name in cleaned_canonical.data.columns:
+                        ev = sem_profile.get_evidence(col_name)
+                        if ev is not None:
+                            if not hasattr(ev, "system_role") or getattr(ev, "system_role") is None:
+                                ev.system_role = ev.candidate_role
+                            ev.user_override_role = ColumnRole(role_str)
+                            ev.candidate_role = ColumnRole(role_str)
+                            ev.is_user_overridden = True
+                            ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {role_str}."]
+            record.semantic_profile = sem_profile
+        except Exception:
+            pass
 
         return exec_result.to_dict()
     except CleaningExecutionError as ex:
@@ -1478,13 +1523,17 @@ def register_cleaned_dataset(dataset_id: str):
             detail=f"Dataset '{dataset_id}' not found in current session.",
         )
 
-    if record.cleaned_dataset is None or not record.last_cleaning_result:
+    target_cleaned = record.cleaned_dataset if record.cleaned_dataset is not None else (
+        record.dataset if record.last_cleaning_result else None
+    )
+
+    if target_cleaned is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No validated cleaned result is available. Apply cleaning first.",
         )
 
-    # Check for duplicate registration - return existing registered cleaned dataset
+    # Check for duplicate registration - return existing registered cleaned dataset if unchanged
     if record.registered_cleaned_dataset_id:
         existing_cleaned = session_store.get(record.registered_cleaned_dataset_id)
         if existing_cleaned:
@@ -1514,27 +1563,27 @@ def register_cleaned_dataset(dataset_id: str):
     # Extract schema from cleaned data
     from ingestion.loaders import CSVLoader
     loader = CSVLoader()
-    schema = loader.extract_column_metadata(record.cleaned_dataset.data)
+    schema = loader.extract_column_metadata(target_cleaned.data)
 
     from ingestion.models import CanonicalDataset, DatasetMetadata
     cleaned_meta = DatasetMetadata(
         dataset_id=cleaned_dataset_id,
         name=cleaned_name,
         source_type=record.dataset.metadata.source_type,
-        row_count=len(record.cleaned_dataset.data),
-        column_count=len(record.cleaned_dataset.data.columns),
+        row_count=len(target_cleaned.data),
+        column_count=len(target_cleaned.data.columns),
         schema=schema,
         custom_metadata={
             "source_dataset_id": dataset_id,
             "source_dataset_name": record.dataset.metadata.name,
             "derivation": "cleaning",
             "derived_from_cleaning": True,
-            "operations_applied": record.last_cleaning_result.get("operations_applied", 0),
+            "operations_applied": (record.last_cleaning_result or {}).get("operations_applied", 0),
         },
     )
     cleaned_canonical = CanonicalDataset(
         metadata=cleaned_meta,
-        data=record.cleaned_dataset.data.copy(deep=True),
+        data=target_cleaned.data.copy(deep=True),
     )
 
     # Run profiler, semantic analyzer, readiness validator
@@ -1568,7 +1617,7 @@ def register_cleaned_dataset(dataset_id: str):
 
 @app.get("/api/datasets/{dataset_id}/download")
 def download_dataset(dataset_id: str, format: str = "csv"):
-    """Download registered dataset in CSV or XLSX format."""
+    """Download registered dataset or latest cleaned state in CSV or XLSX format."""
     record = session_store.get(dataset_id)
     if not record:
         raise HTTPException(
@@ -1583,11 +1632,12 @@ def download_dataset(dataset_id: str, format: str = "csv"):
             detail=f"Unsupported download format '{format}'. Supported formats: csv, xlsx.",
         )
 
-    base_name = os.path.splitext(record.dataset.metadata.name)[0]
+    active_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+    base_name = os.path.splitext(active_dataset.metadata.name)[0]
     safe_base = "".join(c if (c.isalnum() or c in "._- ") else "_" for c in base_name).strip() or "dataset"
 
     if norm_format == "csv":
-        csv_bytes = record.dataset.data.to_csv(index=False).encode("utf-8")
+        csv_bytes = active_dataset.data.to_csv(index=False).encode("utf-8")
         filename = f"{safe_base}.csv"
         return Response(
             content=csv_bytes,
@@ -1597,7 +1647,7 @@ def download_dataset(dataset_id: str, format: str = "csv"):
     elif norm_format == "xlsx":
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            record.dataset.data.to_excel(writer, index=False, sheet_name="Sheet1")
+            active_dataset.data.to_excel(writer, index=False, sheet_name="Sheet1")
         xlsx_bytes = output.getvalue()
         filename = f"{safe_base}.xlsx"
         return Response(
