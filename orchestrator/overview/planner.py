@@ -254,7 +254,14 @@ class OverviewDashboardPlanner:
             elif role == ColumnRole.MEASURE or (is_num and nunique > 5):
                 # Ensure it's not a pure sequential identifier
                 if not (ev and ev.candidate_role == ColumnRole.IDENTIFIER):
-                    measures.append(col)
+                    if is_num:
+                        measures.append(col)
+                    else:
+                        valid_num = pd.to_numeric(df[col].dropna(), errors="coerce").dropna()
+                        if len(valid_num) > 1 and (len(valid_num) / max(len(df[col].dropna()), 1)) >= 0.5:
+                            measures.append(col)
+                        elif 2 <= nunique <= 40:
+                            dimensions.append(col)
             elif role == ColumnRole.DIMENSION or (not is_num and 2 <= nunique <= 40):
                 dimensions.append(col)
             elif role == ColumnRole.IDENTIFIER:
@@ -346,7 +353,10 @@ class OverviewDashboardPlanner:
                 m_title = _format_kpi_title(m, agg)
 
             if exec_kpi.status == ExecutionStatus.SUCCESS and exec_kpi.rows:
-                kpi_val = list(exec_kpi.rows[0].values())[0]
+                raw_kpi = list(exec_kpi.rows[0].values())[0]
+                kpi_val = raw_kpi if raw_kpi is not None else 0
+                if isinstance(kpi_val, float):
+                    kpi_val = round(kpi_val, 2)
                 kpi_tile = DashboardTile(
                     id=f"tile_kpi_{uuid4().hex[:8]}",
                     title=m_title,

@@ -305,7 +305,7 @@ def evaluate_trend(
         return 0.0, 1.0, {}
 
     x = np.arange(t_points, dtype=float)
-    y = ts.values.astype(float)
+    y = pd.to_numeric(pd.Series(ts.values), errors="coerce").fillna(0.0).values.astype(float)
 
     x_mean = np.mean(x)
     y_mean = np.mean(y)
@@ -363,8 +363,8 @@ def evaluate_correlation(
     if n < 4:
         return 0.0, 1.0, {}
 
-    x = clean[m1].values.astype(float)
-    y = clean[m2].values.astype(float)
+    x = pd.to_numeric(pd.Series(clean[m1].values), errors="coerce").fillna(0.0).values.astype(float)
+    y = pd.to_numeric(pd.Series(clean[m2].values), errors="coerce").fillna(0.0).values.astype(float)
     sx = np.std(x)
     sy = np.std(y)
 

@@ -2252,11 +2252,12 @@ def handle_discover_insights(req: DiscoverInsightsRequest):
                 "status_code": 404,
             },
         )
-    dataset = record.dataset
+    dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+    profile = record.profile
     semantic_profile = record.semantic_profile
     if not semantic_profile:
         from intelligence.semantic_analyzer import analyze_semantics
-        semantic_profile = analyze_semantics(dataset, record.profile)
+        semantic_profile = analyze_semantics(dataset, profile)
         record.semantic_profile = semantic_profile
 
     from orchestrator.insights import generate_grounded_insights
@@ -2312,11 +2313,12 @@ def handle_overview_dashboard(req: OverviewDashboardRequest):
                 "status_code": 404,
             },
         )
-    dataset = record.dataset
+    dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+    profile = record.profile
     semantic_profile = record.semantic_profile
     if not semantic_profile:
         from intelligence.semantic_analyzer import analyze_semantics
-        semantic_profile = analyze_semantics(dataset, record.profile)
+        semantic_profile = analyze_semantics(dataset, profile)
         record.semantic_profile = semantic_profile
 
     from orchestrator.overview import generate_overview_dashboard
@@ -2325,7 +2327,7 @@ def handle_overview_dashboard(req: OverviewDashboardRequest):
         dataset=dataset,
         semantic_profile=semantic_profile,
         readiness=record.readiness,
-        data_profile=record.profile,
+        data_profile=profile,
         use_llm=req.use_llm if req.use_llm is not None else True,
     )
 
