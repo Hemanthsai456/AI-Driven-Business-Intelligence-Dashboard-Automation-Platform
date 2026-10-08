@@ -60,6 +60,7 @@ import {
   SemanticProfile,
   SemanticRoleOverrideResponse,
   StructuralQualityRecommendation,
+  CleanedDatasetSummaryResponse,
 } from '../../lib/types';
 import {
   applyCleaningPlan,
@@ -68,6 +69,7 @@ import {
   applyMultiValue,
   applyRemoveDuplicates,
   applySemanticRoleOverride,
+  getCleanedDatasetSummary,
   getDatasetDownloadUrl,
   getMultiValueCandidates,
   getStructuralRecommendations,
@@ -256,6 +258,26 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [registrationState, setRegistrationState] = useState<RegistrationState>('idle');
   const [registeredData, setRegisteredData] = useState<RegisterCleanedDatasetResponse | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
+
+  // Cleaned Dataset Summary State (Part 1)
+  const [summary, setSummary] = useState<CleanedDatasetSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState<boolean>(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const fetchCleaningSummary = async () => {
+    const datasetId = metadata?.dataset_id;
+    if (!datasetId) return;
+    setIsLoadingSummary(true);
+    setSummaryError(null);
+    try {
+      const res = await getCleanedDatasetSummary(datasetId);
+      setSummary(res);
+    } catch (err: any) {
+      setSummaryError(err.message || 'Failed to fetch cleaned dataset summary.');
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  };
 
   // Update selections when cleaningPlan changes (e.g. switching datasets)
   React.useEffect(() => {
@@ -541,6 +563,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   React.useEffect(() => {
     fetchMvCandidates();
+    fetchCleaningSummary();
     setMvPreviewResult(null);
     setMvPreviewError(null);
     setActiveMvCol(null);
@@ -608,6 +631,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchMvCandidates();
       await fetchStructRecs();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setMvApplyError(err.message || 'Failed to apply multi-value transformation.');
     } finally {
@@ -720,6 +744,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchStructRecs();
       await fetchMvCandidates();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setDropApplyError(err.message || 'Failed to apply column drop.');
     } finally {
@@ -791,6 +816,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchStructRecs();
       await fetchMvCandidates();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setFilterApplyError(err.message || 'Failed to apply row filter.');
     } finally {
@@ -836,6 +862,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchStructRecs();
       await fetchMvCandidates();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setDupApplyError(err.message || 'Failed to apply duplicate removal.');
     } finally {
@@ -892,6 +919,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchStructRecs();
       await fetchMvCandidates();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setRoleApplyError(err.message || 'Failed to apply semantic role override.');
     } finally {
@@ -981,6 +1009,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       }
       await fetchStructRecs();
       await fetchMvCandidates();
+      await fetchCleaningSummary();
     } catch (err: any) {
       setExecutionError(err.message || 'Failed to execute cleaning plan.');
       setExecutionState('error');
@@ -3665,6 +3694,256 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
           </Card>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* PART 1 — CLEANED DATASET SUMMARY BEFORE REGISTRATION                     */}
+      {/* ========================================================================= */}
+      <Card className="p-6 border border-primary/20 bg-surface/90 backdrop-blur-sm space-y-6">
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-lg bg-primary/10 text-primary shrink-0">
+              <FileCheck2 className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-bold text-foreground">
+                  Cleaned Dataset Summary
+                </h3>
+                <Badge
+                  variant={summary?.has_cleaned ? 'green' : 'slate'}
+                  size="xs"
+                >
+                  {summary?.has_cleaned ? 'Active Cleaned State' : 'Initial Raw State'}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {summary?.has_cleaned
+                  ? summary.status_message
+                  : 'No cleaning changes have been applied yet.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Registration Trigger if Cleaned State Exists */}
+          {summary?.has_cleaned && (
+            <div className="flex items-center gap-2.5">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleRegisterCleaned}
+                disabled={registrationState === 'registering'}
+                leftIcon={<Sparkles className="w-3.5 h-3.5" />}
+                className="text-xs shrink-0"
+              >
+                {registrationState === 'registering'
+                  ? 'Registering...'
+                  : registrationState === 'registered'
+                  ? 'Registered'
+                  : 'Register Cleaned Dataset'}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {summaryError && (
+          <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-500 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{summaryError}</span>
+          </div>
+        )}
+
+        {/* 1. Summary Metrics: Rows, Columns, Missing cells, Duplicate rows */}
+        {summary ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            {/* Rows */}
+            <div className="p-3.5 bg-surface-muted/40 border border-border rounded-lg space-y-1.5">
+              <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Rows
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {summary.metrics.rows.before.toLocaleString()}
+                </span>
+                <span className="text-xs text-muted-foreground">→</span>
+                <span className="text-sm font-bold text-foreground font-mono">
+                  {summary.metrics.rows.after.toLocaleString()}
+                </span>
+              </div>
+              <div className="text-2xs">
+                {summary.metrics.rows.change !== 0 ? (
+                  <span className={summary.metrics.rows.change < 0 ? 'text-amber-500 font-semibold' : 'text-emerald-500 font-semibold'}>
+                    {summary.metrics.rows.change > 0 ? `+${summary.metrics.rows.change}` : summary.metrics.rows.change} rows
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Unchanged</span>
+                )}
+              </div>
+            </div>
+
+            {/* Columns */}
+            <div className="p-3.5 bg-surface-muted/40 border border-border rounded-lg space-y-1.5">
+              <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Columns
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {summary.metrics.columns.before}
+                </span>
+                <span className="text-xs text-muted-foreground">→</span>
+                <span className="text-sm font-bold text-foreground font-mono">
+                  {summary.metrics.columns.after}
+                </span>
+              </div>
+              <div className="text-2xs">
+                {summary.metrics.columns.change !== 0 ? (
+                  <span className={summary.metrics.columns.change < 0 ? 'text-amber-500 font-semibold' : 'text-emerald-500 font-semibold'}>
+                    {summary.metrics.columns.change > 0 ? `+${summary.metrics.columns.change}` : summary.metrics.columns.change} cols
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Unchanged</span>
+                )}
+              </div>
+            </div>
+
+            {/* Missing Cells */}
+            <div className="p-3.5 bg-surface-muted/40 border border-border rounded-lg space-y-1.5">
+              <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Missing Cells
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {summary.metrics.missing_cells.before.toLocaleString()}
+                </span>
+                <span className="text-xs text-muted-foreground">→</span>
+                <span className="text-sm font-bold text-foreground font-mono">
+                  {summary.metrics.missing_cells.after.toLocaleString()}
+                </span>
+              </div>
+              <div className="text-2xs">
+                {summary.metrics.missing_cells.change < 0 ? (
+                  <span className="text-emerald-500 font-semibold">
+                    {summary.metrics.missing_cells.change} cells resolved
+                  </span>
+                ) : summary.metrics.missing_cells.after === 0 ? (
+                  <span className="text-emerald-500 font-semibold">0 missing cells</span>
+                ) : (
+                  <span className="text-muted-foreground">Unchanged</span>
+                )}
+              </div>
+            </div>
+
+            {/* Duplicate Rows */}
+            <div className="p-3.5 bg-surface-muted/40 border border-border rounded-lg space-y-1.5">
+              <span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                Duplicate Rows
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-muted-foreground font-mono">
+                  {summary.metrics.duplicate_rows.before.toLocaleString()}
+                </span>
+                <span className="text-xs text-muted-foreground">→</span>
+                <span className="text-sm font-bold text-foreground font-mono">
+                  {summary.metrics.duplicate_rows.after.toLocaleString()}
+                </span>
+              </div>
+              <div className="text-2xs">
+                {summary.metrics.duplicate_rows.change < 0 ? (
+                  <span className="text-emerald-500 font-semibold">
+                    {summary.metrics.duplicate_rows.change} duplicates removed
+                  </span>
+                ) : summary.metrics.duplicate_rows.after === 0 ? (
+                  <span className="text-emerald-500 font-semibold">0 duplicate rows</span>
+                ) : (
+                  <span className="text-muted-foreground">Unchanged</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            {isLoadingSummary ? 'Loading dataset summary...' : 'No summary data available.'}
+          </div>
+        )}
+
+        {/* 2. Changes Applied */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-foreground">Changes Applied</span>
+            {summary?.changes_applied && summary.changes_applied.length > 0 && (
+              <Badge variant="blue" size="xs">
+                {summary.changes_applied.length} operation(s) applied
+              </Badge>
+            )}
+          </div>
+
+          {summary?.changes_applied && summary.changes_applied.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {summary.changes_applied.map((change, idx) => (
+                <div
+                  key={idx}
+                  className="p-2.5 bg-surface-muted/30 border border-border/70 rounded-md flex items-start gap-2 text-xs"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <span className="text-foreground leading-relaxed">{change}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              No cleaning changes have been applied yet.
+            </p>
+          )}
+        </div>
+
+        {/* 3. Remaining Data Quality Issues */}
+        <div className="space-y-2 pt-2 border-t border-border">
+          <span className="text-xs font-bold text-foreground block">
+            Remaining Data Quality Issues
+          </span>
+
+          {summary?.remaining_quality_issues && summary.remaining_quality_issues.length > 0 ? (
+            <div className="space-y-1.5">
+              {summary.remaining_quality_issues.map((issue, idx) => {
+                const isClean = issue.includes('No major') || issue.includes('✓');
+                return (
+                  <div
+                    key={idx}
+                    className={`p-2.5 rounded-md border flex items-start gap-2 text-xs ${
+                      isClean
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-medium'
+                        : 'bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300'
+                    }`}
+                  >
+                    {isClean ? (
+                      <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    )}
+                    <span className="leading-relaxed">{issue}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md text-xs text-emerald-500 font-medium flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              <span>✓ No major data-quality issues detected.</span>
+            </div>
+          )}
+        </div>
+
+        {/* 4. Raw Data Protection Notice */}
+        <div className="pt-3 border-t border-border flex items-center justify-between gap-3 flex-wrap text-2xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+            <span className="font-semibold text-foreground">
+              Original dataset remains unchanged.
+            </span>
+            <span>All operations run on in-memory working datasets.</span>
+          </div>
+        </div>
+      </Card>
 
       {/* 4. Action Bar (Preview & Batch Apply) */}
       <Card className="p-4 border border-primary/30 bg-primary-soft/10 flex flex-col sm:flex-row items-center justify-between gap-4 sticky bottom-4 shadow-lg backdrop-blur-md">

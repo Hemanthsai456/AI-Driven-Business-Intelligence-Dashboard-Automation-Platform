@@ -36,7 +36,17 @@ class DatasetSessionRecord:
         self.user_semantic_role_overrides: Dict[str, str] = {}
         self.cached_candidates: Dict[str, List[Any]] = {}
         self.conversations: Dict[str, ConversationContext] = {}
+        self.applied_operations: List[Dict[str, Any]] = []
         self.created_at = datetime.now(timezone.utc).isoformat()
+
+    def record_applied_operation(self, op_type: str, summary: str, details: Optional[Dict[str, Any]] = None) -> None:
+        """Record an authoritative applied cleaning operation."""
+        self.applied_operations.append({
+            "type": op_type,
+            "summary": summary,
+            "details": details or {},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     def get_or_create_conversation(self, conversation_id: Optional[str] = None) -> ConversationContext:
         """Retrieve existing ConversationContext or create a new one."""

@@ -28,6 +28,7 @@ import {
   SemanticRoleOverrideRequest,
   SemanticRoleOverrideResponse,
   StructuralApplyResponse,
+  CleanedDatasetSummaryResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -160,6 +161,13 @@ export async function registerCleanedDataset(datasetId: string): Promise<Registe
     method: 'POST',
   });
   return handleResponse<RegisterCleanedDatasetResponse>(res);
+}
+
+export async function getCleanedDatasetSummary(
+  datasetId: string
+): Promise<CleanedDatasetSummaryResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning-summary`);
+  return handleResponse<CleanedDatasetSummaryResponse>(res);
 }
 
 export function getDatasetDownloadUrl(datasetId: string, format: 'csv' | 'xlsx'): string {

@@ -506,5 +506,40 @@ class StructuralApplyResponse(BaseModel):
     status: str = "SUCCESS"
 
 
+# ---------------------------------------------------------------------------
+# Part 1 — Cleaned Dataset Summary Schemas
+# ---------------------------------------------------------------------------
+
+
+class MetricBeforeAfter(BaseModel):
+    """Before and after metric comparison for cleaned dataset summary."""
+
+    before: int
+    after: int
+    change: int
+
+
+class CleaningSummaryMetrics(BaseModel):
+    """Comprehensive metric comparisons before and after cleaning."""
+
+    rows: MetricBeforeAfter
+    columns: MetricBeforeAfter
+    missing_cells: MetricBeforeAfter
+    duplicate_rows: MetricBeforeAfter
+
+
+class CleanedDatasetSummaryResponse(BaseModel):
+    """Summary of the current cleaned dataset state before registration."""
+
+    dataset_id: str
+    has_cleaned: bool
+    status_message: str
+    raw_data_protection: str = "Original dataset remains unchanged."
+    metrics: CleaningSummaryMetrics
+    changes_applied: List[str] = Field(default_factory=list)
+    remaining_quality_issues: List[str] = Field(default_factory=list)
+    registered_cleaned_dataset_id: Optional[str] = None
+
+
 
 

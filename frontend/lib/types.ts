@@ -1037,5 +1037,33 @@ export interface EDAExploreResult {
   data: Record<string, any>[];
 }
 
+// ---------------------------------------------------------------------------
+// PART 1 — Cleaned Dataset Summary Types
+// ---------------------------------------------------------------------------
+
+export interface MetricBeforeAfter {
+  before: number;
+  after: number;
+  change: number;
+}
+
+export interface CleaningSummaryMetrics {
+  rows: MetricBeforeAfter;
+  columns: MetricBeforeAfter;
+  missing_cells: MetricBeforeAfter;
+  duplicate_rows: MetricBeforeAfter;
+}
+
+export interface CleanedDatasetSummaryResponse {
+  dataset_id: string;
+  has_cleaned: boolean;
+  status_message: string;
+  raw_data_protection: string;
+  metrics: CleaningSummaryMetrics;
+  changes_applied: string[];
+  remaining_quality_issues: string[];
+  registered_cleaned_dataset_id?: string | null;
+}
+
 
 

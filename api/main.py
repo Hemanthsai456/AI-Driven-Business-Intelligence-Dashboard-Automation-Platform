@@ -70,6 +70,7 @@ from api.schemas import (
     SemanticRoleOverrideRequest,
     SemanticRoleOverrideResponse,
     StructuralApplyResponse,
+    CleanedDatasetSummaryResponse,
 )
 from api.store import DatasetSessionRecord, session_store
 from intelligence.semantic_analyzer import ColumnRole
@@ -730,6 +731,124 @@ def get_dataset_cleaning_plan(dataset_id: str):
     return plan.to_dict()
 
 
+@app.get(
+    "/api/datasets/{dataset_id}/cleaning-summary",
+    response_model=CleanedDatasetSummaryResponse,
+)
+@app.get(
+    "/api/datasets/{dataset_id}/cleaning/summary",
+    response_model=CleanedDatasetSummaryResponse,
+)
+def get_cleaned_dataset_summary(dataset_id: str):
+    """Retrieve summary metrics, applied operations, and remaining data quality issues for current cleaned dataset."""
+    record = session_store.get(dataset_id)
+    if not record or not record.dataset or record.dataset.data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset '{dataset_id}' not found in current session.",
+        )
+
+    df_raw = record.dataset.data
+    df_clean = record.cleaned_dataset.data if (record.cleaned_dataset is not None and record.cleaned_dataset.data is not None) else None
+    has_cleaned = df_clean is not None or len(record.applied_operations) > 0
+
+    # 1. Non-mutating calculation of BEFORE metrics from raw dataset
+    rows_before = int(len(df_raw))
+    cols_before = int(len(df_raw.columns))
+    missing_before = int(df_raw.isna().sum().sum())
+    dups_before = int(df_raw.duplicated().sum())
+
+    # 2. Non-mutating calculation of AFTER metrics from active cleaned dataset
+    df_active = df_clean if df_clean is not None else df_raw
+    rows_after = int(len(df_active))
+    cols_after = int(len(df_active.columns))
+    missing_after = int(df_active.isna().sum().sum())
+    dups_after = int(df_active.duplicated().sum())
+
+    metrics = {
+        "rows": {
+            "before": rows_before,
+            "after": rows_after,
+            "change": rows_after - rows_before,
+        },
+        "columns": {
+            "before": cols_before,
+            "after": cols_after,
+            "change": cols_after - cols_before,
+        },
+        "missing_cells": {
+            "before": missing_before,
+            "after": missing_after,
+            "change": missing_after - missing_before,
+        },
+        "duplicate_rows": {
+            "before": dups_before,
+            "after": dups_after,
+            "change": dups_after - dups_before,
+        },
+    }
+
+    # 3. Changes Applied (concise list of actual operations)
+    changes_applied: List[str] = []
+    if has_cleaned and record.applied_operations:
+        for op in record.applied_operations:
+            s = op.get("summary")
+            if s and s not in changes_applied:
+                changes_applied.append(s)
+
+    # 4. Remaining Data Quality Issues from the CURRENT cleaned dataset
+    remaining_issues: List[str] = []
+    if missing_after > 0:
+        cols_with_na = [col for col in df_active.columns if df_active[col].isna().sum() > 0]
+        col_preview = ", ".join(cols_with_na[:3])
+        if len(cols_with_na) > 3:
+            col_preview += f" (+{len(cols_with_na) - 3} more)"
+        remaining_issues.append(f"{missing_after} missing values remain across {len(cols_with_na)} column(s) ({col_preview})")
+
+    if dups_after > 0:
+        remaining_issues.append(f"{dups_after} duplicate row(s) remain")
+
+    for col in df_active.columns:
+        na_count = int(df_active[col].isna().sum())
+        if len(df_active) > 0:
+            na_pct = (na_count / len(df_active)) * 100.0
+            if na_pct >= 80.0:
+                remaining_issues.append(f"Column '{col}' has {na_pct:.1f}% missing values ({na_count}/{len(df_active)} rows)")
+
+    # Check non-numeric values in measure/numeric columns
+    if record.semantic_profile and record.semantic_profile.column_evidences:
+        for col_name, ev in record.semantic_profile.column_evidences.items():
+            if col_name in df_active.columns:
+                role_str = ev.candidate_role.value if hasattr(ev.candidate_role, "value") else str(ev.candidate_role)
+                if role_str == "MEASURE":
+                    col_series = df_active[col_name]
+                    if col_series.dtype == object or str(col_series.dtype) == "string":
+                        coerced = pd.to_numeric(col_series, errors="coerce")
+                        non_num_count = int(coerced.isna().sum() - col_series.isna().sum())
+                        if non_num_count > 0:
+                            remaining_issues.append(f"{non_num_count} non-numeric value(s) remain in '{col_name}'")
+
+    if not remaining_issues:
+        remaining_issues = ["✓ No major data-quality issues detected."]
+
+    status_msg = (
+        f"Cleaned dataset contains {len(changes_applied)} applied operation(s)."
+        if has_cleaned and changes_applied
+        else "No cleaning changes have been applied yet."
+    )
+
+    return {
+        "dataset_id": dataset_id,
+        "has_cleaned": has_cleaned,
+        "status_message": status_msg,
+        "raw_data_protection": "Original dataset remains unchanged.",
+        "metrics": metrics,
+        "changes_applied": changes_applied,
+        "remaining_quality_issues": remaining_issues,
+        "registered_cleaned_dataset_id": record.registered_cleaned_dataset_id,
+    }
+
+
 @app.post(
     "/api/datasets/{dataset_id}/cleaning/column-transform/preview",
     response_model=ColumnTransformPreviewResponse,
@@ -909,6 +1028,12 @@ def apply_multivalue_transformation(dataset_id: str, request: MultiValueApplyReq
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        action_name = "split into columns" if request.action == "SPLIT_COLUMNS" else "expanded into rows"
+        record.record_applied_operation(
+            op_type="MULTIVALUE",
+            summary=f"1 multi-valued column '{request.column_name}' {action_name}",
+            details={"column": request.column_name, "action": request.action, **audit_info},
+        )
 
         return {
             "dataset_id": dataset_id,
@@ -1038,6 +1163,12 @@ def apply_drop_columns(dataset_id: str, request: DropColumnsRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        cols_str = ", ".join(request.columns)
+        record.record_applied_operation(
+            op_type="DROP_COLUMNS",
+            summary=f"{len(request.columns)} column(s) removed ({cols_str})",
+            details={"columns": request.columns, **audit_info},
+        )
 
         return {
             "dataset_id": dataset_id,
@@ -1136,6 +1267,12 @@ def apply_filter_rows(dataset_id: str, request: RowFilterRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        rows_removed = audit_info.get("rows_removed", 0)
+        record.record_applied_operation(
+            op_type="FILTER_ROWS",
+            summary=f"{rows_removed} rows removed via filtering",
+            details=audit_info,
+        )
 
         return {
             "dataset_id": dataset_id,
@@ -1224,6 +1361,12 @@ def apply_duplicate_removal(dataset_id: str, request: DuplicateRemovalRequest):
             "audit_info": audit_info,
             "status": "APPLIED",
         }
+        dups_removed = audit_info.get("duplicate_rows_removed", 0)
+        record.record_applied_operation(
+            op_type="REMOVE_DUPLICATES",
+            summary=f"{dups_removed} duplicate rows removed",
+            details=audit_info,
+        )
 
         return {
             "dataset_id": dataset_id,
@@ -1312,6 +1455,11 @@ def apply_semantic_role_override(dataset_id: str, request: SemanticRoleOverrideR
         )
         record.semantic_profile = updated_sem_profile
         record.registered_cleaned_dataset_id = None  # Invalidate cached registration
+        record.record_applied_operation(
+            op_type="SEMANTIC_ROLE_OVERRIDE",
+            summary=f"1 semantic-role override on '{request.column_name}' ({request.selected_role.upper().strip()})",
+            details={"column": request.column_name, "role": request.selected_role},
+        )
 
         # Also update column metadata schema if present
         for col in target_dataset.metadata.schema:
@@ -1425,6 +1573,34 @@ def apply_dataset_cleaning(dataset_id: str, request: CleaningSelectionRequest):
 
         _refresh_record_cleaned_state(record, cleaned_canonical)
         record.last_cleaning_result = exec_result.to_dict()
+
+        if hasattr(exec_result, "applied_operations") and exec_result.applied_operations:
+            for op in exec_result.applied_operations:
+                op_status = getattr(op, "status", None) or (op.get("status") if isinstance(op, dict) else "")
+                if op_status != "APPLIED":
+                    continue
+                op_name = getattr(op, "operation", "") or (op.get("operation") if isinstance(op, dict) else "")
+                col_name = getattr(op, "column_name", "") or (op.get("column_name") if isinstance(op, dict) else "")
+                cells_affected = getattr(op, "cells_affected", 0) or (op.get("cells_affected", 0) if isinstance(op, dict) else 0)
+                method_used = getattr(op, "method_used", "") or (op.get("method_used", "") if isinstance(op, dict) else "")
+                before_stat = getattr(op, "before_statistic", "") or (op.get("before_statistic", "") if isinstance(op, dict) else "")
+                after_stat = getattr(op, "after_statistic", "") or (op.get("after_statistic", "") if isinstance(op, dict) else "")
+
+                if "CONVERT" in op_name:
+                    desc = f"1 datatype conversion on '{col_name}' ({before_stat} → {after_stat})"
+                elif "IMPUTE" in op_name or "FILL" in op_name or "DROP_MISSING" in op_name:
+                    desc = f"{cells_affected} missing values handled on '{col_name}' ({method_used or op_name})"
+                elif "DUPLICATE" in op_name:
+                    desc = f"{cells_affected} duplicate rows removed"
+                else:
+                    target_str = f"on '{col_name}'" if col_name else "across dataset"
+                    desc = f"Applied {op_name.replace('_', ' ').lower()} {target_str} ({cells_affected} cells affected)"
+
+                record.record_applied_operation(
+                    op_type=op_name,
+                    summary=desc,
+                    details=op.to_dict() if hasattr(op, "to_dict") else (op if isinstance(op, dict) else {}),
+                )
 
         return exec_result.to_dict()
     except CleaningExecutionError as ex:
