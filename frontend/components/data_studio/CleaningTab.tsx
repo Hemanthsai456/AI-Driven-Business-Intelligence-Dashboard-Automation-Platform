@@ -89,6 +89,7 @@ interface CleaningTabProps {
   isLoadingPlan?: boolean;
   planError?: string | null;
   onRetryPlan?: () => void;
+  onRefreshState?: () => Promise<void> | void;
   onSelectDataset?: (datasetId: string) => void;
   onDatasetRegistered?: (newDatasetId: string) => void;
 }
@@ -105,6 +106,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   isLoadingPlan = false,
   planError = null,
   onRetryPlan,
+  onRefreshState,
   onSelectDataset,
   onDatasetRegistered,
 }) => {
@@ -127,12 +129,16 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
 
   // User-Controlled Column Transformations State
+  const availableColumnsKey = metadata?.columns
+    ? metadata.columns.map((c) => (typeof c === 'string' ? c : c.original_name)).join(',')
+    : '';
+
   const availableColumns = useMemo<string[]>(() => {
     if (metadata?.columns && Array.isArray(metadata.columns) && metadata.columns.length > 0) {
       return metadata.columns.map((c) => (typeof c === 'string' ? c : c.original_name));
     }
     return [];
-  }, [metadata]);
+  }, [metadata?.dataset_id, availableColumnsKey]);
 
   const [selectedCol, setSelectedCol] = useState<string>(() => {
     if (metadata?.columns && Array.isArray(metadata.columns) && metadata.columns.length > 0) {
@@ -219,6 +225,23 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   const [roleApplyError, setRoleApplyError] = useState<string | null>(null);
   const [userRoleOverrides, setUserRoleOverrides] = useState<Record<string, string>>({});
 
+  // Sync userRoleOverrides from semanticProfile when loaded or updated
+  React.useEffect(() => {
+    if (semanticProfile?.column_evidences) {
+      const overrides: Record<string, string> = {};
+      for (const [col, ev] of Object.entries(semanticProfile.column_evidences)) {
+        if (ev.is_user_overridden && ev.candidate_role) {
+          overrides[col] = ev.candidate_role;
+        } else if (ev.user_override_role) {
+          overrides[col] = ev.user_override_role;
+        }
+      }
+      if (Object.keys(overrides).length > 0) {
+        setUserRoleOverrides((prev) => ({ ...overrides, ...prev }));
+      }
+    }
+  }, [semanticProfile?.dataset_id, semanticProfile?.column_evidences]);
+
   // Preview & Execution State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
@@ -270,8 +293,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
   }, [cleaningPlan?.dataset_id]);
 
   React.useEffect(() => {
-    if (availableColumns.length > 0 && (!selectedCol || !availableColumns.includes(selectedCol))) {
-      setSelectedCol(availableColumns[0]);
+    if (availableColumns.length > 0) {
+      if (!selectedCol || !availableColumns.includes(selectedCol)) {
+        setSelectedCol(availableColumns[0]);
+      }
+    } else {
+      setSelectedCol('');
     }
   }, [availableColumns, selectedCol]);
 
@@ -395,7 +422,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Preview Action for Single User Column Transformation
   const handlePreviewColumnTransform = async () => {
-    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    const targetDatasetId = metadata?.dataset_id;
     if (!targetDatasetId || !selectedCol) return;
     setColPreviewLoading(true);
     setColPreviewError(null);
@@ -420,7 +447,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Direct Apply for Single User Column Transformation
   const handleApplySingleTransform = async () => {
-    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    const targetDatasetId = metadata?.dataset_id;
     if (!targetDatasetId || !selectedCol) return;
     setIsPreviewOpen(false);
     setExecutionState('applying');
@@ -452,6 +479,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       clearTimeout(timer);
       setExecutionResult(res);
       setExecutionState('complete');
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
+      await fetchStructRecs();
+      await fetchMvCandidates();
     } catch (err: any) {
       setExecutionError(err.message || 'Failed to execute column transformation.');
       setExecutionState('error');
@@ -567,10 +601,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         `Successfully applied ${actionLabel} on "${colName}". Cleaned dataset updated (${res.cleaned_row_count} rows, ${res.cleaned_column_count} columns).`
       );
       setMvPreviewResult(null);
-      await fetchMvCandidates();
-      if (onRetryPlan) {
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
         onRetryPlan();
       }
+      await fetchMvCandidates();
+      await fetchStructRecs();
     } catch (err: any) {
       setMvApplyError(err.message || 'Failed to apply multi-value transformation.');
     } finally {
@@ -615,17 +652,27 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
     setRolePreviewError(null);
     setRoleApplySuccess(null);
     setRoleApplyError(null);
+  }, [metadata?.dataset_id]);
 
+  React.useEffect(() => {
     if (availableColumns.length > 0) {
       setSelectedRoleCol((prev) => (prev && availableColumns.includes(prev) ? prev : availableColumns[0]));
+      setSelectedDropCols((prev) => prev.filter((c) => availableColumns.includes(c)));
       setFilterConditions((prev) => {
         if (prev.length === 0 || !prev[0].column || !availableColumns.includes(prev[0].column)) {
           return [{ column: availableColumns[0], operator: 'equals', value: '' }];
         }
-        return prev;
+        return prev.map((cond) => ({
+          ...cond,
+          column: availableColumns.includes(cond.column) ? cond.column : availableColumns[0],
+        }));
       });
+    } else {
+      setSelectedRoleCol('');
+      setSelectedDropCols([]);
+      setFilterConditions([{ column: '', operator: 'equals', value: '' }]);
     }
-  }, [metadata?.dataset_id, availableColumns]);
+  }, [metadata?.dataset_id, availableColumnsKey, availableColumns]);
 
   // Handlers for Column Dropping
   const handleToggleDropCol = (colName: string) => {
@@ -666,8 +713,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       );
       setSelectedDropCols([]);
       setDropPreviewResult(null);
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
       await fetchStructRecs();
-      if (onRetryPlan) onRetryPlan();
+      await fetchMvCandidates();
     } catch (err: any) {
       setDropApplyError(err.message || 'Failed to apply column drop.');
     } finally {
@@ -732,8 +784,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         `Successfully applied row filtering. Cleaned dataset now has ${res.cleaned_row_count} rows (${res.cleaned_column_count} columns).`
       );
       setFilterPreviewResult(null);
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
       await fetchStructRecs();
-      if (onRetryPlan) onRetryPlan();
+      await fetchMvCandidates();
     } catch (err: any) {
       setFilterApplyError(err.message || 'Failed to apply row filter.');
     } finally {
@@ -772,8 +829,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         `Successfully removed duplicate rows. Cleaned dataset now has ${res.cleaned_row_count} rows.`
       );
       setDupPreviewResult(null);
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
       await fetchStructRecs();
-      if (onRetryPlan) onRetryPlan();
+      await fetchMvCandidates();
     } catch (err: any) {
       setDupApplyError(err.message || 'Failed to apply duplicate removal.');
     } finally {
@@ -823,8 +885,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
         `Successfully designated "${targetCol}" as authoritative semantic role "${res.selected_role}". Physical type (${res.physical_dtype}) is preserved.`
       );
       setRolePreviewResult(null);
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
       await fetchStructRecs();
-      if (onRetryPlan) onRetryPlan();
+      await fetchMvCandidates();
     } catch (err: any) {
       setRoleApplyError(err.message || 'Failed to apply semantic role override.');
     } finally {
@@ -859,7 +926,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Preview Action for Batch Plan
   const handleGeneratePreview = async () => {
-    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    const targetDatasetId = metadata?.dataset_id;
     if (!targetDatasetId || (selectedIds.length === 0 && customTransformations.length === 0)) return;
     setIsLoadingPreview(true);
     setPreviewError(null);
@@ -883,7 +950,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Apply Action for Batch Plan
   const handleApplyCleaning = async () => {
-    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    const targetDatasetId = metadata?.dataset_id;
     if (!targetDatasetId || (selectedIds.length === 0 && customTransformations.length === 0)) return;
     setIsPreviewOpen(false);
     setExecutionState('applying');
@@ -907,6 +974,13 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
       clearTimeout(timer);
       setExecutionResult(res);
       setExecutionState('complete');
+      if (onRefreshState) {
+        await onRefreshState();
+      } else if (onRetryPlan) {
+        onRetryPlan();
+      }
+      await fetchStructRecs();
+      await fetchMvCandidates();
     } catch (err: any) {
       setExecutionError(err.message || 'Failed to execute cleaning plan.');
       setExecutionState('error');
@@ -915,7 +989,7 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
 
   // Register Cleaned Dataset Action
   const handleRegisterCleaned = async () => {
-    const targetDatasetId = cleaningPlan?.dataset_id || metadata?.dataset_id;
+    const targetDatasetId = metadata?.dataset_id;
     if (!targetDatasetId) {
       setRegistrationError('No active dataset found for registration.');
       setRegistrationState('error');
@@ -3099,8 +3173,9 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                         )
                       : null;
                     const dtype = metadata?.dtypes?.[colName] || (colMeta && typeof colMeta === 'object' ? (colMeta as any).detected_datatype : 'string') || 'string';
-                    const semRole = (colMeta && typeof colMeta === 'object' ? (colMeta as any).semantic_role : 'UNKNOWN') || 'UNKNOWN';
-                    const currentOverride = userRoleOverrides[colName] || semRole;
+                    const ev = semanticProfile?.column_evidences?.[colName];
+                    const systemRole = ev?.system_role || ev?.candidate_role || (colMeta && typeof colMeta === 'object' ? (colMeta as any).semantic_role : 'UNKNOWN') || 'UNKNOWN';
+                    const effectiveRole = userRoleOverrides[colName] || (ev?.is_user_overridden && ev?.candidate_role ? ev.candidate_role : (ev?.user_override_role || systemRole));
                     const isSelected = selectedRoleCol === colName;
 
                     return (
@@ -3120,12 +3195,12 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                         </td>
                         <td className="p-3">
                           <Badge variant="blue" size="xs">
-                            {semRole}
+                            {systemRole}
                           </Badge>
                         </td>
                         <td className="p-3">
                           <select
-                            value={currentOverride}
+                            value={effectiveRole}
                             onChange={(e) => {
                               const newRole = e.target.value;
                               setSelectedRoleCol(colName);
@@ -3147,8 +3222,8 @@ export const CleaningTab: React.FC<CleaningTabProps> = ({
                             size="xs"
                             onClick={() => {
                               setSelectedRoleCol(colName);
-                              setSelectedRoleValue(currentOverride);
-                              handlePreviewSemanticRoleOverride(colName, currentOverride);
+                              setSelectedRoleValue(effectiveRole);
+                              handlePreviewSemanticRoleOverride(colName, effectiveRole);
                             }}
                             className="text-2xs"
                           >

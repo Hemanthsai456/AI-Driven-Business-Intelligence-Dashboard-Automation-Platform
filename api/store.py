@@ -60,14 +60,25 @@ class DatasetSessionRecord:
         return False
 
     def to_metadata_dict(self) -> Dict:
+        active_ds = self.cleaned_dataset if self.cleaned_dataset is not None else self.dataset
+        cols_dict = []
+        for col in active_ds.metadata.schema:
+            cd = col.to_dict()
+            if self.user_semantic_role_overrides and col.original_name in self.user_semantic_role_overrides:
+                cd["semantic_role"] = self.user_semantic_role_overrides[col.original_name]
+            elif self.semantic_profile and self.semantic_profile.get_evidence(col.original_name):
+                ev = self.semantic_profile.get_evidence(col.original_name)
+                cd["semantic_role"] = ev.candidate_role.value if hasattr(ev.candidate_role, "value") else str(ev.candidate_role)
+            cols_dict.append(cd)
+
         return {
             "dataset_id": self.dataset.metadata.dataset_id,
             "filename": self.dataset.metadata.name,
             "source_type": self.dataset.metadata.source_type,
-            "row_count": self.dataset.metadata.row_count,
-            "column_count": self.dataset.metadata.column_count,
-            "columns": [col.to_dict() for col in self.dataset.metadata.schema],
-            "dtypes": {col.original_name: col.detected_datatype for col in self.dataset.metadata.schema},
+            "row_count": active_ds.metadata.row_count,
+            "column_count": active_ds.metadata.column_count,
+            "columns": cols_dict,
+            "dtypes": {col.original_name: col.detected_datatype for col in active_ds.metadata.schema},
             "ingestion_status": "SUCCESS",
             "ingestion_errors": [],
             "cleaning_report": self.cleaning_report.model_dump() if hasattr(self.cleaning_report, "model_dump") else None,

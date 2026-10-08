@@ -153,6 +153,37 @@ function DataStudioContent() {
     router.replace(`/data-studio?${params.toString()}`);
   };
 
+  // Authoritative State Refresh for current Data Studio session
+  const refreshDatasetState = async (targetId?: string) => {
+    const datasetId = targetId || selectedDatasetId;
+    if (!datasetId) return;
+
+    try {
+      const [meta, prev, prof, sem, read, qual, planRes] = await Promise.all([
+        getDatasetMetadata(datasetId),
+        getDatasetPreview(datasetId, 50),
+        getDatasetProfile(datasetId),
+        getDatasetSemanticAnalysis(datasetId),
+        getDatasetReadiness(datasetId),
+        getDatasetQualityAssessment(datasetId).catch(() => null),
+        getDatasetCleaningPlan(datasetId)
+          .then((p) => ({ plan: p, error: null }))
+          .catch((e: any) => ({ plan: null, error: e.message || 'Failed to generate cleaning plan.' })),
+      ]);
+
+      setMetadata(meta);
+      setPreview(prev);
+      setProfile(prof);
+      setSemanticProfile(sem);
+      setReadiness(read);
+      setQualityAssessment(qual);
+      setCleaningPlan(planRes.plan);
+      setPlanError(planRes.error);
+    } catch (err: any) {
+      console.error('Error refreshing Data Studio state:', err);
+    }
+  };
+
   // Explicit "Analyze Data" Execution Trigger
   const handleAnalyzeData = async () => {
     if (!selectedDatasetId) return;
@@ -551,6 +582,7 @@ function DataStudioContent() {
                 isLoadingPlan={loadingPlan}
                 planError={planError}
                 onRetryPlan={() => fetchCleaningPlan(selectedDatasetId)}
+                onRefreshState={() => refreshDatasetState(selectedDatasetId)}
                 onSelectDataset={handleDatasetChange}
                 onDatasetRegistered={(newId) => {
                   listDatasets().then(setAllDatasets).catch(console.error);

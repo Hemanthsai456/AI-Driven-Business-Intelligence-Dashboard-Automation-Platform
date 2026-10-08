@@ -100,6 +100,9 @@ export interface DataProfile {
 export interface SemanticColumn {
   column_name: string;
   candidate_role: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN';
+  system_role?: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN';
+  user_override_role?: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN' | null;
+  is_user_overridden?: boolean;
   confidence: number;
   confidence_level: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
   evidence: string[];

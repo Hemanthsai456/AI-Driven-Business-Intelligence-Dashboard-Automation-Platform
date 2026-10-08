@@ -2250,7 +2250,7 @@ class CleaningExecutor:
             )
 
         cleaned_metadata = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Cleaned)",
             source_type=canonical.metadata.source_type,
             row_count=len(cleaned_df),

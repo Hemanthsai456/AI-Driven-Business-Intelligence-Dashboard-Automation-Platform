@@ -297,7 +297,7 @@ class StructuralCleaner:
         new_schema = loader.extract_column_metadata(working_df)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Dropped {len(columns_to_drop)} cols)",
             source_type=canonical.metadata.source_type,
             row_count=len(working_df),
@@ -472,7 +472,7 @@ class StructuralCleaner:
         new_schema = loader.extract_column_metadata(working_df)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Filtered {rows_to_remove} rows)",
             source_type=canonical.metadata.source_type,
             row_count=len(working_df),
@@ -547,7 +547,7 @@ class StructuralCleaner:
         new_schema = loader.extract_column_metadata(working_df)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Deduplicated)",
             source_type=canonical.metadata.source_type,
             row_count=len(working_df),
@@ -710,7 +710,13 @@ class StructuralCleaner:
             semantic_profile = analyzer.analyze(canonical)
 
         ev = semantic_profile.get_evidence(column_name)
-        system_role = ev.candidate_role.value if ev and hasattr(ev.candidate_role, "value") else (str(ev.candidate_role) if ev else "UNKNOWN")
+        if ev:
+            if hasattr(ev, "system_role") and ev.system_role is not None:
+                system_role = ev.system_role.value if hasattr(ev.system_role, "value") else str(ev.system_role)
+            else:
+                system_role = ev.candidate_role.value if hasattr(ev.candidate_role, "value") else str(ev.candidate_role)
+        else:
+            system_role = "UNKNOWN"
         dtype_str = str(df[column_name].dtype)
 
         evidence = [
@@ -762,11 +768,18 @@ class StructuralCleaner:
             ev.is_user_overridden = True
             ev.evidence = list(ev.evidence) + [f"User explicitly designated column as {norm_role}."]
 
+        system_role_val = "UNKNOWN"
+        if ev:
+            if hasattr(ev, "system_role") and ev.system_role is not None:
+                system_role_val = ev.system_role.value if hasattr(ev.system_role, "value") else str(ev.system_role)
+            else:
+                system_role_val = ev.candidate_role.value if hasattr(ev.candidate_role, "value") else str(ev.candidate_role)
+
         audit_info = {
             "action": "SEMANTIC_ROLE_OVERRIDE",
             "column_name": column_name,
             "selected_role": norm_role,
-            "system_role": getattr(ev, "system_role", "UNKNOWN") if ev else "UNKNOWN",
+            "system_role": system_role_val,
             "physical_dtype": str(df[column_name].dtype),
         }
         canonical.add_audit_entry("SEMANTIC_ROLE_OVERRIDE", audit_info)

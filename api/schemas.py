@@ -62,6 +62,9 @@ class DataProfileResponse(BaseModel):
 class SemanticColumnResponse(BaseModel):
     column_name: str
     candidate_role: str
+    system_role: Optional[str] = None
+    user_override_role: Optional[str] = None
+    is_user_overridden: bool = False
     confidence: float
     confidence_level: str
     evidence: List[str]

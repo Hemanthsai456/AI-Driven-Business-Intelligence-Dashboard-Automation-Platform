@@ -466,7 +466,7 @@ class MultiValueHandler:
         new_schema = loader.extract_column_metadata(working_df)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Split {column_name})",
             source_type=canonical.metadata.source_type,
             row_count=len(working_df),
@@ -614,7 +614,7 @@ class MultiValueHandler:
         new_schema = loader.extract_column_metadata(exploded_df)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=f"{canonical.metadata.name} (Expanded {column_name})",
             source_type=canonical.metadata.source_type,
             row_count=len(exploded_df),
@@ -687,7 +687,7 @@ class MultiValueHandler:
         working_df = df.copy(deep=True)
 
         cleaned_meta = DatasetMetadata(
-            dataset_id=f"{canonical.metadata.dataset_id}_cleaned",
+            dataset_id=canonical.metadata.dataset_id,
             name=canonical.metadata.name,
             source_type=canonical.metadata.source_type,
             row_count=len(working_df),

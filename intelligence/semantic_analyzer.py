@@ -41,16 +41,40 @@ class ColumnSemanticEvidence:
     aggregation_default: Optional[str] = None
     aggregation_category: Optional[str] = None
     conflicts: List[str] = field(default_factory=list)
+    system_role: Optional[ColumnRole] = None
+    user_override_role: Optional[ColumnRole] = None
+    is_user_overridden: bool = False
+
+    def __post_init__(self):
+        if self.system_role is None:
+            self.system_role = self.candidate_role
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert semantic evidence to a JSON-serializable dictionary."""
+        candidate_val = (
+            self.candidate_role.value
+            if isinstance(self.candidate_role, Enum)
+            else str(self.candidate_role)
+        )
+        system_val = (
+            self.system_role.value
+            if isinstance(self.system_role, Enum)
+            else str(self.system_role) if self.system_role is not None
+            else candidate_val
+        )
+        user_override_val = (
+            self.user_override_role.value
+            if isinstance(self.user_override_role, Enum)
+            else str(self.user_override_role) if self.user_override_role is not None
+            else None
+        )
+
         d: Dict[str, Any] = {
             "column_name": self.column_name,
-            "candidate_role": (
-                self.candidate_role.value
-                if isinstance(self.candidate_role, Enum)
-                else str(self.candidate_role)
-            ),
+            "candidate_role": candidate_val,
+            "system_role": system_val,
+            "user_override_role": user_override_val,
+            "is_user_overridden": bool(self.is_user_overridden),
             "confidence": round(float(self.confidence), 2),
             "confidence_level": self.confidence_level,
             "evidence": self.evidence,
