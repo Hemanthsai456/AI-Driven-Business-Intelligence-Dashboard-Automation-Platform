@@ -53,6 +53,18 @@ from orchestrator.insights import (
     InsightType,
     generate_grounded_insights,
 )
+from orchestrator.overview.reasoning import (
+    AggregationSuitability,
+    AggregationSupportLevel,
+    AnalyticalCandidate,
+    AnalyticalFamily,
+    DatasetGrainEvidence,
+    DatasetGrainType,
+    evaluate_measure_aggregations,
+    infer_counting_candidates,
+    infer_dataset_grain,
+    select_diversified_candidates,
+)
 from orchestrator.panels import (
     build_table_panel,
     select_main_chart_panel,
@@ -86,9 +98,11 @@ from providers.base import LLMClient
 
 def _format_kpi_title(measure_name: str, agg: AggregationType) -> str:
     """Format clean KPI title without redundant words (e.g. 'Average Salary')."""
+    if measure_name == "*":
+        return "Total Records"
     clean = re.sub(r"([a-z])([A-Z])", r"\1 \2", measure_name).replace("_", " ").strip()
     title_col = clean.title()
-    for prefix in ("Total ", "Average ", "Avg ", "Sum ", "Mean "):
+    for prefix in ("Total ", "Average ", "Avg ", "Sum ", "Mean ", "Distinct ", "Count Of "):
         if title_col.startswith(prefix):
             title_col = title_col[len(prefix):].strip()
 
@@ -98,6 +112,10 @@ def _format_kpi_title(measure_name: str, agg: AggregationType) -> str:
         return f"Total {title_col}"
     elif agg == AggregationType.COUNT:
         return f"Total {title_col} Count"
+    elif agg == AggregationType.COUNT_DISTINCT:
+        return f"Unique {title_col} Count"
+    elif agg == AggregationType.MEDIAN:
+        return f"Median {title_col}"
     elif agg == AggregationType.MAX:
         return f"Maximum {title_col}"
     elif agg == AggregationType.MIN:
@@ -310,335 +328,280 @@ class OverviewDashboardPlanner:
         rejected_list: List[Dict[str, Any]] = [r.model_dump() for r in insight_res.rejections]
 
         # -------------------------------------------------------------------
-        # 4. ROW 1: KPI STRIP (Up to 4 Key Performance Indicators)
+        # 4. Infer Dataset Grain & Measure Aggregation Suitabilities
         # -------------------------------------------------------------------
-        selected_measures = [m for m in measures if m != "*"][:4]
-        if not selected_measures and "*" in measures:
-            selected_measures = ["*"]
+        grain = infer_dataset_grain(
+            dataset=dataset,
+            semantic_profile=semantic_profile,
+            data_profile=data_profile,
+            identifiers=identifiers,
+            datetimes=datetimes,
+            measures=measures,
+        )
+
+        # For every measure, evaluate plausible aggregations (SUM, AVG, MEDIAN, MIN, MAX)
+        measure_suitabilities: Dict[str, Dict[AggregationType, AggregationSuitability]] = {}
+        for m in measures:
+            measure_suitabilities[m] = evaluate_measure_aggregations(
+                measure=m,
+                df=df,
+                grain=grain,
+                semantic_profile=semantic_profile,
+            )
+
+        # -------------------------------------------------------------------
+        # 5. ROW 1: KPI CANDIDATE POOL & SELECTION
+        # -------------------------------------------------------------------
+        kpi_candidate_pool: List[Tuple[CandidatePlan, AggregationType, str, float]] = []
+
+        # A. Measure KPI interpretations (evaluates multiple valid aggregations per measure)
+        for m in measures:
+            if m == "*":
+                continue
+            suits = measure_suitabilities.get(m, {})
+            for agg, suit in suits.items():
+                if suit.score >= 0.65:
+                    plan_k = CandidatePlan(
+                        dataset_id=dataset_id,
+                        intent=f"Overall {agg.value} of {m}",
+                        metric=MetricSpec(column=m, aggregation=agg),
+                        dimensions=[],
+                        reasoning=PlanReasoning(
+                            interpretation=f"Overall {agg.value} of {m}.",
+                            evidence=suit.evidence_reasons,
+                        ),
+                    )
+                    kpi_candidate_pool.append((plan_k, agg, m, suit.score))
+
+        # B. Entity and Record Counting KPI interpretations
+        counting_cands = infer_counting_candidates(
+            dataset_id=dataset_id,
+            df=df,
+            grain=grain,
+            dimensions=dimensions,
+        )
+        for cc in counting_cands:
+            if cc.plan.metric.aggregation:
+                kpi_candidate_pool.append(
+                    (cc.plan, cc.plan.metric.aggregation, cc.primary_measure or "*", cc.base_score)
+                )
+
+        # Execute and validate KPI candidate pool
+        executed_kpis: List[Tuple[CandidatePlan, ExecutionResult, AggregationType, str, float]] = []
+        for plan_k, agg, m_col, score_val in kpi_candidate_pool:
+            sql_k = compile_plan_to_sql(plan_k, "source_data")
+            exec_k = self.executor.execute_plan(
+                plan=plan_k,
+                dataset=dataset,
+                semantic_profile=semantic_profile,
+                custom_sql=sql_k,
+            )
+            if exec_k.status == ExecutionStatus.SUCCESS and exec_k.rows:
+                first_val = list(exec_k.rows[0].values())[0]
+                if first_val is not None:
+                    executed_kpis.append((plan_k, exec_k, agg, m_col, score_val))
+
+        # Select diverse KPIs:
+        # - Max 1 KPI per measure (avoid showing both Sum and Avg of same measure)
+        # - Target up to 4 KPIs
+        # - If dataset has measures, include top distinct measure KPIs
+        selected_kpi_entries: List[Tuple[CandidatePlan, ExecutionResult, AggregationType, str, float]] = []
+        seen_kpi_measures: Set[str] = set()
+
+        # Sort by score descending
+        executed_kpis.sort(key=lambda x: x[4], reverse=True)
+
+        for plan_k, exec_k, agg, m_col, score_val in executed_kpis:
+            if m_col not in seen_kpi_measures:
+                selected_kpi_entries.append((plan_k, exec_k, agg, m_col, score_val))
+                seen_kpi_measures.add(m_col)
+                if len(selected_kpi_entries) >= 4:
+                    break
+
+        if not selected_kpi_entries and executed_kpis:
+            selected_kpi_entries.append(executed_kpis[0])
 
         kpi_tiles: List[DashboardTile] = []
-        kpi_w = 3 if len(selected_measures) == 4 else (4 if len(selected_measures) == 3 else 6)
+        kpi_w = 3 if len(selected_kpi_entries) >= 4 else (4 if len(selected_kpi_entries) == 3 else 6)
 
-        for m in selected_measures:
-            if m == "*":
-                agg = AggregationType.COUNT
-                kpi_val = total_rows
-                m_title = "Total Records"
-                plan_kpi = CandidatePlan(
-                    dataset_id=dataset_id,
-                    intent="Total Dataset Records",
-                    metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
-                    dimensions=[],
-                    reasoning=PlanReasoning(interpretation="Total record count of dataset.", evidence=[]),
-                )
-                sql_kpi = 'SELECT COUNT(*) AS "total_count" FROM "source_data";'
-                exec_kpi = self.executor.execute_plan(plan=plan_kpi, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_kpi)
-            else:
-                ev_m = semantic_profile.get_evidence(m)
-                agg_cat = (ev_m.aggregation_category or "").upper() if ev_m else ""
-                if agg_cat in ("INTENSIVE", "SCORE", "RATE", "DURATION") or (ev_m and ev_m.aggregation_default == "AVG"):
-                    agg = AggregationType.AVG
-                else:
-                    agg = AggregationType.SUM
+        for plan_k, exec_k, agg, m_col, score_val in selected_kpi_entries:
+            raw_val = list(exec_k.rows[0].values())[0]
+            kpi_val = round(raw_val, 2) if isinstance(raw_val, float) else raw_val
+            m_title = _format_kpi_title(m_col, agg)
+            sql_k = compile_plan_to_sql(plan_k, "source_data")
 
-                plan_kpi = CandidatePlan(
-                    dataset_id=dataset_id,
-                    intent=f"Overall {agg.value} of {m}",
-                    metric=MetricSpec(column=m, aggregation=agg),
-                    dimensions=[],
-                    reasoning=PlanReasoning(interpretation=f"Overall {agg.value} of {m}.", evidence=[]),
-                )
-                sql_kpi = compile_plan_to_sql(plan_kpi, "source_data")
-                exec_kpi = self.executor.execute_plan(plan=plan_kpi, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_kpi)
-                m_title = _format_kpi_title(m, agg)
-
-            if exec_kpi.status == ExecutionStatus.SUCCESS and exec_kpi.rows:
-                raw_kpi = list(exec_kpi.rows[0].values())[0]
-                kpi_val = raw_kpi if raw_kpi is not None else 0
-                if isinstance(kpi_val, float):
-                    kpi_val = round(kpi_val, 2)
-                kpi_tile = DashboardTile(
-                    id=f"tile_kpi_{uuid4().hex[:8]}",
-                    title=m_title,
-                    chart_type="kpi",
-                    size=TileSize(w=kpi_w, h=2),
-                    priority=len(kpi_tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=1.0,
-                        robustness=1.0,
-                        score=0.95,
-                        n=exec_kpi.row_count,
-                    ),
-                    why_chosen=f"Core whole-dataset aggregate metric: {m_title} = {kpi_val}",
-                    plan=plan_kpi,
-                    compiled_sql=sql_kpi,
-                    data=exec_kpi.rows,
-                    x_key=None,
-                    y_keys=[list(exec_kpi.rows[0].keys())[0]],
-                    dimensions=[],
-                    metrics=[m],
-                )
-                kpi_tiles.append(kpi_tile)
+            tile_k = DashboardTile(
+                id=f"tile_kpi_{uuid4().hex[:8]}",
+                title=m_title,
+                chart_type="kpi",
+                size=TileSize(w=kpi_w, h=2),
+                priority=len(kpi_tiles) + 1,
+                generator="overview_planner",
+                evidence=TileEvidence(
+                    strength=round(score_val, 2),
+                    robustness=1.0,
+                    score=round(score_val, 2),
+                    n=exec_k.row_count,
+                ),
+                why_chosen=f"Core whole-dataset aggregate metric: {m_title} = {kpi_val}",
+                plan=plan_k,
+                compiled_sql=sql_k,
+                data=exec_k.rows,
+                x_key=None,
+                y_keys=[list(exec_k.rows[0].keys())[0]],
+                dimensions=[],
+                metrics=[m_col],
+            )
+            kpi_tiles.append(tile_k)
 
         tiles.extend(kpi_tiles)
 
         # -------------------------------------------------------------------
-        # 5. ROW 2: HERO TILE (w=8, h=4) + SIDE TILE (w=4, h=4)
+        # 6. VISUAL CANDIDATE POOL ACROSS ANALYTICAL FAMILIES
         # -------------------------------------------------------------------
-        hero_tile: Optional[DashboardTile] = None
-        hero_ranked_candidate: Optional[RankedCandidate] = None
-        primary_measure = selected_measures[0] if selected_measures and selected_measures[0] != "*" else (measures[0] if measures else "*")
+        visual_candidates: List[AnalyticalCandidate] = []
+        primary_measure = (
+            selected_kpi_entries[0][3]
+            if selected_kpi_entries and selected_kpi_entries[0][3] != "*"
+            else (measures[0] if measures else "*")
+        )
 
-        # Option A: Temporal Trend Hero (if datetime column available with >= 2 points)
-        if datetimes and primary_measure != "*":
+        # Family A: Temporal Trend (only when valid datetime is available)
+        if datetimes:
             primary_date = datetimes[0]
-            grain = _resolve_time_granularity(df[primary_date])
-            ev_pm = semantic_profile.get_evidence(primary_measure)
-            pm_agg = AggregationType.AVG if (ev_pm and ev_pm.aggregation_category in ("INTENSIVE", "SCORE", "RATE", "DURATION")) else AggregationType.SUM
+            grain_gran = _resolve_time_granularity(df[primary_date])
+            for m in measures[:3]:
+                if m == "*":
+                    continue
+                suits = measure_suitabilities.get(m, {})
+                best_agg = max(suits.items(), key=lambda x: x[1].score)[0] if suits else AggregationType.AVG
+                matching_trend = next((t for t in trend_insights if t.evidence.metric_column == m), None)
 
-            plan_hero = CandidatePlan(
-                dataset_id=dataset_id,
-                intent=f"Temporal Trend of {primary_measure} over {primary_date}",
-                metric=MetricSpec(column=primary_measure, aggregation=pm_agg),
-                dimensions=[DimensionSpec(column=primary_date, granularity=grain)],
-                order_by=f"{pm_agg.value.lower()}_{primary_measure}",
-                order_direction="ASC",
-                visualization=VisualizationType.LINE,
-                reasoning=PlanReasoning(interpretation=f"Chronological trajectory of {primary_measure} over time.", evidence=[]),
-            )
-            sql_hero = compile_plan_to_sql(plan_hero, "source_data")
-            exec_hero = self.executor.execute_plan(plan=plan_hero, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_hero)
-
-            if exec_hero.status == ExecutionStatus.SUCCESS and len(exec_hero.rows) >= 2:
-                # Find matching verified trend insight statement if available
-                matching_trend = next((t for t in trend_insights if t.evidence.metric_column == primary_measure), None)
-                hero_title = matching_trend.title if matching_trend else f"{primary_measure.replace('_', ' ').title()} Trajectory Over Time"
-                hero_narration = matching_trend.statement if matching_trend else f"Historical progression of {primary_measure} bucketed by {grain.value}."
-
-                hero_tile = DashboardTile(
-                    id=f"tile_hero_{uuid4().hex[:8]}",
-                    title=hero_title,
-                    chart_type="line",
-                    size=TileSize(w=8, h=4),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=0.90,
-                        robustness=0.85,
-                        score=0.92,
-                        n=exec_hero.row_count,
+                plan_trend = CandidatePlan(
+                    dataset_id=dataset_id,
+                    intent=f"Temporal Trend of {m} over {primary_date}",
+                    metric=MetricSpec(column=m, aggregation=best_agg),
+                    dimensions=[DimensionSpec(column=primary_date, granularity=grain_gran)],
+                    order_by=f"{best_agg.value.lower()}_{m}",
+                    order_direction="ASC",
+                    visualization=VisualizationType.LINE,
+                    reasoning=PlanReasoning(
+                        interpretation=matching_trend.statement if matching_trend else f"Chronological trajectory of {m} over time.",
+                        evidence=matching_trend.evidence.values.get("trend_direction", []) if matching_trend else [],
                     ),
-                    why_chosen=hero_narration,
-                    plan=plan_hero,
-                    compiled_sql=sql_hero,
-                    data=exec_hero.rows,
-                    x_key=list(exec_hero.rows[0].keys())[0],
-                    y_keys=[list(exec_hero.rows[0].keys())[1]],
-                    dimensions=[primary_date],
-                    metrics=[primary_measure],
                 )
-                hero_ranked_candidate = _make_ranked_candidate(plan_hero, exec_hero, score_val=0.92)
+                title = matching_trend.title if matching_trend else f"{m.replace('_', ' ').title()} Trajectory Over Time"
+                narration = matching_trend.statement if matching_trend else f"Historical progression of {m} bucketed by {grain_gran.value}."
 
-        # Option B: Ranking / Comparison Hero (if categorical dimension available)
-        if hero_tile is None and dimensions and primary_measure != "*":
-            primary_dim = dimensions[0]
-            ev_pm = semantic_profile.get_evidence(primary_measure)
-            pm_agg = AggregationType.AVG if (ev_pm and ev_pm.aggregation_category in ("INTENSIVE", "SCORE", "RATE", "DURATION")) else AggregationType.SUM
-
-            plan_hero = CandidatePlan(
-                dataset_id=dataset_id,
-                intent=f"Breakdown of {primary_measure} by {primary_dim}",
-                metric=MetricSpec(column=primary_measure, aggregation=pm_agg),
-                dimensions=[DimensionSpec(column=primary_dim, granularity=None)],
-                order_by=f"{pm_agg.value.lower()}_{primary_measure}",
-                order_direction="DESC",
-                limit=15,
-                visualization=VisualizationType.BAR,
-                reasoning=PlanReasoning(interpretation=f"Ranking breakdown of {primary_measure} across {primary_dim}.", evidence=[]),
-            )
-            sql_hero = compile_plan_to_sql(plan_hero, "source_data")
-            exec_hero = self.executor.execute_plan(plan=plan_hero, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_hero)
-
-            if exec_hero.status == ExecutionStatus.SUCCESS and len(exec_hero.rows) >= 2:
-                matching_rank = next((r for r in rank_insights if r.evidence.metric_column == primary_measure and r.evidence.dimension_column == primary_dim), None)
-                hero_title = matching_rank.title if matching_rank else f"{primary_measure.replace('_', ' ').title()} by {primary_dim.replace('_', ' ').title()}"
-                hero_narration = matching_rank.statement if matching_rank else f"Comparative ranking of {primary_measure} across distinct {primary_dim} segments."
-
-                hero_tile = DashboardTile(
-                    id=f"tile_hero_{uuid4().hex[:8]}",
-                    title=hero_title,
-                    chart_type="bar",
-                    size=TileSize(w=8, h=4),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=0.88,
-                        robustness=0.85,
-                        score=0.89,
-                        n=exec_hero.row_count,
-                    ),
-                    why_chosen=hero_narration,
-                    plan=plan_hero,
-                    compiled_sql=sql_hero,
-                    data=exec_hero.rows,
-                    x_key=primary_dim,
-                    y_keys=[list(exec_hero.rows[0].keys())[1]],
-                    dimensions=[primary_dim],
-                    metrics=[primary_measure],
+                visual_candidates.append(
+                    AnalyticalCandidate(
+                        candidate_id=f"cand_trend_{uuid4().hex[:6]}",
+                        family=AnalyticalFamily.TEMPORAL_TREND,
+                        plan=plan_trend,
+                        chart_type="line",
+                        primary_measure=m,
+                        primary_dimension=primary_date,
+                        aggregation=best_agg,
+                        title=title,
+                        narration=narration,
+                        base_score=0.94 if matching_trend else 0.90,
+                        evidence=TileEvidence(strength=0.92, robustness=0.88, score=0.92),
+                        default_size=TileSize(w=8, h=4),
+                    )
                 )
-                hero_ranked_candidate = _make_ranked_candidate(plan_hero, exec_hero, score_val=0.89)
 
-        # Fallback Hero if single column or empty dimensions
-        if hero_tile is None:
-            fallback_plan = CandidatePlan(
-                dataset_id=dataset_id,
-                intent="Overview Distribution",
-                metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
-                dimensions=[DimensionSpec(column=df.columns[0])],
-                limit=10,
-                visualization=VisualizationType.BAR,
-                reasoning=PlanReasoning(interpretation="Primary dataset distribution overview.", evidence=[]),
-            )
-            fallback_sql = compile_plan_to_sql(fallback_plan, "source_data")
-            exec_fallback = self.executor.execute_plan(plan=fallback_plan, dataset=dataset, semantic_profile=semantic_profile, custom_sql=fallback_sql)
-            hero_tile = DashboardTile(
-                id=f"tile_hero_{uuid4().hex[:8]}",
-                title="Primary Dataset Distribution",
-                chart_type="bar",
-                size=TileSize(w=8, h=4),
-                priority=len(tiles) + 1,
-                generator="overview_planner",
-                evidence=TileEvidence(strength=0.8, robustness=0.8, score=0.8, n=exec_fallback.row_count),
-                why_chosen="Whole-dataset categorical distribution overview.",
-                plan=fallback_plan,
-                compiled_sql=fallback_sql,
-                data=exec_fallback.rows,
-                x_key=df.columns[0],
-                y_keys=[list(exec_fallback.rows[0].keys())[1]] if exec_fallback.rows and len(exec_fallback.rows[0]) > 1 else ["count"],
-                dimensions=[df.columns[0]],
-                metrics=["*"],
-            )
-            hero_ranked_candidate = _make_ranked_candidate(fallback_plan, exec_fallback, score_val=0.80)
+        # Family B: Grouped Breakdown / Ranking (when dimensions available)
+        if dimensions:
+            for dim in dimensions[:3]:
+                dim_nunique = df[dim].nunique(dropna=True)
+                if dim_nunique < 2:
+                    continue
+                for m in measures[:3]:
+                    if m == "*":
+                        continue
+                    suits = measure_suitabilities.get(m, {})
+                    best_agg = max(suits.items(), key=lambda x: x[1].score)[0] if suits else AggregationType.AVG
+                    matching_rank = next(
+                        (r for r in rank_insights if r.evidence.metric_column == m and r.evidence.dimension_column == dim),
+                        None,
+                    )
 
-        tiles.append(hero_tile)
+                    plan_rank = CandidatePlan(
+                        dataset_id=dataset_id,
+                        intent=f"Breakdown of {m} by {dim}",
+                        metric=MetricSpec(column=m, aggregation=best_agg),
+                        dimensions=[DimensionSpec(column=dim, granularity=None)],
+                        order_by=f"{best_agg.value.lower()}_{m}",
+                        order_direction="DESC",
+                        limit=15,
+                        visualization=VisualizationType.BAR,
+                        reasoning=PlanReasoning(
+                            interpretation=matching_rank.statement if matching_rank else f"Ranking breakdown of {m} across {dim}.",
+                            evidence=[],
+                        ),
+                    )
+                    title = matching_rank.title if matching_rank else f"{m.replace('_', ' ').title()} by {dim.replace('_', ' ').title()}"
+                    narration = matching_rank.statement if matching_rank else f"Comparative breakdown of {m} across distinct {dim} segments."
 
-        # Side Tile (w=4, h=4): Share of Total / Composition Donut or Bar
-        side_tile: Optional[DashboardTile] = None
-        # Choose a dimension different from hero if possible, with low cardinality <= 7
-        candidate_side_dims = [d for d in dimensions if d != hero_tile.dimensions[0] if hero_tile.dimensions] or dimensions
-        low_card_dims = [d for d in candidate_side_dims if df[d].nunique() <= 7]
-        side_dim = low_card_dims[0] if low_card_dims else (candidate_side_dims[0] if candidate_side_dims else None)
+                    visual_candidates.append(
+                        AnalyticalCandidate(
+                            candidate_id=f"cand_rank_{uuid4().hex[:6]}",
+                            family=AnalyticalFamily.GROUPED_BREAKDOWN,
+                            plan=plan_rank,
+                            chart_type="bar",
+                            primary_measure=m,
+                            primary_dimension=dim,
+                            aggregation=best_agg,
+                            title=title,
+                            narration=narration,
+                            base_score=0.91 if matching_rank else 0.88,
+                            evidence=TileEvidence(strength=0.88, robustness=0.85, score=0.88),
+                            default_size=TileSize(w=8, h=4),
+                        )
+                    )
 
-        if side_dim:
-            side_chart_type = "donut" if df[side_dim].nunique() <= 7 else "bar"
-            plan_side = CandidatePlan(
-                dataset_id=dataset_id,
-                intent=f"Distribution of Records by {side_dim}",
-                metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
-                dimensions=[DimensionSpec(column=side_dim, granularity=None)],
-                order_by="count",
-                order_direction="DESC",
-                limit=10,
-                visualization=VisualizationType.PIE if side_chart_type == "donut" else VisualizationType.BAR,
-                reasoning=PlanReasoning(interpretation=f"Composition distribution of records across {side_dim}.", evidence=[]),
-            )
-            sql_side = compile_plan_to_sql(plan_side, "source_data")
-            exec_side = self.executor.execute_plan(plan=plan_side, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_side)
-
-            if exec_side.status == ExecutionStatus.SUCCESS and len(exec_side.rows) >= 2:
-                matching_dist = next((d for d in dist_insights if d.evidence.dimension_column == side_dim), None)
-                side_title = matching_dist.title if matching_dist else f"{side_dim.replace('_', ' ').title()} Composition"
-                side_narration = matching_dist.statement if matching_dist else f"Record share breakdown across {side_dim} categories."
-
-                side_tile = DashboardTile(
-                    id=f"tile_side_{uuid4().hex[:8]}",
-                    title=side_title,
-                    chart_type=side_chart_type,
-                    size=TileSize(w=4, h=4),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=0.82,
-                        robustness=0.88,
-                        score=0.85,
-                        n=exec_side.row_count,
-                    ),
-                    why_chosen=side_narration,
-                    plan=plan_side,
-                    compiled_sql=sql_side,
-                    data=exec_side.rows,
-                    x_key=side_dim,
-                    y_keys=["count"] if "count" in exec_side.rows[0] else [list(exec_side.rows[0].keys())[1]],
-                    dimensions=[side_dim],
-                    metrics=["*"],
+                # Record count by dimension (composition or entity distribution)
+                plan_dim_cnt = CandidatePlan(
+                    dataset_id=dataset_id,
+                    intent=f"Distribution of Records by {dim}",
+                    metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
+                    dimensions=[DimensionSpec(column=dim, granularity=None)],
+                    order_by="count",
+                    order_direction="DESC",
+                    limit=10,
+                    visualization=VisualizationType.PIE if dim_nunique <= 7 else VisualizationType.BAR,
+                    reasoning=PlanReasoning(interpretation=f"Distribution of records across {dim}.", evidence=[]),
                 )
-                tiles.append(side_tile)
+                chart_type = "donut" if dim_nunique <= 7 else "bar"
+                matching_dist = next((d for d in dist_insights if d.evidence.dimension_column == dim), None)
+                title = matching_dist.title if matching_dist else f"{dim.replace('_', ' ').title()} Composition"
+                narration = matching_dist.statement if matching_dist else f"Record share breakdown across {dim} categories."
 
-        # -------------------------------------------------------------------
-        # 6. ROW 3: SECONDARY GRID TILES (w=6, h=3 each)
-        # -------------------------------------------------------------------
-        # Secondary Tile 1: Secondary Measure Breakdown
-        remaining_measures = [m for m in measures if m != "*" and m != primary_measure]
-        if remaining_measures and dimensions:
-            sec_measure = remaining_measures[0]
-            sec_dim = dimensions[0]
-            ev_sm = semantic_profile.get_evidence(sec_measure)
-            sm_agg = AggregationType.AVG if (ev_sm and ev_sm.aggregation_category in ("INTENSIVE", "SCORE", "RATE", "DURATION")) else AggregationType.SUM
-
-            plan_sec = CandidatePlan(
-                dataset_id=dataset_id,
-                intent=f"{sec_measure} by {sec_dim}",
-                metric=MetricSpec(column=sec_measure, aggregation=sm_agg),
-                dimensions=[DimensionSpec(column=sec_dim, granularity=None)],
-                order_by=f"{sm_agg.value.lower()}_{sec_measure}",
-                order_direction="DESC",
-                limit=10,
-                visualization=VisualizationType.BAR,
-                reasoning=PlanReasoning(interpretation=f"Secondary measure {sec_measure} across {sec_dim}.", evidence=[]),
-            )
-            sql_sec = compile_plan_to_sql(plan_sec, "source_data")
-            exec_sec = self.executor.execute_plan(plan=plan_sec, dataset=dataset, semantic_profile=semantic_profile, custom_sql=sql_sec)
-
-            if exec_sec.status == ExecutionStatus.SUCCESS and len(exec_sec.rows) >= 2:
-                matching_sm_rank = next((r for r in rank_insights if r.evidence.metric_column == sec_measure), None)
-                sec_title = matching_sm_rank.title if matching_sm_rank else f"{sec_measure.replace('_', ' ').title()} by {sec_dim.replace('_', ' ').title()}"
-                sec_narration = matching_sm_rank.statement if matching_sm_rank else f"Analytical comparison of {sec_measure} across {sec_dim}."
-
-                sec_tile = DashboardTile(
-                    id=f"tile_sec_{uuid4().hex[:8]}",
-                    title=sec_title,
-                    chart_type="bar",
-                    size=TileSize(w=6, h=3),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=0.80,
-                        robustness=0.85,
-                        score=0.82,
-                        n=exec_sec.row_count,
-                    ),
-                    why_chosen=sec_narration,
-                    plan=plan_sec,
-                    compiled_sql=sql_sec,
-                    data=exec_sec.rows,
-                    x_key=sec_dim,
-                    y_keys=[list(exec_sec.rows[0].keys())[1]],
-                    dimensions=[sec_dim],
-                    metrics=[sec_measure],
+                visual_candidates.append(
+                    AnalyticalCandidate(
+                        candidate_id=f"cand_comp_{uuid4().hex[:6]}",
+                        family=AnalyticalFamily.COMPOSITION if chart_type == "donut" else AnalyticalFamily.ENTITY_COUNT,
+                        plan=plan_dim_cnt,
+                        chart_type=chart_type,
+                        primary_measure="*",
+                        primary_dimension=dim,
+                        aggregation=AggregationType.COUNT,
+                        title=title,
+                        narration=narration,
+                        base_score=0.87 if matching_dist else 0.84,
+                        evidence=TileEvidence(strength=0.85, robustness=0.88, score=0.86),
+                        default_size=TileSize(w=4, h=4) if chart_type == "donut" else TileSize(w=6, h=3),
+                    )
                 )
-                tiles.append(sec_tile)
 
-        # Secondary Tile 2: Correlation / Outliers / Table
-        # A: Meaningful Correlation Scatter (if r >= 0.35)
-        corr_added = False
+        # Family C: Numeric Correlation (when correlation insight exists or |r| >= 0.35)
         if corr_insights and len(measures) >= 2:
             top_corr = corr_insights[0]
             m1 = top_corr.evidence.metric_column
             m2 = top_corr.evidence.secondary_metric
             if m1 in df.columns and m2 in df.columns:
-                corr_data = df[[m1, m2]].dropna().head(100).to_dict(orient="records")
-                if len(corr_data) >= 8:
+                corr_df = df[[m1, m2]].dropna()
+                if len(corr_df) >= 8:
                     plan_corr = CandidatePlan(
                         dataset_id=dataset_id,
                         intent=f"Correlation between {m1} and {m2}",
@@ -647,79 +610,290 @@ class OverviewDashboardPlanner:
                         visualization=VisualizationType.SCATTER,
                         reasoning=PlanReasoning(interpretation=top_corr.statement, evidence=[]),
                     )
-                    sql_corr = f'SELECT "{m1}", "{m2}" FROM "{dataset_id}" WHERE "{m1}" IS NOT NULL AND "{m2}" IS NOT NULL LIMIT 100;'
-                    corr_tile = DashboardTile(
-                        id=f"tile_corr_{uuid4().hex[:8]}",
-                        title=top_corr.title,
-                        chart_type="scatter",
-                        size=TileSize(w=6, h=3),
-                        priority=len(tiles) + 1,
-                        generator="overview_planner",
-                        evidence=TileEvidence(
-                            strength=abs(top_corr.evidence.values.get("correlation_r", 0.7)),
-                            robustness=0.90,
-                            score=0.88,
-                            n=len(corr_data),
-                        ),
-                        why_chosen=top_corr.statement,
-                        plan=plan_corr,
-                        compiled_sql=sql_corr,
-                        data=corr_data,
-                        x_key=m1,
-                        y_keys=[m2],
-                        dimensions=[m1],
-                        metrics=[m2],
+                    visual_candidates.append(
+                        AnalyticalCandidate(
+                            candidate_id=f"cand_corr_{uuid4().hex[:6]}",
+                            family=AnalyticalFamily.RELATIONSHIP,
+                            plan=plan_corr,
+                            chart_type="scatter",
+                            primary_measure=m1,
+                            primary_dimension=m2,
+                            aggregation=AggregationType.AVG,
+                            title=top_corr.title,
+                            narration=top_corr.statement,
+                            base_score=0.89,
+                            evidence=TileEvidence(
+                                strength=abs(top_corr.evidence.values.get("correlation_r", 0.7)),
+                                robustness=0.90,
+                                score=0.88,
+                                n=len(corr_df),
+                            ),
+                            default_size=TileSize(w=6, h=3),
+                        )
                     )
-                    tiles.append(corr_tile)
-                    corr_added = True
 
-        # B: Outlier observation or Data Sample Table if correlation not added
-        if not corr_added:
-            if outlier_insights:
-                top_outlier = outlier_insights[0]
-                m_out = top_outlier.evidence.metric_column
-                out_tile = DashboardTile(
-                    id=f"tile_outlier_{uuid4().hex[:8]}",
-                    title=top_outlier.title,
-                    chart_type="table",
-                    size=TileSize(w=6, h=3),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(
-                        strength=0.85,
-                        robustness=0.95,
-                        score=0.90,
-                        n=top_outlier.evidence.row_count,
-                    ),
-                    why_chosen=top_outlier.statement,
-                    compiled_sql=top_outlier.evidence.compiled_sql,
-                    data=top_outlier.evidence.supporting_rows_or_groups or df[[m_out]].head(10).to_dict(orient="records"),
-                    x_key=m_out,
-                    y_keys=[m_out],
-                    dimensions=[],
-                    metrics=[m_out],
+        # Fallback candidate if no dimensions or measures found (e.g. single-column dataset)
+        if not visual_candidates:
+            fallback_col = df.columns[0]
+            fallback_plan = CandidatePlan(
+                dataset_id=dataset_id,
+                intent="Overview Distribution",
+                metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
+                dimensions=[DimensionSpec(column=fallback_col)],
+                limit=10,
+                visualization=VisualizationType.BAR,
+                reasoning=PlanReasoning(interpretation="Primary dataset distribution overview.", evidence=[]),
+            )
+            visual_candidates.append(
+                AnalyticalCandidate(
+                    candidate_id=f"cand_fallback_{uuid4().hex[:6]}",
+                    family=AnalyticalFamily.GROUPED_BREAKDOWN,
+                    plan=fallback_plan,
+                    chart_type="bar",
+                    primary_measure="*",
+                    primary_dimension=fallback_col,
+                    aggregation=AggregationType.COUNT,
+                    title="Primary Dataset Distribution",
+                    narration="Whole-dataset distribution overview.",
+                    base_score=0.80,
+                    evidence=TileEvidence(strength=0.8, robustness=0.8, score=0.8),
+                    default_size=TileSize(w=8, h=4),
                 )
-                tiles.append(out_tile)
+            )
+
+        # Execute and validate visual candidates
+        validated_candidates: List[AnalyticalCandidate] = []
+        for cand in visual_candidates:
+            if cand.chart_type == "scatter":
+                m1 = cand.primary_measure
+                m2 = cand.primary_dimension
+                sql = f'SELECT "{m1}", "{m2}" FROM "{dataset_id}" WHERE "{m1}" IS NOT NULL AND "{m2}" IS NOT NULL LIMIT 100;'
+                scatter_rows = df[[m1, m2]].dropna().head(100).to_dict(orient="records")
+                if len(scatter_rows) >= 8:
+                    cand.compiled_sql = sql
+                    cand.execution_result = ExecutionResult(
+                        plan_id=cand.plan.plan_id,
+                        status=ExecutionStatus.SUCCESS,
+                        rows=scatter_rows,
+                        columns=[m1, m2],
+                        row_count=len(scatter_rows),
+                        compiled_sql=sql,
+                    )
+                    validated_candidates.append(cand)
             else:
-                # Sample summary table
-                preview_cols = [c for c in df.columns if c in measures or c in dimensions][:4]
-                table_rows = df[preview_cols].head(8).to_dict(orient="records")
-                table_tile = DashboardTile(
-                    id=f"tile_table_{uuid4().hex[:8]}",
-                    title="Key Dataset Records",
-                    chart_type="table",
-                    size=TileSize(w=6, h=3),
-                    priority=len(tiles) + 1,
-                    generator="overview_planner",
-                    evidence=TileEvidence(strength=0.7, robustness=1.0, score=0.75, n=len(table_rows)),
-                    why_chosen="Overview sample of foundational records and dimensions.",
-                    data=table_rows,
-                    x_key=preview_cols[0] if preview_cols else "id",
-                    y_keys=preview_cols[1:] if len(preview_cols) > 1 else preview_cols,
-                    dimensions=[d for d in preview_cols if d in dimensions],
-                    metrics=[m for m in preview_cols if m in measures],
+                sql = compile_plan_to_sql(cand.plan, "source_data")
+                cand.compiled_sql = sql
+                exec_res = self.executor.execute_plan(
+                    plan=cand.plan,
+                    dataset=dataset,
+                    semantic_profile=semantic_profile,
+                    custom_sql=sql,
                 )
-                tiles.append(table_tile)
+                if exec_res.status == ExecutionStatus.SUCCESS and len(exec_res.rows) >= 2:
+                    cand.execution_result = exec_res
+                    cand.evidence = TileEvidence(
+                        strength=cand.evidence.strength,
+                        robustness=cand.evidence.robustness,
+                        score=cand.evidence.score,
+                        n=exec_res.row_count,
+                    )
+                    validated_candidates.append(cand)
+
+        # Fallback if no visual candidates validated
+        if not validated_candidates:
+            fb_col = df.columns[0]
+            fb_rows = df.head(10).to_dict(orient="records")
+            fb_plan = CandidatePlan(
+                dataset_id=dataset_id,
+                intent="Dataset Sample",
+                metric=MetricSpec(column="*", aggregation=AggregationType.COUNT),
+                dimensions=[],
+                reasoning=PlanReasoning(interpretation="Dataset preview sample.", evidence=[]),
+            )
+            validated_candidates.append(
+                AnalyticalCandidate(
+                    candidate_id=f"cand_fb_{uuid4().hex[:6]}",
+                    family=AnalyticalFamily.RECORD_SAMPLE,
+                    plan=fb_plan,
+                    chart_type="table",
+                    primary_measure="*",
+                    primary_dimension=fb_col,
+                    aggregation=AggregationType.COUNT,
+                    title="Dataset Overview Records",
+                    narration="Dataset preview records.",
+                    base_score=0.75,
+                    evidence=TileEvidence(strength=0.7, robustness=1.0, score=0.75, n=len(fb_rows)),
+                    default_size=TileSize(w=8, h=4),
+                    execution_result=ExecutionResult(
+                        plan_id=fb_plan.plan_id,
+                        status=ExecutionStatus.SUCCESS,
+                        rows=fb_rows,
+                        columns=list(df.columns),
+                        row_count=len(fb_rows),
+                        compiled_sql=f"SELECT * FROM {dataset_id} LIMIT 10",
+                    ),
+                    compiled_sql=f"SELECT * FROM {dataset_id} LIMIT 10",
+                )
+            )
+
+        # -------------------------------------------------------------------
+        # 7. DIVERSITY-AWARE VISUAL DASHBOARD SELECTION
+        # -------------------------------------------------------------------
+        # Hero Tile (w=8, h=4): prioritize temporal trend if available, else highest-scoring visual candidate
+        temporal_candidates = [c for c in validated_candidates if c.family == AnalyticalFamily.TEMPORAL_TREND]
+        if temporal_candidates:
+            hero_cand = temporal_candidates[0]
+        else:
+            hero_cand = max(validated_candidates, key=lambda c: c.base_score)
+
+        hero_tile = DashboardTile(
+            id=f"tile_hero_{uuid4().hex[:8]}",
+            title=hero_cand.title,
+            chart_type=hero_cand.chart_type,
+            size=TileSize(w=8, h=4),
+            priority=len(tiles) + 1,
+            generator="overview_planner",
+            evidence=hero_cand.evidence,
+            why_chosen=hero_cand.narration,
+            plan=hero_cand.plan,
+            compiled_sql=hero_cand.compiled_sql,
+            data=hero_cand.execution_result.rows if hero_cand.execution_result else [],
+            x_key=hero_cand.primary_dimension or (list(hero_cand.execution_result.rows[0].keys())[0] if hero_cand.execution_result and hero_cand.execution_result.rows else None),
+            y_keys=[list(hero_cand.execution_result.rows[0].keys())[1]] if hero_cand.execution_result and len(hero_cand.execution_result.rows[0]) > 1 else ["count"],
+            dimensions=[hero_cand.primary_dimension] if hero_cand.primary_dimension else [],
+            metrics=[hero_cand.primary_measure] if hero_cand.primary_measure else [],
+        )
+        hero_ranked_candidate = _make_ranked_candidate(hero_cand.plan, hero_cand.execution_result, score_val=hero_cand.base_score)
+        tiles.append(hero_tile)
+
+        # Side Tile (w=4, h=4): must complement Hero (prefer COMPOSITION donut or distinct dimension)
+        remaining_for_side = [
+            c for c in validated_candidates
+            if c.candidate_id != hero_cand.candidate_id
+            and (c.primary_dimension != hero_cand.primary_dimension or not hero_cand.primary_dimension)
+        ]
+        donut_side = next((c for c in remaining_for_side if c.chart_type == "donut"), None)
+        side_cand = donut_side or (remaining_for_side[0] if remaining_for_side else None)
+
+        if side_cand is not None and side_cand.execution_result:
+            side_tile = DashboardTile(
+                id=f"tile_side_{uuid4().hex[:8]}",
+                title=side_cand.title,
+                chart_type=side_cand.chart_type,
+                size=TileSize(w=4, h=4),
+                priority=len(tiles) + 1,
+                generator="overview_planner",
+                evidence=side_cand.evidence,
+                why_chosen=side_cand.narration,
+                plan=side_cand.plan,
+                compiled_sql=side_cand.compiled_sql,
+                data=side_cand.execution_result.rows,
+                x_key=side_cand.primary_dimension or list(side_cand.execution_result.rows[0].keys())[0],
+                y_keys=["count"] if "count" in side_cand.execution_result.rows[0] else [list(side_cand.execution_result.rows[0].keys())[1]],
+                dimensions=[side_cand.primary_dimension] if side_cand.primary_dimension else [],
+                metrics=[side_cand.primary_measure] if side_cand.primary_measure else ["*"],
+            )
+            tiles.append(side_tile)
+
+        # Secondary Tiles (w=6, h=3 each)
+        used_ids = {hero_cand.candidate_id}
+        if side_cand:
+            used_ids.add(side_cand.candidate_id)
+
+        remaining_sec = [
+            c for c in validated_candidates
+            if c.candidate_id not in used_ids
+            and c.chart_type in ("bar", "line")
+            and (not hero_cand.primary_measure or c.primary_measure != hero_cand.primary_measure)
+        ]
+        if not remaining_sec:
+            remaining_sec = [c for c in validated_candidates if c.candidate_id not in used_ids and c.chart_type in ("bar", "line")]
+
+        if remaining_sec and remaining_sec[0].execution_result:
+            sec_cand = remaining_sec[0]
+            used_ids.add(sec_cand.candidate_id)
+            sec_tile = DashboardTile(
+                id=f"tile_sec_{uuid4().hex[:8]}",
+                title=sec_cand.title,
+                chart_type=sec_cand.chart_type,
+                size=TileSize(w=6, h=3),
+                priority=len(tiles) + 1,
+                generator="overview_planner",
+                evidence=sec_cand.evidence,
+                why_chosen=sec_cand.narration,
+                plan=sec_cand.plan,
+                compiled_sql=sec_cand.compiled_sql,
+                data=sec_cand.execution_result.rows,
+                x_key=sec_cand.primary_dimension or list(sec_cand.execution_result.rows[0].keys())[0],
+                y_keys=[list(sec_cand.execution_result.rows[0].keys())[1]] if len(sec_cand.execution_result.rows[0]) > 1 else ["count"],
+                dimensions=[sec_cand.primary_dimension] if sec_cand.primary_dimension else [],
+                metrics=[sec_cand.primary_measure] if sec_cand.primary_measure else [],
+            )
+            tiles.append(sec_tile)
+
+        # Secondary Tile 2: Correlation Scatter, Outlier, or Sample Table
+        corr_cand = next((c for c in validated_candidates if c.chart_type == "scatter" and c.candidate_id not in used_ids), None)
+        if corr_cand and corr_cand.execution_result:
+            corr_tile = DashboardTile(
+                id=f"tile_corr_{uuid4().hex[:8]}",
+                title=corr_cand.title,
+                chart_type="scatter",
+                size=TileSize(w=6, h=3),
+                priority=len(tiles) + 1,
+                generator="overview_planner",
+                evidence=corr_cand.evidence,
+                why_chosen=corr_cand.narration,
+                plan=corr_cand.plan,
+                compiled_sql=corr_cand.compiled_sql,
+                data=corr_cand.execution_result.rows,
+                x_key=corr_cand.primary_measure,
+                y_keys=[corr_cand.primary_dimension] if corr_cand.primary_dimension else [],
+                dimensions=[corr_cand.primary_measure] if corr_cand.primary_measure else [],
+                metrics=[corr_cand.primary_dimension] if corr_cand.primary_dimension else [],
+            )
+            tiles.append(corr_tile)
+        elif outlier_insights:
+            top_outlier = outlier_insights[0]
+            m_out = top_outlier.evidence.metric_column
+            out_tile = DashboardTile(
+                id=f"tile_outlier_{uuid4().hex[:8]}",
+                title=top_outlier.title,
+                chart_type="table",
+                size=TileSize(w=6, h=3),
+                priority=len(tiles) + 1,
+                generator="overview_planner",
+                evidence=TileEvidence(strength=0.85, robustness=0.95, score=0.90, n=top_outlier.evidence.row_count),
+                why_chosen=top_outlier.statement,
+                compiled_sql=top_outlier.evidence.compiled_sql,
+                data=top_outlier.evidence.supporting_rows_or_groups or df[[m_out]].head(10).to_dict(orient="records"),
+                x_key=m_out,
+                y_keys=[m_out],
+                dimensions=[],
+                metrics=[m_out],
+            )
+            tiles.append(out_tile)
+        else:
+            # Sample summary table
+            preview_cols = [c for c in df.columns if c in measures or c in dimensions][:4]
+            if not preview_cols:
+                preview_cols = list(df.columns[:4])
+            table_rows = df[preview_cols].head(8).to_dict(orient="records")
+            table_tile = DashboardTile(
+                id=f"tile_table_{uuid4().hex[:8]}",
+                title="Key Dataset Records",
+                chart_type="table",
+                size=TileSize(w=6, h=3),
+                priority=len(tiles) + 1,
+                generator="overview_planner",
+                evidence=TileEvidence(strength=0.7, robustness=1.0, score=0.75, n=len(table_rows)),
+                why_chosen="Overview sample of foundational records and dimensions.",
+                data=table_rows,
+                x_key=preview_cols[0] if preview_cols else "id",
+                y_keys=preview_cols[1:] if len(preview_cols) > 1 else preview_cols,
+                dimensions=[d for d in preview_cols if d in dimensions],
+                metrics=[m for m in preview_cols if m in measures],
+            )
+            tiles.append(table_tile)
 
         # -------------------------------------------------------------------
         # 7. Slicers Generation
