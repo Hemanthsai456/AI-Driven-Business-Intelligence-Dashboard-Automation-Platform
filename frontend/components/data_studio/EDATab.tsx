@@ -1309,159 +1309,188 @@ export const EDATab: React.FC<EDATabProps> = ({
               <div className="space-y-4">
                 {/* Visual Canvas */}
                 <div className="h-80 w-full bg-surface p-4 rounded-lg border border-border">
-                  {exploreResult.chart_type === 'scatter' && (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart
-                        key={`explore-scatter-${chartTheme.themeKey}`}
-                        margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
-                      >
-                        <CartesianGrid {...chartTheme.gridProps} />
-                        <XAxis
-                          dataKey="x"
-                          name={exploreResult.x_column}
-                          type="number"
-                          {...chartTheme.xAxisProps({
-                            label: {
-                              value: exploreResult.x_column,
-                              position: 'bottom',
-                              offset: 15,
-                              fontSize: 11,
-                              fill: 'var(--foreground)',
-                            },
-                          })}
-                        />
-                        <YAxis
-                          dataKey="y"
-                          name={exploreResult.y_column}
-                          type="number"
-                          {...chartTheme.yAxisProps({
-                            width: 45,
-                            label: {
-                              value: exploreResult.y_column,
-                              angle: -90,
-                              position: 'insideLeft',
-                              fontSize: 11,
-                              fill: 'var(--foreground)',
-                            },
-                          })}
-                        />
-                        <Tooltip
-                          {...chartTheme.tooltipProps}
-                          cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}
-                        />
-                        <Scatter
-                          data={exploreResult.data}
-                          fill="var(--chart-1)"
-                          opacity={0.75}
-                        />
-                      </ScatterChart>
-                    </ResponsiveContainer>
-                  )}
+                  {!exploreResult.data || exploreResult.data.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
+                      <BarChart3 className="w-8 h-8 text-muted-foreground/40" />
+                      <p className="text-xs font-semibold text-foreground">No data points to display</p>
+                      <p className="text-2xs text-muted-foreground max-w-sm">
+                        {exploreResult.error_message || 'The selected query produced no valid non-null rows.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {exploreResult.chart_type === 'scatter' && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ScatterChart
+                            key={`explore-scatter-${chartTheme.themeKey}`}
+                            margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
+                          >
+                            <CartesianGrid {...chartTheme.gridProps} />
+                            <XAxis
+                              dataKey="x"
+                              name={exploreResult.x_column}
+                              type="number"
+                              {...chartTheme.xAxisProps({
+                                label: {
+                                  value: exploreResult.x_column,
+                                  position: 'bottom',
+                                  offset: 15,
+                                  fontSize: 11,
+                                  fill: 'var(--foreground)',
+                                },
+                              })}
+                            />
+                            <YAxis
+                              dataKey="y"
+                              name={exploreResult.y_column}
+                              type="number"
+                              {...chartTheme.yAxisProps({
+                                width: 45,
+                                label: {
+                                  value: exploreResult.y_column,
+                                  angle: -90,
+                                  position: 'insideLeft',
+                                  fontSize: 11,
+                                  fill: 'var(--foreground)',
+                                },
+                              })}
+                            />
+                            <Tooltip
+                              {...chartTheme.tooltipProps}
+                              cursor={{ stroke: 'var(--border)', strokeDasharray: '3 3' }}
+                            />
+                            <Scatter
+                              data={exploreResult.data}
+                              fill="var(--chart-1)"
+                              opacity={0.75}
+                            />
+                          </ScatterChart>
+                        </ResponsiveContainer>
+                      )}
 
-                  {exploreResult.chart_type === 'line' && (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        key={`explore-line-${chartTheme.themeKey}`}
-                        data={exploreResult.data}
-                        margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
-                      >
-                        <CartesianGrid {...chartTheme.gridProps} />
-                        <XAxis
-                          dataKey="period"
-                          {...chartTheme.xAxisProps({
-                            angle: -20,
-                            textAnchor: 'end',
-                            height: 35,
-                          })}
-                        />
-                        <YAxis
-                          {...chartTheme.yAxisProps({
-                            width: 45,
-                            tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
-                          })}
-                        />
-                        <Tooltip {...chartTheme.tooltipProps} />
-                        <Line
-                          type="monotone"
-                          dataKey="value"
-                          name={exploreResult.y_column || 'Value'}
-                          stroke="var(--chart-3)"
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: 'var(--chart-3)' }}
-                          activeDot={{ r: 5, stroke: 'var(--surface)', strokeWidth: 2 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )}
+                      {exploreResult.chart_type === 'line' && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            key={`explore-line-${chartTheme.themeKey}`}
+                            data={exploreResult.data}
+                            margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
+                          >
+                            <CartesianGrid {...chartTheme.gridProps} />
+                            <XAxis
+                              dataKey="period"
+                              {...chartTheme.xAxisProps({
+                                angle: -20,
+                                textAnchor: 'end',
+                                height: 35,
+                              })}
+                            />
+                            <YAxis
+                              {...chartTheme.yAxisProps({
+                                width: 45,
+                                tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
+                              })}
+                            />
+                            <Tooltip {...chartTheme.tooltipProps} />
+                            <Line
+                              type="monotone"
+                              dataKey="value"
+                              name={exploreResult.y_column || 'Value'}
+                              stroke="var(--chart-3)"
+                              strokeWidth={2}
+                              dot={{ r: 3, fill: 'var(--chart-3)' }}
+                              activeDot={{ r: 5, stroke: 'var(--surface)', strokeWidth: 2 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
 
-                  {exploreResult.chart_type === 'bar' && (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        key={`explore-bar-${chartTheme.themeKey}`}
-                        data={exploreResult.data}
-                        margin={{ top: 10, right: 20, left: 15, bottom: 40 }}
-                      >
-                        <CartesianGrid {...chartTheme.gridProps} vertical={false} />
-                        <XAxis
-                          dataKey="category"
-                          {...chartTheme.xAxisProps({
-                            angle: -25,
-                            textAnchor: 'end',
-                            interval: 0,
-                            height: 40,
-                            tick: { fontSize: 9, fill: 'var(--foreground)' },
-                          })}
-                        />
-                        <YAxis
-                          {...chartTheme.yAxisProps({
-                            width: 45,
-                            tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
-                          })}
-                        />
-                        <Tooltip {...chartTheme.tooltipProps} />
-                        <Bar
-                          dataKey="value"
-                          name={exploreResult.y_column || 'Count'}
-                          fill="var(--chart-2)"
-                          radius={[3, 3, 0, 0]}
-                          activeBar={{ fill: 'var(--primary-hover, var(--chart-2))' }}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
+                      {exploreResult.chart_type === 'bar' && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            key={`explore-bar-${chartTheme.themeKey}`}
+                            data={exploreResult.data}
+                            margin={{ top: 10, right: 20, left: 15, bottom: 40 }}
+                          >
+                            <CartesianGrid {...chartTheme.gridProps} vertical={false} />
+                            <XAxis
+                              dataKey="category"
+                              {...chartTheme.xAxisProps({
+                                angle: -25,
+                                textAnchor: 'end',
+                                interval: 0,
+                                height: 40,
+                                tick: { fontSize: 9, fill: 'var(--foreground)' },
+                              })}
+                            />
+                            <YAxis
+                              {...chartTheme.yAxisProps({
+                                width: 45,
+                                tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
+                              })}
+                            />
+                            <Tooltip {...chartTheme.tooltipProps} />
+                            <Bar
+                              dataKey="value"
+                              name={exploreResult.y_column || 'Count'}
+                              fill="var(--chart-2)"
+                              radius={[3, 3, 0, 0]}
+                              activeBar={{ fill: 'var(--primary-hover, var(--chart-2))' }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
 
-                  {exploreResult.chart_type === 'distribution' && (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        key={`explore-dist-${chartTheme.themeKey}`}
-                        data={exploreResult.data}
-                        margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
-                      >
-                        <CartesianGrid {...chartTheme.gridProps} vertical={false} />
-                        <XAxis
-                          dataKey={exploreResult.distribution_type === 'numeric' ? 'bin_label' : 'category'}
-                          {...chartTheme.xAxisProps({
-                            angle: -20,
-                            textAnchor: 'end',
-                            height: 35,
-                          })}
-                        />
-                        <YAxis
-                          {...chartTheme.yAxisProps({
-                            width: 45,
-                            tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
-                          })}
-                        />
-                        <Tooltip {...chartTheme.tooltipProps} />
-                        <Bar
-                          dataKey="count"
-                          name="Frequency"
-                          fill="var(--chart-1)"
-                          radius={[3, 3, 0, 0]}
-                          activeBar={{ fill: 'var(--primary-hover, var(--chart-1))' }}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
+                      {exploreResult.chart_type === 'distribution' && (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            key={`explore-dist-${chartTheme.themeKey}`}
+                            data={exploreResult.data}
+                            margin={{ top: 10, right: 20, left: 15, bottom: 35 }}
+                          >
+                            <CartesianGrid {...chartTheme.gridProps} vertical={false} />
+                            <XAxis
+                              dataKey={
+                                exploreResult.distribution_type === 'numeric' ||
+                                (exploreResult.data?.[0] && 'bin_label' in exploreResult.data[0])
+                                  ? 'bin_label'
+                                  : 'category'
+                              }
+                              {...chartTheme.xAxisProps({
+                                angle: -20,
+                                textAnchor: 'end',
+                                height: 35,
+                              })}
+                            />
+                            <YAxis
+                              {...chartTheme.yAxisProps({
+                                width: 45,
+                                tickFormatter: (v: number) => (typeof v === 'number' ? v.toLocaleString() : v),
+                              })}
+                            />
+                            <Tooltip
+                              {...chartTheme.tooltipProps}
+                              formatter={(val: any, name: any, item: any) => {
+                                const pct = item?.payload?.percentage;
+                                return [
+                                  pct !== undefined
+                                    ? `${val} rows (${Number(pct).toFixed(1)}%)`
+                                    : `${val} rows`,
+                                  'Frequency',
+                                ];
+                              }}
+                              labelFormatter={(l) => `Interval / Category: ${l}`}
+                            />
+                            <Bar
+                              dataKey="count"
+                              name="Frequency"
+                              fill={chartTheme.tokens.series[0] || 'var(--chart-1)'}
+                              radius={[3, 3, 0, 0]}
+                              activeBar={{ fill: 'var(--primary-hover, var(--chart-1))' }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </>
                   )}
                 </div>
 
