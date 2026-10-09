@@ -11,6 +11,10 @@ module.exports = {
         bg: 'var(--bg)',
         background: 'var(--bg)',
         foreground: 'var(--text)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
         surface: {
           DEFAULT: 'var(--surface)',
           elevated: 'var(--surface-elevated)',
