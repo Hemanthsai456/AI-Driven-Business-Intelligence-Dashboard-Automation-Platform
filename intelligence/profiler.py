@@ -124,6 +124,7 @@ class DataProfiler:
                     "null_count": null_cnt,
                     "null_percentage": null_pct,
                     "distinct_count": distinct_cnt,
+                    "uniqueness_percentage": round(float((distinct_cnt / row_cnt) * 100.0), 2) if row_cnt > 0 else 0.0,
                     "is_unique": is_uniq,
                     "is_constant": is_const,
                     "is_all_null": is_all_null,
@@ -148,6 +149,32 @@ class DataProfiler:
                         col_stats["negative_count"] = int((non_null_series < 0).sum())
                         if pd.api.types.is_float_dtype(series):
                             col_stats["infinite_count"] = int(np.isinf(non_null_series).sum())
+
+                        # Deterministic 10-bin histogram for distribution visualization
+                        try:
+                            finite_series = non_null_series[np.isfinite(non_null_series)]
+                            if len(finite_series) >= 2 and float(finite_series.min()) != float(finite_series.max()):
+                                counts, bin_edges = np.histogram(finite_series, bins=10)
+                                col_stats["histogram"] = [
+                                    {
+                                        "bin_start": sanitize_json_value(round(float(bin_edges[i]), 2)),
+                                        "bin_end": sanitize_json_value(round(float(bin_edges[i+1]), 2)),
+                                        "count": int(counts[i]),
+                                    }
+                                    for i in range(len(counts))
+                                ]
+                            elif len(finite_series) > 0:
+                                col_stats["histogram"] = [
+                                    {
+                                        "bin_start": sanitize_json_value(round(float(finite_series.min()), 2)),
+                                        "bin_end": sanitize_json_value(round(float(finite_series.max()), 2)),
+                                        "count": int(len(finite_series)),
+                                    }
+                                ]
+                            else:
+                                col_stats["histogram"] = []
+                        except Exception:
+                            col_stats["histogram"] = []
                     else:
                         col_stats.update(
                             {
@@ -161,13 +188,16 @@ class DataProfiler:
                                 "zero_count": 0,
                                 "negative_count": 0,
                                 "infinite_count": 0,
+                                "histogram": [],
                             }
                         )
 
                 # Boolean Column Statistics
-                elif pd.api.types.is_bool_dtype(series):
-                    col_stats["true_count"] = int((series == True).sum())
-                    col_stats["false_count"] = int((series == False).sum())
+                elif pd.api.types.is_bool_dtype(series) or (
+                    non_null_cnt > 0 and all(isinstance(x, (bool, np.bool_)) for x in non_null_series)
+                ):
+                    col_stats["true_count"] = int((non_null_series == True).sum())
+                    col_stats["false_count"] = int((non_null_series == False).sum())
 
                 # Categorical / Text / Object Column Statistics
                 elif (
@@ -193,17 +223,50 @@ class DataProfiler:
                         col_stats["most_frequent_values"] = []
 
                 # Datetime Column Statistics
-                elif pd.api.types.is_datetime64_any_dtype(series):
+                if pd.api.types.is_datetime64_any_dtype(series):
                     if non_null_cnt > 0:
-                        col_stats["min_datetime"] = sanitize_json_value(non_null_series.min())
-                        col_stats["max_datetime"] = sanitize_json_value(non_null_series.max())
+                        min_dt = non_null_series.min()
+                        max_dt = non_null_series.max()
+                        col_stats["min_datetime"] = sanitize_json_value(min_dt)
+                        col_stats["max_datetime"] = sanitize_json_value(max_dt)
                         col_stats["distinct_dates_count"] = int(
                             non_null_series.dt.date.nunique(dropna=True)
                         )
+                        try:
+                            col_stats["temporal_span_days"] = int((max_dt - min_dt).days)
+                        except Exception:
+                            col_stats["temporal_span_days"] = None
                     else:
                         col_stats.update(
-                            {"min_datetime": None, "max_datetime": None, "distinct_dates_count": 0}
+                            {
+                                "min_datetime": None,
+                                "max_datetime": None,
+                                "distinct_dates_count": 0,
+                                "temporal_span_days": None,
+                            }
                         )
+                elif (
+                    pd.api.types.is_string_dtype(series)
+                    or pd.api.types.is_object_dtype(series)
+                ) and non_null_cnt > 0:
+                    # Non-destructively evaluate if text column represents date/timestamps
+                    try:
+                        parsed_dt = pd.to_datetime(non_null_series, errors="coerce", format="mixed")
+                        valid_parsed = parsed_dt.dropna()
+                        if len(valid_parsed) >= 0.8 * non_null_cnt and len(valid_parsed) > 0:
+                            min_dt = valid_parsed.min()
+                            max_dt = valid_parsed.max()
+                            col_stats["min_datetime"] = sanitize_json_value(min_dt)
+                            col_stats["max_datetime"] = sanitize_json_value(max_dt)
+                            col_stats["distinct_dates_count"] = int(
+                                valid_parsed.dt.date.nunique(dropna=True)
+                            )
+                            try:
+                                col_stats["temporal_span_days"] = int((max_dt - min_dt).days)
+                            except Exception:
+                                col_stats["temporal_span_days"] = None
+                    except Exception:
+                        pass
 
                 column_statistics[col_str] = col_stats
 

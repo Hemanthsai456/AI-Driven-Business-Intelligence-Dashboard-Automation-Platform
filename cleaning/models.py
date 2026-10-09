@@ -145,3 +145,414 @@ class CleaningResult:
             "dataset": self.dataset.to_dict(),
             "report": self.report.to_dict(),
         }
+
+
+# =========================================================================
+# Part 4 — Data Studio: Cleaning Intelligence & Cleaning Plan Models
+# =========================================================================
+
+
+def get_default_supported_variants(operation: str) -> List[Dict[str, str]]:
+    """Determine the deterministic set of allowed user-selectable operation variants."""
+    if operation in ["IMPUTE_MEDIAN", "IMPUTE_MEAN"]:
+        return [
+            {"operation": "IMPUTE_MEDIAN", "label": "Median", "description": "Fill missing values with dynamically computed median"},
+            {"operation": "IMPUTE_MEAN", "label": "Mean", "description": "Fill missing values with dynamically computed mean"},
+            {"operation": "IMPUTE_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified numeric constant"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "FILL_MODE":
+        return [
+            {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
+            {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
+            {"operation": "FILL_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified text constant"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "FILL_UNKNOWN":
+        return [
+            {"operation": "FILL_UNKNOWN", "label": "Unknown", "description": "Fill missing values with 'Unknown' placeholder"},
+            {"operation": "FILL_MODE", "label": "Mode", "description": "Fill missing values with dominant mode"},
+            {"operation": "FILL_SPECIFIC_VALUE", "label": "Specific Value", "description": "Fill missing values with a user-specified text constant"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Do not fill missing values"},
+        ]
+    elif operation == "REMOVE_DUPLICATES":
+        return [
+            {"operation": "REMOVE_DUPLICATES", "label": "Remove Duplicates", "description": "Drop exact duplicate rows"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Keep Duplicates", "description": "Keep all duplicate rows"},
+        ]
+    elif operation == "NORMALIZE_EMPTY_STRINGS":
+        return [
+            {"operation": "NORMALIZE_EMPTY_STRINGS", "label": "Normalize to Null", "description": "Convert empty/whitespace strings to null"},
+            {"operation": "TRIM_WHITESPACE", "label": "Trim Whitespace", "description": "Strip leading and trailing spaces"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Keep whitespace strings as-is"},
+        ]
+    elif operation == "TRIM_WHITESPACE":
+        return [
+            {"operation": "TRIM_WHITESPACE", "label": "Trim Whitespace", "description": "Strip leading and trailing spaces"},
+            {"operation": "NORMALIZE_EMPTY_STRINGS", "label": "Normalize to Null", "description": "Convert empty/whitespace strings to null"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Keep whitespace as-is"},
+        ]
+    elif operation in ["CONVERT_NUMERIC", "CONVERT_FLOAT"]:
+        return [
+            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric (float)"},
+            {"operation": "CONVERT_INTEGER", "label": "Convert to Integer", "description": "Convert whole numbers to integer"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation == "CONVERT_INTEGER":
+        return [
+            {"operation": "CONVERT_INTEGER", "label": "Convert to Integer", "description": "Convert whole numbers to integer"},
+            {"operation": "CONVERT_NUMERIC", "label": "Convert to Numeric", "description": "Coerce values to numeric (float)"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation == "CONVERT_DATETIME":
+        return [
+            {"operation": "CONVERT_DATETIME", "label": "Convert to Datetime", "description": "Parse timestamps into datetime"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text data type"},
+        ]
+    elif operation in ["NORMALIZE_BOOLEAN", "CONVERT_BOOLEAN"]:
+        return [
+            {"operation": "NORMALIZE_BOOLEAN", "label": "Normalize Boolean", "description": "Standardize yes/no/true/false to bool"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original text representations"},
+        ]
+    elif operation in ["CONVERT_STRING", "CONVERT_TEXT"]:
+        return [
+            {"operation": "CONVERT_STRING", "label": "Convert to Text", "description": "Convert column values to text"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Leave Unchanged", "description": "Preserve original data type"},
+        ]
+    elif operation in ["SPLIT_COLUMNS", "EXPAND_ROWS"]:
+        return [
+            {"operation": "SPLIT_COLUMNS", "label": "Split into Columns", "description": "Split delimited tokens into distinct new columns"},
+            {"operation": "EXPAND_ROWS", "label": "Expand into Rows", "description": "Explode delimited values into multiple duplicated rows"},
+            {"operation": "LEAVE_UNCHANGED", "label": "Keep As Is", "description": "Preserve original multi-valued cells as-is"},
+        ]
+    return []
+
+
+@dataclass
+class CleaningRecommendation:
+    """Structured deterministic cleaning proposal for a dataset column or whole dataset."""
+
+    recommendation_id: str
+    column_name: Optional[str]
+    operation: str
+    category: str
+    evidence: List[str]
+    affected_rows: int
+    affected_percentage: float
+    confidence: float
+    confidence_level: str
+    risk_level: str
+    default_selected: bool
+    user_selected: bool
+    rationale: str
+    expected_effect: str
+    requires_review: bool
+    status: str
+    source: str = "RECOMMENDATION"  # "RECOMMENDATION" | "USER"
+    user_selected_operation: Optional[str] = None
+    supported_variants: List[Dict[str, str]] = field(default_factory=list)
+    params: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.user_selected_operation is None:
+            self.user_selected_operation = self.operation
+        if not self.supported_variants:
+            self.supported_variants = get_default_supported_variants(self.operation)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert cleaning recommendation to a JSON-serializable dictionary."""
+        return {
+            "recommendation_id": self.recommendation_id,
+            "column_name": self.column_name,
+            "operation": self.operation,
+            "user_selected_operation": self.user_selected_operation or self.operation,
+            "supported_variants": self.supported_variants,
+            "category": self.category,
+            "evidence": self.evidence,
+            "affected_rows": int(self.affected_rows),
+            "affected_percentage": round(float(self.affected_percentage), 2),
+            "confidence": round(float(self.confidence), 2),
+            "confidence_level": self.confidence_level,
+            "risk_level": self.risk_level,
+            "default_selected": bool(self.default_selected),
+            "user_selected": bool(self.user_selected),
+            "rationale": self.rationale,
+            "expected_effect": self.expected_effect,
+            "requires_review": bool(self.requires_review),
+            "status": self.status,
+            "source": self.source,
+            "params": sanitize_json_value(self.params),
+        }
+
+
+@dataclass
+class CleaningPlan:
+    """Ordered collection of deterministic cleaning recommendations for user review.
+
+    Attributes:
+        dataset_id: Identifier of the dataset.
+        total_recommendations: Total count of proposed recommendations.
+        recommended_count: Count of high-confidence recommended operations.
+        review_required_count: Count of operations flagged for user review.
+        safe_count: Count of low-risk safe operations.
+        estimated_rows_affected: Estimated distinct rows affected across all recommendations.
+        recommendations: Ordered list of cleaning recommendations.
+        generated_at: ISO timestamp of plan creation.
+    """
+
+    dataset_id: str
+    total_recommendations: int
+    recommended_count: int
+    review_required_count: int
+    safe_count: int
+    estimated_rows_affected: int
+    recommendations: List[CleaningRecommendation] = field(default_factory=list)
+    generated_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert cleaning plan to a JSON-serializable dictionary."""
+        return {
+            "dataset_id": self.dataset_id,
+            "total_recommendations": int(self.total_recommendations),
+            "recommended_count": int(self.recommended_count),
+            "review_required_count": int(self.review_required_count),
+            "safe_count": int(self.safe_count),
+            "estimated_rows_affected": int(self.estimated_rows_affected),
+            "recommendations": [r.to_dict() for r in self.recommendations],
+            "generated_at": sanitize_json_value(self.generated_at),
+        }
+
+
+# =========================================================================
+# Part 5 — Data Studio: Cleaning Preview & Batch Execution Models
+# =========================================================================
+
+
+@dataclass
+class SampleCellChange:
+    """Sample record of a single cell value modified during cleaning preview/execution."""
+
+    row_index: int
+    column_name: str
+    before_value: Any
+    after_value: Any
+    operation: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "row_index": int(self.row_index),
+            "column_name": self.column_name,
+            "before_value": sanitize_json_value(self.before_value),
+            "after_value": sanitize_json_value(self.after_value),
+            "operation": self.operation,
+        }
+
+
+@dataclass
+class ColumnTransformPreviewResult:
+    """Deterministic conversion preview for a user-controlled column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: str
+    original_dtype: str
+    target_dtype: str
+    total_rows: int
+    non_null_count: int
+    converted_count: int
+    unparseable_count: int
+    unparseable_samples: List[Any] = field(default_factory=list)
+    fractional_loss_count: int = 0
+    original_missing_count: int = 0
+    new_missing_count: int = 0
+    is_valid: bool = True
+    error_message: Optional[str] = None
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "column_name": self.column_name,
+            "operation": self.operation,
+            "target_type": self.target_type,
+            "original_dtype": self.original_dtype,
+            "target_dtype": self.target_dtype,
+            "total_rows": int(self.total_rows),
+            "non_null_count": int(self.non_null_count),
+            "converted_count": int(self.converted_count),
+            "unparseable_count": int(self.unparseable_count),
+            "unparseable_samples": [sanitize_json_value(s) for s in self.unparseable_samples],
+            "fractional_loss_count": int(self.fractional_loss_count),
+            "original_missing_count": int(self.original_missing_count),
+            "new_missing_count": int(self.new_missing_count),
+            "is_valid": bool(self.is_valid),
+            "error_message": self.error_message,
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
+        }
+
+
+@dataclass
+class OperationExecutionResult:
+    """Detailed audit of a single executed or skipped cleaning recommendation."""
+
+    recommendation_id: str
+    operation: str
+    column_name: Optional[str]
+    status: str  # 'APPLIED', 'SKIPPED', 'WARNING', 'FAILED'
+    rows_affected: int
+    cells_affected: int
+    method_used: str
+    before_statistic: str
+    after_statistic: str
+    details: Dict[str, Any] = field(default_factory=dict)
+    warnings: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "recommendation_id": self.recommendation_id,
+            "operation": self.operation,
+            "column_name": self.column_name,
+            "status": self.status,
+            "rows_affected": int(self.rows_affected),
+            "cells_affected": int(self.cells_affected),
+            "method_used": self.method_used,
+            "before_statistic": self.before_statistic,
+            "after_statistic": self.after_statistic,
+            "details": sanitize_json_value(self.details),
+            "warnings": self.warnings,
+        }
+
+
+@dataclass
+class CleaningValidationCheck:
+    """A deterministic invariant check performed on post-cleaning data."""
+
+    check_name: str
+    status: str  # 'PASSED', 'FAILED', 'WARNING'
+    message: str
+    column_name: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "check_name": self.check_name,
+            "status": self.status,
+            "message": self.message,
+            "column_name": self.column_name,
+            "details": sanitize_json_value(self.details),
+        }
+
+
+@dataclass
+class CleaningValidationResult:
+    """Comprehensive validation outcomes across all post-cleaning invariant checks."""
+
+    overall_status: str  # 'PASSED', 'WARNING', 'FAILED'
+    total_checks: int
+    passed_checks: int
+    failed_checks: int
+    warning_checks: int
+    checks: List[CleaningValidationCheck] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "overall_status": self.overall_status,
+            "total_checks": int(self.total_checks),
+            "passed_checks": int(self.passed_checks),
+            "failed_checks": int(self.failed_checks),
+            "warning_checks": int(self.warning_checks),
+            "checks": [c.to_dict() for c in self.checks],
+        }
+
+
+@dataclass
+class CleaningPreviewResult:
+    """Non-mutating preview of the selected cleaning operations."""
+
+    dataset_id: str
+    original_row_count: int
+    preview_row_count: int
+    row_count_change: int
+    original_column_count: int
+    preview_column_count: int
+    operations_requested: int
+    operations_applicable: int
+    operations_skipped: int
+    total_cells_affected: int
+    operations: List[OperationExecutionResult] = field(default_factory=list)
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    generated_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "dataset_id": self.dataset_id,
+            "original_row_count": int(self.original_row_count),
+            "preview_row_count": int(self.preview_row_count),
+            "row_count_change": int(self.row_count_change),
+            "original_column_count": int(self.original_column_count),
+            "preview_column_count": int(self.preview_column_count),
+            "operations_requested": int(self.operations_requested),
+            "operations_applicable": int(self.operations_applicable),
+            "operations_skipped": int(self.operations_skipped),
+            "total_cells_affected": int(self.total_cells_affected),
+            "operations": [op.to_dict() for op in self.operations],
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
+            "warnings": self.warnings,
+            "generated_at": sanitize_json_value(self.generated_at),
+        }
+
+
+@dataclass
+class CleaningExecutionResult:
+    """Audit-grade summary of applied batch cleaning transformations and validation."""
+
+    dataset_id: str
+    original_row_count: int
+    cleaned_row_count: int
+    row_count_change: int
+    original_column_count: int
+    cleaned_column_count: int
+    operations_requested: int
+    operations_applied: int
+    operations_skipped: int
+    operations_failed: int
+    total_rows_affected: int
+    total_cells_affected: int
+    operations: List[OperationExecutionResult] = field(default_factory=list)
+    validation: Optional[CleaningValidationResult] = None
+    before_summary: Dict[str, Any] = field(default_factory=dict)
+    after_summary: Dict[str, Any] = field(default_factory=dict)
+    sample_changes: List[SampleCellChange] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    executed_at: str = field(
+        default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "dataset_id": self.dataset_id,
+            "original_row_count": int(self.original_row_count),
+            "cleaned_row_count": int(self.cleaned_row_count),
+            "row_count_change": int(self.row_count_change),
+            "original_column_count": int(self.original_column_count),
+            "cleaned_column_count": int(self.cleaned_column_count),
+            "operations_requested": int(self.operations_requested),
+            "operations_applied": int(self.operations_applied),
+            "operations_skipped": int(self.operations_skipped),
+            "operations_failed": int(self.operations_failed),
+            "total_rows_affected": int(self.total_rows_affected),
+            "total_cells_affected": int(self.total_cells_affected),
+            "operations": [op.to_dict() for op in self.operations],
+            "validation": self.validation.to_dict() if self.validation else None,
+            "before_summary": sanitize_json_value(self.before_summary),
+            "after_summary": sanitize_json_value(self.after_summary),
+            "sample_changes": [s.to_dict() for s in self.sample_changes],
+            "warnings": self.warnings,
+            "executed_at": sanitize_json_value(self.executed_at),
+        }
+
+

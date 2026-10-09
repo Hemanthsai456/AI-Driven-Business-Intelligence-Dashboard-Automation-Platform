@@ -32,6 +32,12 @@ export interface DataPreviewResponse {
   is_preview: boolean;
 }
 
+export interface HistogramBin {
+  bin_start: number;
+  bin_end: number;
+  count: number;
+}
+
 export interface ColumnStatistics {
   column_name: string;
   detected_datatype: string;
@@ -40,18 +46,30 @@ export interface ColumnStatistics {
   null_count: number;
   null_percentage: number;
   distinct_count: number;
+  uniqueness_percentage?: number;
   is_unique: boolean;
   is_constant: boolean;
   is_all_null: boolean;
   observations: string[];
-  min?: number;
-  max?: number;
-  mean?: number;
-  median?: number;
-  std?: number;
-  q25?: number;
-  q75?: number;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  median?: number | null;
+  std?: number | null;
+  q25?: number | null;
+  q75?: number | null;
+  zero_count?: number;
+  negative_count?: number;
+  infinite_count?: number;
+  histogram?: HistogramBin[];
   most_frequent_values?: { value: any; count: number }[];
+  min_datetime?: string | null;
+  max_datetime?: string | null;
+  distinct_dates_count?: number;
+  temporal_span_days?: number | null;
+  true_count?: number;
+  false_count?: number;
+  empty_string_count?: number;
   [key: string]: any;
 }
 
@@ -82,6 +100,9 @@ export interface DataProfile {
 export interface SemanticColumn {
   column_name: string;
   candidate_role: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN';
+  system_role?: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN';
+  user_override_role?: 'MEASURE' | 'DIMENSION' | 'DATETIME' | 'IDENTIFIER' | 'UNKNOWN' | null;
+  is_user_overridden?: boolean;
   confidence: number;
   confidence_level: 'HIGH' | 'MEDIUM' | 'LOW' | 'NONE';
   evidence: string[];
@@ -111,6 +132,404 @@ export interface AnalysisReadiness {
   checked_row_count: number;
   checked_column_count: number;
   checks: ReadinessCheck[];
+}
+
+export interface MissingColumnInfo {
+  column_name: string;
+  detected_datatype: string;
+  semantic_role: string;
+  null_count: number;
+  null_percentage: number;
+  completeness_percentage: number;
+}
+
+export interface NumericQualityInfo {
+  column_name: string;
+  detected_datatype: string;
+  non_null_count: number;
+  zero_count: number;
+  zero_percentage: number;
+  negative_count: number;
+  negative_percentage: number;
+  infinite_count: number;
+  min?: number | null;
+  max?: number | null;
+  mean?: number | null;
+  median?: number | null;
+}
+
+export interface DatetimeQualityInfo {
+  column_name: string;
+  detected_datatype: string;
+  non_null_count: number;
+  null_count: number;
+  null_percentage: number;
+  min_datetime?: string | null;
+  max_datetime?: string | null;
+  distinct_dates_count: number;
+}
+
+export interface CardinalityInfo {
+  column_name: string;
+  detected_datatype: string;
+  semantic_role: string;
+  distinct_count: number;
+  is_unique: boolean;
+  is_constant: boolean;
+  cardinality_ratio: number;
+}
+
+export interface QualityAssessment {
+  dataset_id: string;
+  status: 'Good' | 'Needs Attention' | 'Critical';
+  status_reason: string;
+  total_rows: number;
+  total_columns: number;
+  duplicate_row_count: number;
+  duplicate_row_percentage: number;
+  overall_missing_count: number;
+  overall_missing_percentage: number;
+  completeness_percentage: number;
+  uniqueness_percentage: number;
+  affected_missing_columns_count: number;
+  missing_columns: MissingColumnInfo[];
+  numeric_observations: NumericQualityInfo[];
+  datetime_observations: DatetimeQualityInfo[];
+  cardinality_observations: CardinalityInfo[];
+  quality_issues: {
+    issue_type: string;
+    target?: string;
+    message: string;
+    severity: string;
+  }[];
+  readiness_warnings: string[];
+  readiness_blocking_issues: string[];
+}
+
+export interface CleaningRecommendationVariant {
+  operation: string;
+  label: string;
+  description?: string;
+}
+
+export interface CleaningRecommendation {
+  recommendation_id: string;
+  column_name: string | null;
+  operation: string;
+  user_selected_operation?: string;
+  supported_variants?: CleaningRecommendationVariant[];
+  category: string;
+  evidence: string[];
+  affected_rows: number;
+  affected_percentage: number;
+  confidence: number;
+  confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  default_selected: boolean;
+  user_selected: boolean;
+  rationale: string;
+  expected_effect: string;
+  requires_review: boolean;
+  status: 'RECOMMENDED' | 'REVIEW_REQUIRED' | 'NOT_RECOMMENDED';
+  params: Record<string, any>;
+}
+
+export interface CleaningPlan {
+  dataset_id: string;
+  total_recommendations: number;
+  recommended_count: number;
+  review_required_count: number;
+  safe_count: number;
+  estimated_rows_affected: number;
+  recommendations: CleaningRecommendation[];
+  generated_at: string;
+}
+
+export interface SampleCellChange {
+  row_index: number;
+  column_name: string;
+  before_value: any;
+  after_value: any;
+  operation: string;
+}
+
+export interface OperationExecutionResult {
+  recommendation_id: string;
+  operation: string;
+  column_name: string | null;
+  status: 'APPLIED' | 'SKIPPED' | 'WARNING' | 'FAILED' | 'REVIEW_ONLY';
+  rows_affected: number;
+  cells_affected: number;
+  method_used: string;
+  before_statistic: string;
+  after_statistic: string;
+  details: Record<string, any>;
+  warnings: string[];
+}
+
+export interface CleaningValidationCheck {
+  check_name: string;
+  status: 'PASSED' | 'FAILED' | 'WARNING';
+  message: string;
+  column_name?: string | null;
+  details: Record<string, any>;
+}
+
+export interface CleaningValidationResult {
+  overall_status: 'PASSED' | 'WARNING' | 'FAILED';
+  total_checks: number;
+  passed_checks: number;
+  failed_checks: number;
+  warning_checks: number;
+  checks: CleaningValidationCheck[];
+}
+
+export interface CleaningPreviewResult {
+  dataset_id: string;
+  original_row_count: number;
+  preview_row_count: number;
+  row_count_change: number;
+  original_column_count: number;
+  preview_column_count: number;
+  operations_requested: number;
+  operations_applicable: number;
+  operations_skipped: number;
+  total_cells_affected: number;
+  operations: OperationExecutionResult[];
+  sample_changes: SampleCellChange[];
+  warnings: string[];
+  generated_at: string;
+}
+
+export interface CleaningExecutionResult {
+  dataset_id: string;
+  original_row_count: number;
+  cleaned_row_count: number;
+  row_count_change: number;
+  original_column_count: number;
+  cleaned_column_count: number;
+  operations_requested: number;
+  operations_applied: number;
+  operations_skipped: number;
+  operations_failed: number;
+  total_rows_affected: number;
+  total_cells_affected: number;
+  operations: OperationExecutionResult[];
+  validation: CleaningValidationResult | null;
+  before_summary: Record<string, any>;
+  after_summary: Record<string, any>;
+  sample_changes: SampleCellChange[];
+  warnings: string[];
+  executed_at: string;
+}
+
+export interface ColumnTransformPreviewRequest {
+  column_name: string;
+  operation: string;
+  target_type?: string;
+  custom_value?: any;
+  allow_fractional_truncation?: boolean;
+}
+
+export interface ColumnTransformPreviewResult {
+  column_name: string;
+  operation: string;
+  target_type: string;
+  original_dtype: string;
+  target_dtype: string;
+  total_rows: number;
+  non_null_count: number;
+  converted_count: number;
+  unparseable_count: number;
+  unparseable_samples: any[];
+  fractional_loss_count: number;
+  original_missing_count: number;
+  new_missing_count: number;
+  is_valid: boolean;
+  error_message?: string | null;
+  sample_changes: SampleCellChange[];
+}
+
+export interface CustomColumnTransformation {
+  column_name: string;
+  operation: string;
+  target_type?: string;
+  custom_value?: any;
+  allow_fractional_truncation?: boolean;
+  source?: string;
+}
+
+export interface MultiValueCandidate {
+  column_name: string;
+  detected_delimiter: string;
+  affected_rows: number;
+  affected_percentage: number;
+  average_values_per_affected_row: number;
+  max_values_per_row: number;
+  examples: string[];
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'REVIEW';
+  recommendation: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP' | 'REVIEW';
+  reason: string;
+  evidence: string[];
+  column_dtype: string;
+  semantic_role: string;
+}
+
+export interface MultiValueCandidatesResponse {
+  dataset_id: string;
+  candidates_count: number;
+  candidates: MultiValueCandidate[];
+}
+
+export interface MultiValuePreviewRequest {
+  column_name: string;
+  action: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP';
+  delimiter?: string;
+}
+
+export interface MultiValuePreviewResult {
+  dataset_id: string;
+  column_name: string;
+  action: string;
+  delimiter_used: string;
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_added: number;
+  original_column_count: number;
+  resulting_column_count: number;
+  affected_rows: number;
+  generated_columns: string[];
+  warning_message?: string | null;
+  sample_before_after: Array<{
+    row_index?: number;
+    original_row_index?: number;
+    before?: any;
+    after?: any;
+    before_value?: any;
+    before_row?: Record<string, any>;
+    expanded_values?: string[];
+    resulting_rows_count?: number;
+    after_rows?: Array<Record<string, any>>;
+  }>;
+  warnings: string[];
+}
+
+export interface MultiValueApplyRequest {
+  column_name: string;
+  action: 'SPLIT_COLUMNS' | 'EXPAND_ROWS' | 'KEEP';
+  delimiter?: string;
+}
+
+export interface MultiValueApplyResponse {
+  dataset_id: string;
+  action: string;
+  column_name: string;
+  audit_info: Record<string, any>;
+  cleaned_row_count: number;
+  cleaned_column_count: number;
+  status: string;
+}
+
+// ----------------------------------------------------
+// PART 6.4 — STRUCTURAL CLEANING & SEMANTIC ROLE TYPES
+// ----------------------------------------------------
+
+export interface DropColumnsRequest {
+  columns: string[];
+}
+
+export interface DropColumnsPreviewResult {
+  dataset_id: string;
+  original_column_count: number;
+  resulting_column_count: number;
+  columns_to_drop: string[];
+  remaining_columns: string[];
+  original_row_count: number;
+  resulting_row_count: number;
+  sample_before_after: Array<{
+    row_index: number;
+    before: Record<string, any>;
+    after: Record<string, any>;
+  }>;
+}
+
+export interface FilterCondition {
+  column: string;
+  operator: string;
+  value?: any;
+}
+
+export interface RowFilterRequest {
+  conditions: FilterCondition[];
+  logical_operator: 'AND' | 'OR';
+}
+
+export interface RowFilterPreviewResult {
+  dataset_id: string;
+  conditions: Array<{ column: string; operator: string; value?: any }>;
+  logical_operator: 'AND' | 'OR';
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_removed: number;
+  original_column_count: number;
+  resulting_column_count: number;
+  sample_matching_rows: Record<string, any>[];
+  sample_remaining_rows: Record<string, any>[];
+}
+
+export interface DuplicateRemovalRequest {
+  keep_strategy: 'first' | 'last';
+}
+
+export interface DuplicateRemovalPreviewResult {
+  dataset_id: string;
+  duplicate_rows_count: number;
+  keep_strategy: string;
+  original_row_count: number;
+  resulting_row_count: number;
+  rows_removed: number;
+  sample_duplicate_rows: Record<string, any>[];
+}
+
+export interface StructuralQualityRecommendation {
+  recommendation_id: string;
+  column_name: string | null;
+  issue_type: 'HIGH_MISSINGNESS' | 'CONSTANT_COLUMN' | 'LIKELY_IDENTIFIER' | 'DUPLICATE_ROWS' | string;
+  reason: string;
+  evidence: string[];
+  suggested_action: 'DROP_COLUMN' | 'MARK_IDENTIFIER' | 'REMOVE_DUPLICATES' | 'KEEP' | string;
+  allowed_actions: string[];
+  metrics: Record<string, any>;
+}
+
+export interface StructuralRecommendationsResponse {
+  dataset_id: string;
+  total_recommendations: number;
+  recommendations: StructuralQualityRecommendation[];
+}
+
+export interface SemanticRoleOverrideRequest {
+  column_name: string;
+  selected_role: 'IDENTIFIER' | 'DIMENSION' | 'MEASURE' | 'DATETIME' | 'UNKNOWN' | string;
+}
+
+export interface SemanticRoleOverrideResponse {
+  dataset_id: string;
+  column_name: string;
+  system_role: string;
+  selected_role: string;
+  physical_dtype: string;
+  evidence: string[];
+  status: string;
+}
+
+export interface StructuralApplyResponse {
+  dataset_id: string;
+  action: string;
+  audit_info: Record<string, any>;
+  cleaned_row_count: number;
+  cleaned_column_count: number;
+  status: string;
 }
 
 export interface DatasetListItem {
@@ -436,11 +855,215 @@ export interface ChatResponseUI {
   evidence?: any;
   confidence: number;
   warnings: string[];
-  ambiguity_status: string;
   clarification_needed: boolean;
   clarification_options?: string[];
   provenance?: any;
   runtime_seconds: number;
   error?: string;
 }
+
+export interface RegisterCleanedDatasetResponse {
+  status: string;
+  message: string;
+  dataset_id: string;
+  filename: string;
+  row_count: number;
+  column_count: number;
+  source_dataset_id: string;
+  already_registered?: boolean;
+  metadata: DatasetMetadata;
+}
+
+// ----------------------------------------------------
+// PART 7 — DATA STUDIO: AUTOMATED + INTERACTIVE EDA
+// ----------------------------------------------------
+
+export interface HistogramBin {
+  bin_label?: string;
+  bin_start: number;
+  bin_end: number;
+  count: number;
+  percentage?: number;
+}
+
+export interface NumericDistribution {
+  column_name: string;
+  row_count?: number;
+  non_null_count?: number;
+  null_count: number;
+  null_percentage: number;
+  mean: number | null;
+  median: number | null;
+  std: number | null;
+  min: number | null;
+  max: number | null;
+  q1?: number | null;
+  q3?: number | null;
+  q25?: number | null;
+  q75?: number | null;
+  zero_count: number;
+  negative_count: number;
+  skewness: number | null;
+  skew_label?: string;
+  distribution_shape?: string;
+  histogram: HistogramBin[];
+}
+
+export interface CategoryFrequency {
+  category?: string;
+  value?: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CategoricalDistribution {
+  column_name: string;
+  row_count?: number;
+  distinct_count: number;
+  null_count: number;
+  null_percentage: number;
+  is_high_cardinality: boolean;
+  cardinality_note?: string | null;
+  top_categories: CategoryFrequency[];
+}
+
+export interface CorrelatedPair {
+  col1: string;
+  col2: string;
+  correlation: number;
+  absolute_correlation?: number;
+  direction?: 'positive' | 'negative' | 'Positive' | 'Negative' | 'None' | string;
+  strength?: 'strong' | 'moderate' | 'weak' | 'none' | 'Strong' | 'Moderate' | 'Weak' | 'None' | string;
+  description: string;
+}
+
+export interface CorrelationAnalysisData {
+  status?: 'SUCCESS' | 'INSUFFICIENT_NUMERIC_COLUMNS' | 'EMPTY_DATA' | 'ERROR' | string;
+  is_available?: boolean;
+  columns: string[];
+  matrix: Record<string, Record<string, number | null>>;
+  message: string | null;
+  top_correlated_pairs?: CorrelatedPair[];
+  strong_pairs?: CorrelatedPair[];
+}
+
+export interface TemporalDataPoint {
+  period: string;
+  metric_value?: number | null;
+  value?: number | null;
+  count?: number;
+}
+
+export interface TemporalAnalysisData {
+  status?: string;
+  is_available?: boolean;
+  datetime_column: string | null;
+  measure_column?: string | null;
+  granularity?: string;
+  time_granularity?: string;
+  date_range?: { min_date: string; max_date: string };
+  earliest_date?: string;
+  latest_date?: string;
+  temporal_span_days?: number;
+  total_points?: number;
+  trend_direction?: string;
+  data_points?: TemporalDataPoint[];
+  series?: TemporalDataPoint[];
+  message?: string | null;
+}
+
+export interface EDAObservation {
+  id: string;
+  type?: string;
+  category?: string;
+  column?: string | null;
+  observation?: string;
+  text?: string;
+  evidence?: Record<string, any>;
+  severity?: 'info' | 'notice' | 'warning' | string;
+}
+
+export interface EDADatasetSummary {
+  row_count: number;
+  column_count: number;
+  numeric_columns_count: number;
+  categorical_columns_count: number;
+  datetime_columns_count: number;
+  boolean_columns_count: number;
+  total_cells: number;
+  missing_cells_count: number;
+  missing_cells_percentage: number;
+  duplicate_rows_count: number;
+  duplicate_rows_percentage: number;
+}
+
+export interface EDASummary {
+  dataset_id: string;
+  dataset_summary: EDADatasetSummary;
+  numeric_distributions: NumericDistribution[];
+  categorical_distributions: CategoricalDistribution[];
+  correlation_analysis: CorrelationAnalysisData;
+  temporal_analysis: TemporalAnalysisData | null;
+  automated_observations: EDAObservation[];
+}
+
+export interface EDAExploreRequest {
+  chart_type: 'scatter' | 'line' | 'bar' | 'distribution';
+  x_column: string;
+  y_column?: string;
+  group_by?: string;
+  aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max' | 'mean';
+  time_granularity?: 'day' | 'month' | 'quarter' | 'year';
+}
+
+
+export interface EDAExploreResult {
+  chart_type: string;
+  is_supported: boolean;
+  error_message?: string | null;
+  x_column?: string;
+  y_column?: string;
+  group_by?: string | null;
+  aggregation?: string;
+  granularity?: string;
+  total_points?: number;
+  rendered_points?: number;
+  is_sampled?: boolean;
+  correlation?: number | null;
+  total_categories?: number;
+  rendered_categories?: number;
+  distribution_type?: string;
+  summary?: Record<string, any>;
+  data: Record<string, any>[];
+}
+
+// ---------------------------------------------------------------------------
+// PART 1 — Cleaned Dataset Summary Types
+// ---------------------------------------------------------------------------
+
+export interface MetricBeforeAfter {
+  before: number;
+  after: number;
+  change: number;
+}
+
+export interface CleaningSummaryMetrics {
+  rows: MetricBeforeAfter;
+  columns: MetricBeforeAfter;
+  missing_cells: MetricBeforeAfter;
+  duplicate_rows: MetricBeforeAfter;
+}
+
+export interface CleanedDatasetSummaryResponse {
+  dataset_id: string;
+  has_cleaned: boolean;
+  status_message: string;
+  raw_data_protection: string;
+  metrics: CleaningSummaryMetrics;
+  changes_applied: string[];
+  remaining_quality_issues: string[];
+  registered_cleaned_dataset_id?: string | null;
+}
+
+
 

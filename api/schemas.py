@@ -62,6 +62,9 @@ class DataProfileResponse(BaseModel):
 class SemanticColumnResponse(BaseModel):
     column_name: str
     candidate_role: str
+    system_role: Optional[str] = None
+    user_override_role: Optional[str] = None
+    is_user_overridden: bool = False
     confidence: float
     confidence_level: str
     evidence: List[str]
@@ -254,6 +257,289 @@ class TileQueryResponse(BaseModel):
     compiled_sql: Optional[str] = None
     cached: bool = False
     message: Optional[str] = None
+
+
+class EDAExploreRequest(BaseModel):
+    """Request payload for interactive exploratory data analysis."""
+
+    chart_type: str = "scatter"  # "scatter" | "line" | "bar" | "distribution"
+    x_column: str
+    y_column: Optional[str] = None
+    group_by: Optional[str] = None
+    aggregation: str = "mean"  # "mean" | "sum" | "median" | "count" | "min" | "max"
+    time_granularity: Optional[str] = None  # "day" | "month" | "quarter" | "year"
+
+
+class ColumnTransformPreviewRequest(BaseModel):
+    """Request payload for deterministic preview of a single column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: Optional[str] = None
+    custom_value: Optional[Any] = None
+    allow_fractional_truncation: bool = False
+
+
+class ColumnTransformPreviewResponse(BaseModel):
+    """Response payload with preview metrics for a column transformation."""
+
+    column_name: str
+    operation: str
+    target_type: str
+    original_dtype: str
+    target_dtype: str
+    total_rows: int
+    non_null_count: int
+    converted_count: int
+    unparseable_count: int
+    unparseable_samples: List[Any] = Field(default_factory=list)
+    fractional_loss_count: int = 0
+    original_missing_count: int = 0
+    new_missing_count: int = 0
+    is_valid: bool = True
+    error_message: Optional[str] = None
+    sample_changes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class CleaningSelectionRequest(BaseModel):
+    """Request payload for cleaning preview or apply."""
+
+    selected_recommendation_ids: List[str] = Field(default_factory=list)
+    operation_overrides: Optional[Dict[str, str]] = Field(default_factory=dict)
+    operation_values: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    custom_transformations: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+
+
+class MultiValueCandidateSchema(BaseModel):
+    """Structured result of multi-valued cell detection on a column."""
+
+    column_name: str
+    detected_delimiter: str
+    affected_rows: int
+    affected_percentage: float
+    average_values_per_affected_row: float
+    max_values_per_row: int
+    examples: List[str] = Field(default_factory=list)
+    confidence: str
+    recommendation: str
+    reason: str
+    evidence: List[str] = Field(default_factory=list)
+    column_dtype: str = "object"
+    semantic_role: str = "DIMENSION"
+
+
+class MultiValueCandidatesResponse(BaseModel):
+    """Response containing detected multi-valued cell candidates."""
+
+    dataset_id: str
+    candidates_count: int
+    candidates: List[MultiValueCandidateSchema]
+
+
+class MultiValuePreviewRequest(BaseModel):
+    """Request payload for multi-valued cell transformation preview."""
+
+    column_name: str
+    action: str  # "SPLIT_COLUMNS" | "EXPAND_ROWS" | "KEEP"
+    delimiter: Optional[str] = None
+
+
+class MultiValuePreviewResponse(BaseModel):
+    """Response payload for multi-valued cell transformation preview."""
+
+    dataset_id: str
+    column_name: str
+    action: str
+    delimiter_used: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_added: int
+    original_column_count: int
+    resulting_column_count: int
+    affected_rows: int
+    generated_columns: List[str] = Field(default_factory=list)
+    warning_message: Optional[str] = None
+    sample_before_after: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class MultiValueApplyRequest(BaseModel):
+    """Request payload for applying multi-valued cell transformation."""
+
+    column_name: str
+    action: str  # "SPLIT_COLUMNS" | "EXPAND_ROWS" | "KEEP"
+    delimiter: Optional[str] = None
+
+
+class MultiValueApplyResponse(BaseModel):
+    """Response payload after applying multi-valued cell transformation."""
+
+    dataset_id: str
+    action: str
+    column_name: str
+    audit_info: Dict[str, Any]
+    cleaned_row_count: int
+    cleaned_column_count: int
+    status: str = "SUCCESS"
+
+
+# =========================================================================
+# Part 6.4 — Structural Cleaning & Semantic Role Overrides Schemas
+# =========================================================================
+
+
+class DropColumnsRequest(BaseModel):
+    """Request payload for dropping one or more columns."""
+
+    columns: List[str]
+
+
+class DropColumnsPreviewResponse(BaseModel):
+    """Response payload for column drop preview."""
+
+    dataset_id: str
+    original_column_count: int
+    resulting_column_count: int
+    columns_to_drop: List[str]
+    remaining_columns: List[str]
+    original_row_count: int
+    resulting_row_count: int
+    sample_before_after: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class FilterConditionSchema(BaseModel):
+    """Structured condition for row removal."""
+
+    column: str
+    operator: str
+    value: Optional[Any] = None
+
+
+class RowFilterRequest(BaseModel):
+    """Request payload for single or multi-condition row removal."""
+
+    conditions: List[FilterConditionSchema]
+    logical_operator: str = "AND"  # "AND" | "OR"
+
+
+class RowFilterPreviewResponse(BaseModel):
+    """Response payload for row removal preview."""
+
+    dataset_id: str
+    conditions: List[Dict[str, Any]]
+    logical_operator: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_removed: int
+    original_column_count: int
+    resulting_column_count: int
+    sample_matching_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    sample_remaining_rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class DuplicateRemovalRequest(BaseModel):
+    """Request payload for duplicate row removal."""
+
+    keep_strategy: str = "first"  # "first" | "last"
+
+
+class DuplicateRemovalPreviewResponse(BaseModel):
+    """Response payload for duplicate row removal preview."""
+
+    dataset_id: str
+    duplicate_rows_count: int
+    keep_strategy: str
+    original_row_count: int
+    resulting_row_count: int
+    rows_removed: int
+    sample_duplicate_rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class StructuralQualityRecommendationSchema(BaseModel):
+    """Deterministic structural recommendation based on profiling observations."""
+
+    recommendation_id: str
+    column_name: Optional[str] = None
+    issue_type: str
+    reason: str
+    evidence: List[str] = Field(default_factory=list)
+    suggested_action: str
+    allowed_actions: List[str] = Field(default_factory=list)
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class StructuralRecommendationsResponse(BaseModel):
+    """Response containing structural recommendations."""
+
+    dataset_id: str
+    total_recommendations: int
+    recommendations: List[StructuralQualityRecommendationSchema] = Field(default_factory=list)
+
+
+class SemanticRoleOverrideRequest(BaseModel):
+    """Request payload for overriding a column's semantic role."""
+
+    column_name: str
+    selected_role: str  # "IDENTIFIER" | "DIMENSION" | "MEASURE" | "DATETIME" | "UNKNOWN"
+
+
+class SemanticRoleOverrideResponse(BaseModel):
+    """Response payload after overriding a column's semantic role."""
+
+    dataset_id: str
+    column_name: str
+    system_role: str
+    selected_role: str
+    physical_dtype: str
+    evidence: List[str] = Field(default_factory=list)
+    status: str = "SUCCESS"
+
+
+class StructuralApplyResponse(BaseModel):
+    """Response payload after applying a structural cleaning operation."""
+
+    dataset_id: str
+    action: str
+    audit_info: Dict[str, Any]
+    cleaned_row_count: int
+    cleaned_column_count: int
+    status: str = "SUCCESS"
+
+
+# ---------------------------------------------------------------------------
+# Part 1 — Cleaned Dataset Summary Schemas
+# ---------------------------------------------------------------------------
+
+
+class MetricBeforeAfter(BaseModel):
+    """Before and after metric comparison for cleaned dataset summary."""
+
+    before: int
+    after: int
+    change: int
+
+
+class CleaningSummaryMetrics(BaseModel):
+    """Comprehensive metric comparisons before and after cleaning."""
+
+    rows: MetricBeforeAfter
+    columns: MetricBeforeAfter
+    missing_cells: MetricBeforeAfter
+    duplicate_rows: MetricBeforeAfter
+
+
+class CleanedDatasetSummaryResponse(BaseModel):
+    """Summary of the current cleaned dataset state before registration."""
+
+    dataset_id: str
+    has_cleaned: bool
+    status_message: str
+    raw_data_protection: str = "Original dataset remains unchanged."
+    metrics: CleaningSummaryMetrics
+    changes_applied: List[str] = Field(default_factory=list)
+    remaining_quality_issues: List[str] = Field(default_factory=list)
+    registered_cleaned_dataset_id: Optional[str] = None
+
 
 
 

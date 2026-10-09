@@ -1,10 +1,34 @@
 import {
   AnalysisReadiness,
+  CleaningExecutionResult,
+  CleaningPlan,
+  CleaningPreviewResult,
+  ColumnTransformPreviewRequest,
+  ColumnTransformPreviewResult,
+  CustomColumnTransformation,
   DataPreviewResponse,
   DataProfile,
   DatasetListItem,
   DatasetMetadata,
+  MultiValueApplyRequest,
+  MultiValueApplyResponse,
+  MultiValueCandidatesResponse,
+  MultiValuePreviewRequest,
+  MultiValuePreviewResult,
+  QualityAssessment,
+  RegisterCleanedDatasetResponse,
   SemanticProfile,
+  DropColumnsRequest,
+  DropColumnsPreviewResult,
+  RowFilterRequest,
+  RowFilterPreviewResult,
+  DuplicateRemovalRequest,
+  DuplicateRemovalPreviewResult,
+  StructuralRecommendationsResponse,
+  SemanticRoleOverrideRequest,
+  SemanticRoleOverrideResponse,
+  StructuralApplyResponse,
+  CleanedDatasetSummaryResponse,
 } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -69,6 +93,224 @@ export async function getDatasetReadiness(datasetId: string): Promise<AnalysisRe
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/readiness`);
   return handleResponse<AnalysisReadiness>(res);
 }
+
+export async function getDatasetQualityAssessment(datasetId: string): Promise<QualityAssessment> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/quality-assessment`);
+  return handleResponse<QualityAssessment>(res);
+}
+
+export async function getDatasetCleaningPlan(datasetId: string): Promise<CleaningPlan> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning-plan`);
+  return handleResponse<CleaningPlan>(res);
+}
+
+export async function previewColumnTransformation(
+  datasetId: string,
+  request: ColumnTransformPreviewRequest
+): Promise<ColumnTransformPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/column-transform/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<ColumnTransformPreviewResult>(res);
+}
+
+export async function previewCleaningPlan(
+  datasetId: string,
+  selectedRecommendationIds: string[],
+  operationOverrides?: Record<string, string>,
+  operationValues?: Record<string, any>,
+  customTransformations?: CustomColumnTransformation[]
+): Promise<CleaningPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      selected_recommendation_ids: selectedRecommendationIds,
+      operation_overrides: operationOverrides || {},
+      operation_values: operationValues || {},
+      custom_transformations: customTransformations || [],
+    }),
+  });
+  return handleResponse<CleaningPreviewResult>(res);
+}
+
+export async function applyCleaningPlan(
+  datasetId: string,
+  selectedRecommendationIds: string[],
+  operationOverrides?: Record<string, string>,
+  operationValues?: Record<string, any>,
+  customTransformations?: CustomColumnTransformation[]
+): Promise<CleaningExecutionResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      selected_recommendation_ids: selectedRecommendationIds,
+      operation_overrides: operationOverrides || {},
+      operation_values: operationValues || {},
+      custom_transformations: customTransformations || [],
+    }),
+  });
+  return handleResponse<CleaningExecutionResult>(res);
+}
+
+export async function registerCleanedDataset(datasetId: string): Promise<RegisterCleanedDatasetResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaned/register`, {
+    method: 'POST',
+  });
+  return handleResponse<RegisterCleanedDatasetResponse>(res);
+}
+
+export async function getCleanedDatasetSummary(
+  datasetId: string
+): Promise<CleanedDatasetSummaryResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning-summary`);
+  return handleResponse<CleanedDatasetSummaryResponse>(res);
+}
+
+export function getDatasetDownloadUrl(datasetId: string, format: 'csv' | 'xlsx'): string {
+  return `${API_BASE}/datasets/${datasetId}/download?format=${format}`;
+}
+
+export async function getMultiValueCandidates(datasetId: string): Promise<MultiValueCandidatesResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/candidates`);
+  return handleResponse<MultiValueCandidatesResponse>(res);
+}
+
+export async function previewMultiValue(
+  datasetId: string,
+  request: MultiValuePreviewRequest
+): Promise<MultiValuePreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<MultiValuePreviewResult>(res);
+}
+
+export async function applyMultiValue(
+  datasetId: string,
+  request: MultiValueApplyRequest
+): Promise<MultiValueApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/multivalue/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<MultiValueApplyResponse>(res);
+}
+
+// ----------------------------------------------------
+// PART 6.4 — STRUCTURAL CLEANING & SEMANTIC ROLES API
+// ----------------------------------------------------
+
+export async function getStructuralRecommendations(
+  datasetId: string
+): Promise<StructuralRecommendationsResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/recommendations`);
+  return handleResponse<StructuralRecommendationsResponse>(res);
+}
+
+export async function previewDropColumns(
+  datasetId: string,
+  request: DropColumnsRequest
+): Promise<DropColumnsPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/drop-columns/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<DropColumnsPreviewResult>(res);
+}
+
+export async function applyDropColumns(
+  datasetId: string,
+  request: DropColumnsRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/drop-columns/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewFilterRows(
+  datasetId: string,
+  request: RowFilterRequest
+): Promise<RowFilterPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/filter-rows/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<RowFilterPreviewResult>(res);
+}
+
+export async function applyFilterRows(
+  datasetId: string,
+  request: RowFilterRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/filter-rows/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewRemoveDuplicates(
+  datasetId: string,
+  request: DuplicateRemovalRequest
+): Promise<DuplicateRemovalPreviewResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/duplicates/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<DuplicateRemovalPreviewResult>(res);
+}
+
+export async function applyRemoveDuplicates(
+  datasetId: string,
+  request: DuplicateRemovalRequest
+): Promise<StructuralApplyResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/duplicates/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<StructuralApplyResponse>(res);
+}
+
+export async function previewSemanticRoleOverride(
+  datasetId: string,
+  request: SemanticRoleOverrideRequest
+): Promise<SemanticRoleOverrideResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/semantic-role/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<SemanticRoleOverrideResponse>(res);
+}
+
+export async function applySemanticRoleOverride(
+  datasetId: string,
+  request: SemanticRoleOverrideRequest
+): Promise<SemanticRoleOverrideResponse> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/cleaning/structural/semantic-role/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<SemanticRoleOverrideResponse>(res);
+}
+
+
 
 export async function validatePlan(plan: any): Promise<import('./types').Pass1aResult> {
   const res = await fetch(`${API_BASE}/orchestrator/validate-plan`, {
@@ -241,6 +483,26 @@ export async function clearChatConversation(
   });
   return handleResponse<any>(res);
 }
+
+export async function getDatasetEDASummary(
+  datasetId: string
+): Promise<import('./types').EDASummary> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/eda`);
+  return handleResponse<import('./types').EDASummary>(res);
+}
+
+export async function exploreDatasetEDA(
+  datasetId: string,
+  request: import('./types').EDAExploreRequest
+): Promise<import('./types').EDAExploreResult> {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/eda/explore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<import('./types').EDAExploreResult>(res);
+}
+
 
 
 

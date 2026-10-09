@@ -86,14 +86,19 @@ class DuckDBExecutor:
             # Register source dataframe (zero-copy read-only reference)
             con.register("raw_dataframe", df)
 
-            # C2 Implementation: Build TRY_CAST expressions for DATETIME columns in the view
+            # C2 Implementation: Build TRY_CAST expressions for DATETIME & MEASURE columns in the view
             view_expressions: List[str] = []
             for col in df.columns:
                 ev = semantic_profile.get_evidence(col)
                 col_quoted = quote_identifier(col)
 
-                # Check if classified as DATETIME and stored as string/object in pandas
+                # Check if classified as DATETIME or MEASURE and stored as string/object in pandas
                 is_datetime_role = ev is not None and ev.candidate_role == ColumnRole.DATETIME
+                is_measure_role = (
+                    ev is not None and ev.candidate_role == ColumnRole.MEASURE
+                ) or (
+                    plan is not None and plan.metric is not None and plan.metric.column == col and col != "*"
+                )
                 is_string_dtype = pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])
 
                 if is_datetime_role and is_string_dtype:
@@ -117,6 +122,27 @@ class DuckDBExecutor:
                         rate = failed_count / max(len(df), 1)
                         warnings.append(
                             f"Column '{col}' had {failed_count} failed datetime casts ({rate:.1%}) via TRY_CAST."
+                        )
+                elif is_measure_role and is_string_dtype:
+                    # TRY_CAST string measure to DOUBLE
+                    view_expressions.append(f"TRY_CAST({col_quoted} AS DOUBLE) AS {col_quoted}")
+
+                    cast_check_query = (
+                        f"SELECT COUNT(*) FROM raw_dataframe "
+                        f"WHERE {col_quoted} IS NOT NULL "
+                        f"  AND TRIM(CAST({col_quoted} AS VARCHAR)) != '' "
+                        f"  AND TRY_CAST({col_quoted} AS DOUBLE) IS NULL;"
+                    )
+                    try:
+                        failed_count = con.execute(cast_check_query).fetchone()[0]
+                    except Exception:
+                        failed_count = 0
+
+                    if failed_count > 0:
+                        total_failed_casts += failed_count
+                        rate = failed_count / max(len(df), 1)
+                        warnings.append(
+                            f"Column '{col}' had {failed_count} non-numeric values ({rate:.1%}) converted to NULL for numeric calculation via TRY_CAST."
                         )
                 else:
                     view_expressions.append(f"{col_quoted} AS {col_quoted}")

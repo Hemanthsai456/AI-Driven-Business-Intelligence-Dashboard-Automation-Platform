@@ -45,6 +45,19 @@ from orchestrator.schemas import (
 )
 
 
+def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
+    """Safely convert any raw DuckDB or row value to float, handling NaN/Inf/strings gracefully."""
+    if val is None:
+        return default
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+    except (ValueError, TypeError):
+        return default
+
+
 def _infer_time_grain(dt_series: pd.Series) -> Granularity:
     """Infer suitable temporal granularity from datetime span."""
     try:
@@ -110,7 +123,14 @@ class AnalyticalInsightDiscoverer:
                 and ev.candidate_role != ColumnRole.DATETIME
                 and pd.api.types.is_numeric_dtype(df[col])
             ):
-                measures.append(col)
+                # Verify numeric usability: must contain at least 2 convertible numeric values
+                valid_num = pd.to_numeric(df[col].dropna(), errors="coerce").dropna()
+                if len(valid_num) > 1:
+                    measures.append(col)
+                elif ev.candidate_role == ColumnRole.MEASURE and not pd.api.types.is_numeric_dtype(df[col]):
+                    # If column was marked MEASURE but has 0/1 numeric values, treat as dimension if discrete
+                    if nunique <= 50 and (nunique / total_rows <= 0.5 or total_rows <= 20):
+                        dimensions.append(col)
             elif ev.candidate_role == ColumnRole.DIMENSION or (
                 ev.candidate_role != ColumnRole.IDENTIFIER
                 and ev.candidate_role != ColumnRole.DATETIME
@@ -152,8 +172,9 @@ class AnalyticalInsightDiscoverer:
             compiled_sql = compile_plan_to_sql(plan, "source_data")
             exec_res = self.executor.execute_plan(plan=plan, dataset=dataset, semantic_profile=semantic_profile, custom_sql=compiled_sql)
             if exec_res.status == ExecutionStatus.SUCCESS and exec_res.rows:
-                primary_val = list(exec_res.rows[0].values())[0]
-                if primary_val is not None and not (isinstance(primary_val, float) and math.isnan(primary_val)):
+                raw_primary = list(exec_res.rows[0].values())[0]
+                primary_val = _safe_float(raw_primary)
+                if primary_val is not None:
                     evidence = InsightEvidence(
                         source_dataset=dataset_id,
                         metric_column=m,
@@ -162,8 +183,8 @@ class AnalyticalInsightDiscoverer:
                         filters=[],
                         time_grain=None,
                         values={
-                            "primary_value": round(float(primary_val), 2),
-                            "raw_value": float(primary_val),
+                            "primary_value": round(primary_val, 2),
+                            "raw_value": primary_val,
                             "aggregation": agg.value,
                         },
                         query_or_plan=plan,
@@ -212,9 +233,12 @@ class AnalyticalInsightDiscoverer:
                     bottom_row = rows[-1]
 
                     top_group = str(top_row.get(d, ""))
-                    top_val = float(top_row.get(val_col, 0.0) or 0.0)
+                    top_val = _safe_float(top_row.get(val_col), default=0.0)
                     bottom_group = str(bottom_row.get(d, ""))
-                    bottom_val = float(bottom_row.get(val_col, 0.0) or 0.0)
+                    bottom_val = _safe_float(bottom_row.get(val_col), default=0.0)
+
+                    if top_val is None or bottom_val is None:
+                        continue
 
                     diff = top_val - bottom_val
                     pct_diff = (diff / abs(bottom_val) * 100.0) if abs(bottom_val) > 1e-6 else 0.0
@@ -248,37 +272,39 @@ class AnalyticalInsightDiscoverer:
                     discovered.append((InsightType.RANKING, rank_evidence))
 
                     # 3. Group Comparison Candidate (if meaningful spread)
-                    all_vals = [float(r.get(val_col, 0.0) or 0.0) for r in rows]
-                    mean_val = float(np.mean(all_vals))
-                    std_val = float(np.std(all_vals)) if len(all_vals) > 1 else 0.0
-                    top_vs_mean_diff = top_val - mean_val
-                    top_vs_mean_pct = (top_vs_mean_diff / abs(mean_val) * 100.0) if abs(mean_val) > 1e-6 else 0.0
+                    all_vals = [_safe_float(r.get(val_col)) for r in rows]
+                    valid_vals = [v for v in all_vals if v is not None]
+                    if len(valid_vals) >= 2:
+                        mean_val = float(np.mean(valid_vals))
+                        std_val = float(np.std(valid_vals)) if len(valid_vals) > 1 else 0.0
+                        top_vs_mean_diff = top_val - mean_val
+                        top_vs_mean_pct = (top_vs_mean_diff / abs(mean_val) * 100.0) if abs(mean_val) > 1e-6 else 0.0
 
-                    comp_evidence = InsightEvidence(
-                        source_dataset=dataset_id,
-                        metric_column=m,
-                        aggregation=agg,
-                        dimension_column=d,
-                        filters=[],
-                        time_grain=None,
-                        values={
-                            "lead_group": top_group,
-                            "lead_value": round(top_val, 2),
-                            "group_mean": round(mean_val, 2),
-                            "relative_premium_pct": round(top_vs_mean_pct, 1),
-                            "bottom_group": bottom_group,
-                            "bottom_value": round(bottom_val, 2),
-                        },
-                        query_or_plan=plan_rank,
-                        compiled_sql=compiled_sql,
-                        row_count=exec_res.row_count,
-                        supporting_rows_or_groups=rows[:5],
-                        statistical_metadata={
-                            "variance_across_groups": round(std_val, 2),
-                            "group_count": len(rows),
-                        },
-                    )
-                    discovered.append((InsightType.GROUP_COMPARISON, comp_evidence))
+                        comp_evidence = InsightEvidence(
+                            source_dataset=dataset_id,
+                            metric_column=m,
+                            aggregation=agg,
+                            dimension_column=d,
+                            filters=[],
+                            time_grain=None,
+                            values={
+                                "lead_group": top_group,
+                                "lead_value": round(top_val, 2),
+                                "group_mean": round(mean_val, 2),
+                                "relative_premium_pct": round(top_vs_mean_pct, 1),
+                                "bottom_group": bottom_group,
+                                "bottom_value": round(bottom_val, 2),
+                            },
+                            query_or_plan=plan_rank,
+                            compiled_sql=compiled_sql,
+                            row_count=exec_res.row_count,
+                            supporting_rows_or_groups=rows[:5],
+                            statistical_metadata={
+                                "variance_across_groups": round(std_val, 2),
+                                "group_count": len(rows),
+                            },
+                        )
+                        discovered.append((InsightType.GROUP_COMPARISON, comp_evidence))
 
         # -------------------------------------------------------------------
         # 4. Distribution / Categorical Share
@@ -308,12 +334,13 @@ class AnalyticalInsightDiscoverer:
                 if len(rows) < 2:
                     continue
                 cnt_col = "count" if "count" in rows[0] else list(rows[0].keys())[1]
-                counts = [float(r.get(cnt_col, 0) or 0) for r in rows]
+                raw_counts = [_safe_float(r.get(cnt_col), default=0.0) for r in rows]
+                counts = [c if c is not None else 0.0 for c in raw_counts]
                 total_cnt = sum(counts)
                 if total_cnt > 0:
                     top_row = rows[0]
                     top_cat = str(top_row.get(d, ""))
-                    top_cnt = float(top_row.get(cnt_col, 0) or 0)
+                    top_cnt = _safe_float(top_row.get(cnt_col), default=0.0) or 0.0
                     top_share = (top_cnt / total_cnt) * 100.0
 
                     dist_evidence = InsightEvidence(
@@ -368,7 +395,8 @@ class AnalyticalInsightDiscoverer:
                 if exec_res.status == ExecutionStatus.SUCCESS and len(exec_res.rows) >= 2:
                     rows = exec_res.rows
                     val_col = f"{agg.value.lower()}_{m}" if f"{agg.value.lower()}_{m}" in rows[0] else list(rows[0].keys())[1]
-                    vals = [float(r.get(val_col, 0.0) or 0.0) for r in rows if r.get(val_col) is not None]
+                    raw_vals = [_safe_float(r.get(val_col)) for r in rows if r.get(val_col) is not None]
+                    vals = [v for v in raw_vals if v is not None]
                     if len(vals) >= 2:
                         first_val = vals[0]
                         last_val = vals[-1]
@@ -410,7 +438,7 @@ class AnalyticalInsightDiscoverer:
         # 6. Outliers / Unusual Observations
         # -------------------------------------------------------------------
         for m in measures:
-            clean_s = df[m].dropna().astype(float)
+            clean_s = pd.to_numeric(df[m].dropna(), errors="coerce").dropna()
             if len(clean_s) >= 8:
                 q1 = float(clean_s.quantile(0.25))
                 q3 = float(clean_s.quantile(0.75))
@@ -444,7 +472,7 @@ class AnalyticalInsightDiscoverer:
                             query_or_plan=None,
                             compiled_sql=f'SELECT "{m}" FROM "{dataset_id}" WHERE "{m}" < {lower_bound} OR "{m}" > {upper_bound};',
                             row_count=outlier_count,
-                            supporting_rows_or_groups=[{"outlier_value": round(v, 2)} for v in outliers.iloc[:5]],
+                            supporting_rows_or_groups=[{"outlier_value": round(float(v), 2)} for v in outliers.iloc[:5]],
                             statistical_metadata={
                                 "q1": round(q1, 2),
                                 "q3": round(q3, 2),
@@ -461,7 +489,9 @@ class AnalyticalInsightDiscoverer:
             for i in range(len(measures)):
                 for j in range(i + 1, len(measures)):
                     m1, m2 = measures[i], measures[j]
-                    pair_df = df[[m1, m2]].dropna().astype(float)
+                    s1 = pd.to_numeric(df[m1], errors="coerce")
+                    s2 = pd.to_numeric(df[m2], errors="coerce")
+                    pair_df = pd.DataFrame({m1: s1, m2: s2}).dropna()
                     if len(pair_df) >= 8:
                         std1 = float(pair_df[m1].std())
                         std2 = float(pair_df[m2].std())
