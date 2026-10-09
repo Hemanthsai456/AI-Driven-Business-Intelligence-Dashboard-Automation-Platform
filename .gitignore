@@ -59,6 +59,9 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+test-results/
+playwright-report/
+blob-report/
 
 # Type checking / linting caches
 .mypy_cache/
@@ -180,9 +183,16 @@ frontend/.env.production.local
 # ============================================================
 
 # User-uploaded datasets during development
-uploads/
-upload/
+/uploads/
+/upload/
 data/uploads/
+data/upload/
+!frontend/app/upload/
+
+# Local exports and downloads
+data/exports/
+data/downloads/
+exports/
 
 # Temporary dataset files
 tmp/

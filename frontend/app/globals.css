@@ -41,12 +41,15 @@
   --success-soft: #F0FDF4;
   --success-foreground: #FFFFFF;
 
-  /* Chart Series (Both Modes) */
+  --card: #FFFFFF;
+  --card-foreground: #1F2A37;
+
+  /* Chart Series (Light Mode) */
   --chart-1: #2F7F7A;
   --chart-2: #5B7C99;
   --chart-3: #C9A66B;
   --chart-4: #B56576;
-  --chart-5: #9AA5B1;
+  --chart-5: #7E8B9B;
 
   --radius-card: 10px;
 }
@@ -90,12 +93,15 @@
   --success-soft: #162B21;
   --success-foreground: #FFFFFF;
 
-  /* Chart Series (Both Modes) */
-  --chart-1: #2F7F7A;
-  --chart-2: #5B7C99;
-  --chart-3: #C9A66B;
-  --chart-4: #B56576;
-  --chart-5: #9AA5B1;
+  --card: #1A2128;
+  --card-foreground: #E6EAEE;
+
+  /* Chart Series (Dark Mode: Calibrated for contrast against dark surfaces) */
+  --chart-1: #4FA39D;
+  --chart-2: #7AA2C0;
+  --chart-3: #E0BA7E;
+  --chart-4: #D97387;
+  --chart-5: #B0BAC5;
 }
 
 body {

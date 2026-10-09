@@ -78,26 +78,39 @@ class EDAEngine:
             ev = semantic_profile.column_evidences.get(col_str) if semantic_profile else None
             role = ev.candidate_role if ev else None
 
-            if pd.api.types.is_bool_dtype(series) or (row_cnt > 0 and series.dropna().isin([True, False]).all() and series.dropna().dtype == bool):
-                boolean_cols.append(col_str)
-            elif pd.api.types.is_datetime64_any_dtype(series) or role == ColumnRole.DATETIME:
+            # 1. Native Datetime
+            if pd.api.types.is_datetime64_any_dtype(series) or role == ColumnRole.DATETIME:
                 datetime_cols.append(col_str)
+            # 2. Native Boolean
+            elif pd.api.types.is_bool_dtype(series):
+                boolean_cols.append(col_str)
+            # 3. Numeric (excluding booleans)
             elif (pd.api.types.is_numeric_dtype(series) and not pd.api.types.is_bool_dtype(series)) or role == ColumnRole.MEASURE:
                 numeric_cols.append(col_str)
             else:
-                # Check if string/object column represents dates
-                is_dt = False
-                if row_cnt > 0:
-                    try:
-                        non_null_s = series.dropna()
-                        if len(non_null_s) > 0 and ("date" in col_str.lower() or "time" in col_str.lower() or "year" in col_str.lower() or "timestamp" in col_str.lower()):
-                            parsed_dt = pd.to_datetime(non_null_s, errors="coerce", format="mixed")
-                            if len(parsed_dt.dropna()) >= 0.8 * len(non_null_s):
+                # 4. Object, Categorical, String, or Mixed series
+                non_null_s = series.dropna()
+                if len(non_null_s) > 0:
+                    # Check if object column contains Python bool objects (e.g. [True, False, None])
+                    first_items = non_null_s.iloc[:100]
+                    if all(isinstance(v, (bool, np.bool_)) for v in first_items):
+                        boolean_cols.append(col_str)
+                        continue
+
+                    # Check if column represents dates in text form
+                    is_dt = False
+                    if ("date" in col_str.lower() or "time" in col_str.lower() or "year" in col_str.lower() or "timestamp" in col_str.lower()):
+                        try:
+                            parsed_dt = pd.to_datetime(first_items, errors="coerce", format="mixed")
+                            if len(parsed_dt.dropna()) >= 0.8 * len(first_items):
                                 datetime_cols.append(col_str)
                                 is_dt = True
-                    except Exception:
-                        pass
-                if not is_dt:
+                        except Exception:
+                            pass
+                    if not is_dt:
+                        categorical_cols.append(col_str)
+                else:
+                    # All-null object column: default to categorical
                     categorical_cols.append(col_str)
 
         # Dataset Summary Metrics
@@ -130,24 +143,25 @@ class EDAEngine:
             null_cnt = int(series.isna().sum())
             null_pct = round(float((null_cnt / row_cnt) * 100.0), 2) if row_cnt > 0 else 0.0
 
-            if non_null_cnt > 0:
-                mean_val = float(non_null.mean())
-                median_val = float(non_null.median())
-                std_val = float(non_null.std()) if non_null_cnt > 1 else 0.0
-                min_val = float(non_null.min())
-                max_val = float(non_null.max())
-                q25_val = float(non_null.quantile(0.25))
-                q75_val = float(non_null.quantile(0.75))
-                zero_cnt = int((non_null == 0).sum())
-                negative_cnt = int((non_null < 0).sum())
+            finite_vals = non_null[np.isfinite(non_null)]
+            if len(finite_vals) > 0:
+                mean_val = float(finite_vals.mean())
+                median_val = float(finite_vals.median())
+                std_val = float(finite_vals.std()) if len(finite_vals) > 1 else 0.0
+                min_val = float(finite_vals.min())
+                max_val = float(finite_vals.max())
+                q25_val = float(finite_vals.quantile(0.25))
+                q75_val = float(finite_vals.quantile(0.75))
+                zero_cnt = int((finite_vals == 0).sum())
+                negative_cnt = int((finite_vals < 0).sum())
 
                 # Deterministic Skewness & Shape
                 skewness: Optional[float] = None
                 distribution_shape = "Symmetric"
-                if non_null_cnt >= 3 and std_val > 1e-9:
+                if len(finite_vals) >= 3 and std_val > 1e-9:
                     try:
-                        raw_skew = float(non_null.skew())
-                        if not math.isnan(raw_skew):
+                        raw_skew = float(finite_vals.skew())
+                        if not math.isnan(raw_skew) and not math.isinf(raw_skew):
                             skewness = round(raw_skew, 2)
                             if skewness > 0.5:
                                 distribution_shape = "Right-skewed"
@@ -161,7 +175,6 @@ class EDAEngine:
                 # Deterministic 10-bin Histogram
                 histogram: List[Dict[str, Any]] = []
                 try:
-                    finite_vals = non_null[np.isfinite(non_null)]
                     if len(finite_vals) >= 2 and float(finite_vals.min()) != float(finite_vals.max()):
                         counts, bin_edges = np.histogram(finite_vals, bins=10)
                         histogram = [
@@ -169,8 +182,9 @@ class EDAEngine:
                                 "bin_start": sanitize_json_value(round(float(bin_edges[i]), 2)),
                                 "bin_end": sanitize_json_value(round(float(bin_edges[i+1]), 2)),
                                 "bin_label": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
+                                "category": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
                                 "count": int(counts[i]),
-                                "percentage": round(float(counts[i] / non_null_cnt * 100.0), 1) if non_null_cnt > 0 else 0.0,
+                                "percentage": round(float(counts[i] / len(finite_vals) * 100.0), 1),
                             }
                             for i in range(len(counts))
                         ]
@@ -181,6 +195,7 @@ class EDAEngine:
                                 "bin_start": sanitize_json_value(round(single_val, 2)),
                                 "bin_end": sanitize_json_value(round(single_val, 2)),
                                 "bin_label": f"{round(single_val, 1)}",
+                                "category": f"{round(single_val, 1)}",
                                 "count": int(len(finite_vals)),
                                 "percentage": 100.0,
                             }
@@ -236,7 +251,7 @@ class EDAEngine:
 
         # 3. Categorical Distributions
         categorical_distributions: List[Dict[str, Any]] = []
-        for col_name in categorical_cols:
+        for col_name in categorical_cols + boolean_cols:
             series = df[col_name]
             non_null = series.dropna()
             non_null_cnt = len(non_null)
@@ -273,8 +288,9 @@ class EDAEngine:
         usable_numeric_cols: List[str] = []
         for col in numeric_cols:
             s = pd.to_numeric(df[col], errors="coerce").dropna()
+            s_finite = s[np.isfinite(s)]
             # Must have at least 2 non-null rows and non-zero standard deviation
-            if len(s) >= 2 and float(s.std()) > 1e-9:
+            if len(s_finite) >= 2 and float(s_finite.std()) > 1e-9:
                 usable_numeric_cols.append(col)
 
         correlation_analysis: Dict[str, Any] = {}
@@ -290,7 +306,7 @@ class EDAEngine:
             }
         else:
             try:
-                num_df = df[usable_numeric_cols].apply(pd.to_numeric, errors="coerce")
+                num_df = df[usable_numeric_cols].apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
                 corr_df = num_df.corr(method="pearson")
                 
                 # Build deterministic matrix dict
@@ -379,6 +395,8 @@ class EDAEngine:
                 valid_temp = temp_df.dropna(subset=["__dt__", "__val__"]).copy()
 
                 if len(valid_temp) > 0:
+                    if getattr(valid_temp["__dt__"].dt, "tz", None) is not None:
+                        valid_temp["__dt__"] = valid_temp["__dt__"].dt.tz_localize(None)
                     earliest_dt = valid_temp["__dt__"].min()
                     latest_dt = valid_temp["__dt__"].max()
                     span_days = int((latest_dt - earliest_dt).days)
@@ -718,6 +736,7 @@ class EDAEngine:
                 plot_df["group"] = "All"
 
             valid_pts = plot_df.dropna(subset=["x", "y"])
+            valid_pts = valid_pts[np.isfinite(valid_pts["x"]) & np.isfinite(valid_pts["y"])]
             total_valid = len(valid_pts)
 
             if total_valid == 0:
@@ -740,9 +759,10 @@ class EDAEngine:
             # Compute correlation coefficient
             corr_val: Optional[float] = None
             try:
-                c = float(valid_pts["x"].corr(valid_pts["y"]))
-                if not math.isnan(c) and not math.isinf(c):
-                    corr_val = round(c, 2)
+                if len(valid_pts) >= 2 and float(valid_pts["x"].std()) > 1e-9 and float(valid_pts["y"].std()) > 1e-9:
+                    c = float(valid_pts["x"].corr(valid_pts["y"]))
+                    if not math.isnan(c) and not math.isinf(c):
+                        corr_val = round(c, 2)
             except Exception:
                 pass
 
@@ -803,6 +823,7 @@ class EDAEngine:
                 plot_df["group"] = df[group_by].astype(str).fillna("Unknown")
 
             valid_df = plot_df.dropna(subset=["__dt__", "__val__"])
+            valid_df = valid_df[np.isfinite(valid_df["__val__"])]
             if valid_df.empty:
                 return {
                     "chart_type": "line",
@@ -810,6 +831,9 @@ class EDAEngine:
                     "error_message": "No valid non-null date and numeric pairs found.",
                     "data": [],
                 }
+
+            if getattr(valid_df["__dt__"].dt, "tz", None) is not None:
+                valid_df["__dt__"] = valid_df["__dt__"].dt.tz_localize(None)
 
             # Determine Granularity
             span_days = int((valid_df["__dt__"].max() - valid_df["__dt__"].min()).days)
@@ -959,37 +983,100 @@ class EDAEngine:
         # 4. UNIVARIATE DISTRIBUTION / HISTOGRAM
         elif norm_chart_type == "distribution":
             num_s = pd.to_numeric(df[x_column], errors="coerce").dropna()
-            if not num_s.empty:
-                finite_vals = num_s[np.isfinite(num_s)]
-                counts, bin_edges = np.histogram(finite_vals, bins=10)
-                data_rows = [
-                    {
-                        "bin_start": sanitize_json_value(round(float(bin_edges[i]), 2)),
-                        "bin_end": sanitize_json_value(round(float(bin_edges[i+1]), 2)),
-                        "bin_label": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
-                        "value": int(counts[i]),
-                        "count": int(counts[i]),
-                    }
-                    for i in range(len(counts))
-                ]
+            finite_vals = num_s[np.isfinite(num_s)] if not num_s.empty else pd.Series(dtype=float)
+
+            if len(finite_vals) > 0:
+                min_v = float(finite_vals.min())
+                max_v = float(finite_vals.max())
+
+                if min_v == max_v:
+                    # Constant numeric column
+                    single_val = round(min_v, 2)
+                    lbl = f"{round(min_v, 1)}"
+                    data_rows = [
+                        {
+                            "bin_start": sanitize_json_value(single_val),
+                            "bin_end": sanitize_json_value(single_val),
+                            "bin_label": lbl,
+                            "category": lbl,
+                            "value": int(len(finite_vals)),
+                            "count": int(len(finite_vals)),
+                            "percentage": 100.0,
+                        }
+                    ]
+                else:
+                    counts, bin_edges = np.histogram(finite_vals, bins=10)
+                    data_rows = [
+                        {
+                            "bin_start": sanitize_json_value(round(float(bin_edges[i]), 2)),
+                            "bin_end": sanitize_json_value(round(float(bin_edges[i+1]), 2)),
+                            "bin_label": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
+                            "category": f"{round(float(bin_edges[i]), 1)}–{round(float(bin_edges[i+1]), 1)}",
+                            "value": int(counts[i]),
+                            "count": int(counts[i]),
+                            "percentage": round(float(counts[i] / len(finite_vals) * 100.0), 1),
+                        }
+                        for i in range(len(counts))
+                    ]
+
                 return {
                     "chart_type": "distribution",
+                    "distribution_type": "numeric",
                     "is_supported": True,
                     "error_message": None,
                     "x_column": x_column,
                     "y_column": None,
-                    "mean": sanitize_json_value(round(float(num_s.mean()), 2)),
-                    "median": sanitize_json_value(round(float(num_s.median()), 2)),
-                    "std": sanitize_json_value(round(float(num_s.std()), 2)) if len(num_s) > 1 else 0.0,
+                    "mean": sanitize_json_value(round(float(finite_vals.mean()), 2)),
+                    "median": sanitize_json_value(round(float(finite_vals.median()), 2)),
+                    "std": sanitize_json_value(round(float(finite_vals.std()), 2)) if len(finite_vals) > 1 else 0.0,
+                    "summary": {
+                        "mean": sanitize_json_value(round(float(finite_vals.mean()), 2)),
+                        "median": sanitize_json_value(round(float(finite_vals.median()), 2)),
+                        "std": sanitize_json_value(round(float(finite_vals.std()), 2)) if len(finite_vals) > 1 else 0.0,
+                        "min": sanitize_json_value(round(min_v, 2)),
+                        "max": sanitize_json_value(round(max_v, 2)),
+                    },
                     "data": data_rows,
                 }
             else:
-                return {
-                    "chart_type": "distribution",
-                    "is_supported": False,
-                    "error_message": f"Column '{x_column}' does not contain numeric data for distribution analysis.",
-                    "data": [],
-                }
+                raw_s = df[x_column].dropna()
+                if not raw_s.empty:
+                    s_str = raw_s.astype(str)
+                    vc = s_str.value_counts().head(20)
+                    sorted_items = sorted(vc.items(), key=lambda x: (-x[1], str(x[0])))
+                    total_cnt = len(s_str)
+                    data_rows = [
+                        {
+                            "category": str(val) if str(val) != "" else "<Empty String>",
+                            "bin_label": str(val) if str(val) != "" else "<Empty String>",
+                            "value": int(cnt),
+                            "count": int(cnt),
+                            "percentage": round(float(cnt / total_cnt * 100.0), 1) if total_cnt > 0 else 0.0,
+                        }
+                        for val, cnt in sorted_items
+                    ]
+                    return {
+                        "chart_type": "distribution",
+                        "distribution_type": "categorical",
+                        "is_supported": True,
+                        "error_message": None,
+                        "x_column": x_column,
+                        "y_column": None,
+                        "distinct_count": int(raw_s.nunique()),
+                        "summary": {
+                            "distinct_count": int(raw_s.nunique()),
+                            "total_count": total_cnt,
+                        },
+                        "data": data_rows,
+                    }
+                else:
+                    return {
+                        "chart_type": "distribution",
+                        "distribution_type": "numeric",
+                        "is_supported": False,
+                        "error_message": f"Column '{x_column}' contains no valid data for distribution analysis.",
+                        "data": [],
+                    }
 
         else:
             return {

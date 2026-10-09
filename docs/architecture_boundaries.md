@@ -2,7 +2,8 @@
 
 **Document Version:** 1.0  
 **Status:** IMPLEMENTED & VERIFIED  
-**Architecture Authority:** Senior AI Software Architect & Remediation Audit
+**Architecture Authority:** Senior AI Software Architect & Remediation Audit  
+**System Topology:** For the end-to-end platform architecture and data flow, see [System Architecture](system_architecture.md).
 
 ---
 

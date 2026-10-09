@@ -391,8 +391,9 @@ def explore_dataset_eda(dataset_id: str, req: EDAExploreRequest):
         )
     from intelligence.eda import EDAEngine
     engine = EDAEngine()
+    active_ds = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
     result = engine.explore(
-        canonical=record.dataset,
+        canonical=active_ds,
         chart_type=req.chart_type,
         x_column=req.x_column,
         y_column=req.y_column,
@@ -1779,46 +1780,6 @@ def download_dataset(dataset_id: str, format: str = "csv"):
         )
 
 
-@app.get("/api/datasets/{dataset_id}/eda")
-def get_dataset_eda_summary(dataset_id: str):
-    """Retrieve deterministic automated Exploratory Data Analysis (EDA) summary for a dataset."""
-    record = session_store.get(dataset_id)
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Dataset '{dataset_id}' not found in current session.",
-        )
-    from intelligence.eda import EDAEngine
-    engine = EDAEngine()
-    summary = engine.generate_summary(
-        canonical=record.dataset,
-        profile=record.profile,
-        semantic_profile=record.semantic_profile,
-    )
-    return summary.to_dict()
-
-
-@app.post("/api/datasets/{dataset_id}/eda/explore")
-def explore_dataset_eda(dataset_id: str, request: EDAExploreRequest):
-    """Execute interactive, type-aware bivariate/multivariate exploration on dataset."""
-    record = session_store.get(dataset_id)
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Dataset '{dataset_id}' not found in current session.",
-        )
-    from intelligence.eda import EDAEngine
-    engine = EDAEngine()
-    result = engine.explore(
-        canonical=record.dataset,
-        chart_type=request.chart_type,
-        x_column=request.x_column,
-        y_column=request.y_column,
-        group_by=request.group_by,
-        aggregation=request.aggregation,
-        time_granularity=request.time_granularity,
-    )
-    return result
 @app.get("/api/providers/status")
 def get_providers_status():
     """Retrieve live availability and diagnostic status for configured LLM providers."""

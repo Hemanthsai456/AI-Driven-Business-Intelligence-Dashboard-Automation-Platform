@@ -115,7 +115,7 @@ During analysis of `docs/`, `README.md`, and the prompt instructions, the follow
 
 ## 4. Architecture Diagram (`Archotecture.drawio.png`) Verification & Binding Resolutions
 
-This section cross-references the official system architecture diagram ([`docs/references/Archotecture.drawio.png`](file:///c:/Users/GANDL/OneDrive/Documents/MiniProject/AI-Driven-Business-Intelligence-Dashboard-Automation-Platform/docs/references/Archotecture.drawio.png)) with existing documentation (`docs/`) and the Orchestrator specifications, citing exact text, diagram blocks, and section numbers.
+This section cross-references the official system architecture diagram ([`docs/references/Archotecture.drawio.png`](references/Archotecture.drawio.png)) with existing documentation (`docs/`) and the Orchestrator specifications, citing exact text, diagram blocks, and section numbers.
 
 ### 4.1 Verification Matrix: Diagram vs. Specifications
 

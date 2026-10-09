@@ -504,12 +504,12 @@ export const ProfilingTab: React.FC<ProfilingTabProps> = ({
                                 className="flex-1 flex flex-col items-center group relative h-full justify-end"
                               >
                                 {/* Tooltip on Hover */}
-                                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-foreground text-background text-2xs px-2.5 py-1 rounded pointer-events-none whitespace-nowrap z-20 shadow-md">
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-surface-elevated text-foreground border border-border text-2xs px-2.5 py-1 rounded pointer-events-none whitespace-nowrap z-20 shadow-md">
                                   [{bin.bin_start} to {bin.bin_end}]: {bin.count.toLocaleString()} rows
                                 </div>
 
                                 <div
-                                  className="w-full bg-primary/75 hover:bg-primary rounded-t transition-all"
+                                  className="w-full bg-primary opacity-80 hover:opacity-100 rounded-t transition-all"
                                   style={{ height: `${heightPct}%` }}
                                 />
                               </div>
