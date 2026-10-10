@@ -30,10 +30,19 @@ import {
   HelpCircle,
   Check,
   Database,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { DashboardPanelUI, DashboardTileUI, SlicerDef } from '../lib/types';
 import { InsightChart, resolveChartKeys } from './InsightChart';
-import { queryTile, getProvidersStatus } from '../lib/api';
+import {
+  queryTile,
+  getProvidersStatus,
+  deleteDashboardTile,
+  resetDashboardTile,
+  resetDashboard,
+} from '../lib/api';
+import { ChartEditModal } from './ChartEditModal';
 import { THEME_TOKENS } from '../lib/theme';
 
 export interface DashboardPanelsViewProps {
@@ -44,6 +53,8 @@ export interface DashboardPanelsViewProps {
   cleaningReport?: any;
   providers?: any[];
   onSelectCandidate?: (planId: string) => void;
+  datasetId?: string;
+  onSpecChange?: (updatedTiles: DashboardTileUI[]) => void;
   className?: string;
 }
 
@@ -55,6 +66,8 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   cleaningReport,
   providers: rawProviders,
   onSelectCandidate,
+  datasetId,
+  onSpecChange,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'data' | 'cleaning' | 'trace'>('dashboard');
@@ -164,6 +177,23 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     });
   }, [rawTiles, panels]);
 
+  // Working and original tiles state for editable dashboard
+  const [workingTiles, setWorkingTiles] = useState<DashboardTileUI[]>([]);
+  const [originalTiles, setOriginalTiles] = useState<DashboardTileUI[]>([]);
+  const [editingTile, setEditingTile] = useState<DashboardTileUI | null>(null);
+
+  useEffect(() => {
+    setWorkingTiles(tiles);
+    setOriginalTiles(tiles);
+  }, [tiles]);
+
+  const isDirty = useMemo(() => {
+    if (workingTiles.length !== originalTiles.length) return true;
+    return workingTiles.some((t) => t.metadata?.is_edited);
+  }, [workingTiles, originalTiles]);
+
+  const activeTiles = workingTiles.length > 0 || isDirty ? workingTiles : tiles;
+
   // Slicer definitions
   const slicers: SlicerDef[] = spec?.slicers || [];
 
@@ -172,10 +202,100 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   const headlineRobustness =
     spec?.winner?.score_breakdown?.stability ??
     spec?.winner?.score_breakdown?.robustness ??
-    tiles[0]?.evidence?.robustness ??
+    activeTiles[0]?.evidence?.robustness ??
     1.0;
   const isLowRobustness = headlineRobustness < 0.35;
-  const headlineText = activeHeadline || tiles[0]?.title || 'Executive Insight';
+  const headlineText = activeHeadline || activeTiles[0]?.title || 'Executive Insight';
+
+  // Tile edit handlers
+  const handleTileSaved = (updatedTile: DashboardTileUI) => {
+    const nextTiles = activeTiles.map((t) => (t.id === updatedTile.id ? updatedTile : t));
+    setWorkingTiles(nextTiles);
+    setTileOverrides((prev) => {
+      const next = { ...prev };
+      delete next[updatedTile.id];
+      return next;
+    });
+    setEditingTile(null);
+    onSpecChange?.(nextTiles);
+
+    if (activeFilters.length > 0) {
+      setTimeout(() => {
+        applyFiltersToTiles(activeFilters);
+      }, 50);
+    }
+  };
+
+  const handleRemoveTile = async (tileId: string) => {
+    if (spec?.spec_id) {
+      try {
+        await deleteDashboardTile(spec.spec_id, tileId);
+      } catch (err) {
+        console.warn('Failed to delete tile on backend:', err);
+      }
+    }
+    const nextTiles = activeTiles.filter((t) => t.id !== tileId);
+    setWorkingTiles(nextTiles);
+    setTileOverrides((prev) => {
+      const next = { ...prev };
+      delete next[tileId];
+      return next;
+    });
+    onSpecChange?.(nextTiles);
+  };
+
+  const handleResetTile = async (tileId: string) => {
+    if (spec?.spec_id) {
+      try {
+        const res = await resetDashboardTile(spec.spec_id, tileId);
+        if (res?.tile) {
+          const nextTiles = activeTiles.map((t) => (t.id === tileId ? res.tile : t));
+          setWorkingTiles(nextTiles);
+          setTileOverrides((prev) => {
+            const next = { ...prev };
+            delete next[tileId];
+            return next;
+          });
+          onSpecChange?.(nextTiles);
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to reset tile on backend, falling back to local snapshot:', err);
+      }
+    }
+    const orig = originalTiles.find((t) => t.id === tileId);
+    if (orig) {
+      const nextTiles = activeTiles.map((t) => (t.id === tileId ? orig : t));
+      setWorkingTiles(nextTiles);
+      setTileOverrides((prev) => {
+        const next = { ...prev };
+        delete next[tileId];
+        return next;
+      });
+      onSpecChange?.(nextTiles);
+    }
+  };
+
+  const handleResetDashboard = async () => {
+    if (spec?.spec_id) {
+      try {
+        const res = await resetDashboard(spec.spec_id);
+        if (res?.spec?.tiles) {
+          setWorkingTiles(res.spec.tiles);
+          setTileOverrides({});
+          setActiveFilters([]);
+          onSpecChange?.(res.spec.tiles);
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to reset dashboard on backend, falling back to local snapshot:', err);
+      }
+    }
+    setWorkingTiles(originalTiles);
+    setTileOverrides({});
+    setActiveFilters([]);
+    onSpecChange?.(originalTiles);
+  };
 
   // Dataset info
   const datasetName = spec?.dataset_name || spec?.dataset_id || 'Active Dataset';
@@ -270,7 +390,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     // Set loading state for all tiles
     setTileOverrides((prev) => {
       const next: typeof prev = { ...prev };
-      tiles.forEach((tile) => {
+      activeTiles.forEach((tile) => {
         next[tile.id] = {
           data: prev[tile.id]?.data || tile.data,
           isLoading: true,
@@ -282,7 +402,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
     // Fetch recomputed data for all tiles in parallel
     await Promise.all(
-      tiles.map(async (tile) => {
+      activeTiles.map(async (tile) => {
         try {
           console.log(`[SQL_DEBUG] queryTile START for tile.id=${tile.id}, activeFilters=`, filters);
           const res = await queryTile(spec.spec_id, tile.id, filters);
@@ -850,7 +970,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         </div>
       `;
 
-    const tilesHtml = tiles
+    const tilesHtml = activeTiles
       .map((t) => {
         const override = tileOverrides[t.id];
         const dataRows = override?.data !== undefined ? override.data : t.data || [];
@@ -1177,7 +1297,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     return 'col-span-1 md:col-span-3 xl:col-span-4';
   };
 
-  if (!tiles || tiles.length === 0) {
+  if ((!activeTiles || activeTiles.length === 0) && !isDirty) {
     return null;
   }
 
@@ -1237,6 +1357,16 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
         {/* Global Export & Print buttons */}
         <div className="flex items-center gap-2 pb-1">
+          {isDirty && (
+            <button
+              onClick={handleResetDashboard}
+              className="flex items-center gap-1 px-2.5 py-1 text-2xs font-mono font-semibold rounded bg-surface border border-attention/40 text-attention hover:bg-attention-soft transition-colors"
+              title="Reset dashboard to original AI-generated configuration"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Dashboard</span>
+            </button>
+          )}
           <button
             onClick={handleExportHtml}
             className="flex items-center gap-1 px-2.5 py-1 text-2xs font-mono font-semibold rounded bg-surface border border-border text-foreground hover:bg-surface-muted transition-colors"
@@ -1274,7 +1404,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                 </span>
                 <span className="text-muted-foreground">•</span>
                 <span className="px-2 py-0.5 rounded text-2xs font-mono font-medium bg-primary-soft text-primary border border-primary/20">
-                  {tiles.length} insights shown
+                  {activeTiles.length} insights shown
                 </span>
                 {rejectedInsights.length > 0 && (
                   <span className="px-2 py-0.5 rounded text-2xs font-mono font-medium bg-surface-muted text-muted-foreground border border-border">
@@ -1476,79 +1606,128 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           )}
 
           {/* F1: 12-Column Responsive Grid of Tiles */}
-          <div className="grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4 dashboard-container">
-            {tiles.map((tile) => {
-              const override = tileOverrides[tile.id];
-              const effectiveData = override?.data !== undefined ? override.data : tile.data;
-              const isLoading = override?.isLoading ?? false;
-              const isInsufficientData = override?.isInsufficientData ?? false;
-              const queryError = override?.error;
+          {activeTiles.length === 0 ? (
+            <div className="py-12 px-4 text-center space-y-3 bg-surface-muted/20 rounded-card border border-dashed border-border">
+              <div className="w-10 h-10 rounded-full bg-surface-muted text-muted-foreground flex items-center justify-center mx-auto">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-semibold text-foreground">All dashboard charts have been removed</p>
+              <p className="text-2xs text-muted-foreground max-w-sm mx-auto">
+                You can restore the original AI-generated charts at any time.
+              </p>
+              <button
+                onClick={handleResetDashboard}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-primary text-primary-foreground hover:bg-primary-hover transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset to Original Dashboard</span>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4 dashboard-container">
+              {activeTiles.map((tile) => {
+                const override = tileOverrides[tile.id];
+                const effectiveData = override?.data !== undefined ? override.data : tile.data;
+                const isLoading = override?.isLoading ?? false;
+                const isInsufficientData = override?.isInsufficientData ?? false;
+                const queryError = override?.error;
 
-              return (
-                <div
-                  key={tile.id}
-                  id={`tile-card-${tile.id}`}
-                  className={`${getColSpanClass(tile)} bg-surface border border-border rounded-card p-4 sm:p-5 flex flex-col justify-between shadow-xs transition-shadow hover:shadow-sm dashboard-tile`}
-                >
-                  {/* Tile Header: Insight Sentence & Action Menu */}
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-3xs font-mono uppercase px-2 py-0.5 rounded bg-surface-muted text-muted-foreground border border-border font-semibold">
-                          {tile.chart_type}
-                        </span>
-                        {tile.candidate_id && (
-                          <span className="text-3xs font-mono text-muted-foreground">
-                            #{tile.candidate_id.slice(0, 6)}
+                return (
+                  <div
+                    key={tile.id}
+                    id={`tile-card-${tile.id}`}
+                    className={`${getColSpanClass(tile)} bg-surface border border-border rounded-card p-4 sm:p-5 flex flex-col justify-between shadow-xs transition-shadow hover:shadow-sm dashboard-tile`}
+                  >
+                    {/* Tile Header: Insight Sentence & Action Menu */}
+                    <div>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-3xs font-mono uppercase px-2 py-0.5 rounded bg-surface-muted text-muted-foreground border border-border font-semibold">
+                            {tile.chart_type}
                           </span>
-                        )}
+                          {tile.metadata?.is_edited && (
+                            <span
+                              className="text-3xs font-mono uppercase px-1.5 py-0.5 rounded bg-primary-soft text-primary border border-primary/30 font-semibold"
+                              title="Chart modified from original"
+                            >
+                              Edited
+                            </span>
+                          )}
+                          {tile.candidate_id && (
+                            <span className="text-3xs font-mono text-muted-foreground">
+                              #{tile.candidate_id.slice(0, 6)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tile Actions Menu */}
+                        <div className="flex items-center gap-1 tile-menu-button no-print">
+                          <button
+                            onClick={() => setEditingTile(tile)}
+                            className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary-soft transition-colors"
+                            title="Edit chart configuration"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          {tile.metadata?.is_edited && (
+                            <button
+                              onClick={() => handleResetTile(tile.id)}
+                              className="p-1 rounded text-muted-foreground hover:text-attention hover:bg-attention-soft transition-colors"
+                              title="Reset chart to original AI-generated configuration"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleRemoveTile(tile.id)}
+                            className="p-1 rounded text-muted-foreground hover:text-error hover:bg-error-soft transition-colors"
+                            title="Remove chart from dashboard"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setActiveModal({ type: 'why', tile })}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+                            title="Why this was chosen"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setActiveModal({ type: 'sql', tile })}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+                            title="View compiled SQL query"
+                          >
+                            <Code className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setActiveModal({ type: 'data', tile })}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+                            title="View underlying data table"
+                          >
+                            <TableIcon className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setActiveModal({ type: 'expand', tile })}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+                            title="Expand chart modal"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDownloadPng(tile.id, tile.title)}
+                            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
+                            title="Download chart PNG"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Tile Actions Menu */}
-                      <div className="flex items-center gap-1 tile-menu-button no-print">
-                        <button
-                          onClick={() => setActiveModal({ type: 'why', tile })}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
-                          title="Why this was chosen"
-                        >
-                          <HelpCircle className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setActiveModal({ type: 'sql', tile })}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
-                          title="View compiled SQL query"
-                        >
-                          <Code className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setActiveModal({ type: 'data', tile })}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
-                          title="View underlying data table"
-                        >
-                          <TableIcon className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setActiveModal({ type: 'expand', tile })}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
-                          title="Expand chart modal"
-                        >
-                          <Maximize2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDownloadPng(tile.id, tile.title)}
-                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-surface-muted transition-colors"
-                          title="Download chart PNG"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {/* Title: The Insight Sentence */}
+                      <h3 className="text-xs sm:text-sm font-bold text-foreground leading-snug mb-3">
+                        {tile.title}
+                      </h3>
                     </div>
-
-                    {/* Title: The Insight Sentence */}
-                    <h3 className="text-xs sm:text-sm font-bold text-foreground leading-snug mb-3">
-                      {tile.title}
-                    </h3>
-                  </div>
 
                   {/* Tile Body: Chart via InsightChart */}
                   <div className="flex-1 w-full my-2 min-h-[160px] flex items-center justify-center">
@@ -1629,6 +1808,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
               );
             })}
           </div>
+          )}
 
           {/* F1: "Considered but rejected" Drawer at bottom (Collapsed by default) */}
           {rejectedInsights && rejectedInsights.length > 0 && (
@@ -1782,11 +1962,11 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           <pre className="p-3 bg-surface-muted/50 rounded-card border border-border font-mono text-xs text-foreground overflow-x-auto">
             <code>
               {(() => {
-                const heroTile = tiles.find((t) => t.size.w === 8) || tiles[0];
+                const heroTile = activeTiles.find((t) => t.size.w === 8) || activeTiles[0];
                 return (
                   (heroTile && tileOverrides[heroTile.id]?.compiled_sql) ||
                   spec.winner?.execution?.compiled_sql ||
-                  tiles[0]?.compiled_sql ||
+                  activeTiles[0]?.compiled_sql ||
                   '-- Re-compiled dynamically through DuckDB sandboxed compiler\nSELECT * FROM dataset'
                 );
               })()}
@@ -1954,6 +2134,17 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           </div>
         );
       })()}
+
+      {editingTile && (
+        <ChartEditModal
+          isOpen={true}
+          tile={editingTile}
+          specId={spec?.spec_id || ''}
+          datasetId={datasetId || spec?.dataset_id || ''}
+          onClose={() => setEditingTile(null)}
+          onSave={handleTileSaved}
+        />
+      )}
     </div>
   );
 };

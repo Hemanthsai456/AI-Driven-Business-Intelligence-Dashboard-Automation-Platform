@@ -503,6 +503,63 @@ export async function exploreDatasetEDA(
   return handleResponse<import('./types').EDAExploreResult>(res);
 }
 
+// ----------------------------------------------------
+// PART 8 — EDITABLE DASHBOARD TILE MANAGEMENT API
+// ----------------------------------------------------
+
+export async function updateDashboardTile(
+  specId: string,
+  tileId: string,
+  request: {
+    title?: string;
+    description?: string;
+    chart_type?: string;
+    plan: any;
+  }
+): Promise<{
+  status: string;
+  tile: import('./types').DashboardTileUI;
+  spec_id: string;
+  pass1a?: any;
+  pass1b?: any;
+}> {
+  const res = await fetch(`${API_BASE}/dashboard/${specId}/tile/${tileId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<any>(res);
+}
+
+export async function deleteDashboardTile(
+  specId: string,
+  tileId: string
+): Promise<{ status: string; message: string; remaining_count: number }> {
+  const res = await fetch(`${API_BASE}/dashboard/${specId}/tile/${tileId}`, {
+    method: 'DELETE',
+  });
+  return handleResponse<any>(res);
+}
+
+export async function resetDashboardTile(
+  specId: string,
+  tileId: string
+): Promise<{ status: string; message: string; tile: import('./types').DashboardTileUI }> {
+  const res = await fetch(`${API_BASE}/dashboard/${specId}/tile/${tileId}/reset`, {
+    method: 'POST',
+  });
+  return handleResponse<any>(res);
+}
+
+export async function resetDashboard(
+  specId: string
+): Promise<{ status: string; message: string; spec: any }> {
+  const res = await fetch(`${API_BASE}/dashboard/${specId}/reset`, {
+    method: 'POST',
+  });
+  return handleResponse<any>(res);
+}
+
 
 
 

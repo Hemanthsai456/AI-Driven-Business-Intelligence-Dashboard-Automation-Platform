@@ -806,6 +806,7 @@ export default function HomePage() {
         {pipelineStep === 'done' && (pipelineResult?.dashboard_spec || pipelineResult?.panels || (pipelineResult as any)?.tiles) && (
           <DashboardPanelsView
             spec={pipelineResult?.dashboard_spec || pipelineResult}
+            datasetId={selectedDatasetId}
             previewData={previewData}
             cleaningReport={cleaningReport}
             providers={providers}

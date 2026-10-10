@@ -77,6 +77,7 @@ from intelligence.semantic_analyzer import ColumnRole
 
 # In-memory stores for dashboard specifications and cached tile queries
 dashboard_specs_store: Dict[str, Any] = {}
+original_specs_store: Dict[str, Any] = {}
 tile_query_cache: Dict[Tuple[str, str, str], TileQueryResponse] = {}
 from orchestrator.run_store import (
     PlanNotFoundError,
@@ -455,9 +456,10 @@ def run_plan_endpoint(plan: CandidatePlan):
         )
 
     # 2. DuckDB Execution
+    active_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
     exec_res = execute_plan(
         plan=plan,
-        dataset=record.dataset,
+        dataset=active_dataset,
         semantic_profile=record.semantic_profile,
     )
 
@@ -619,13 +621,14 @@ def select_winner_endpoint(req: SelectWinnerRequest):
     consistency = check_candidate_output_consistency(candidate_pairs)
 
     # 5. Rank candidates (intent tokens for coverage score)
+    active_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
     intent_tokens = req.intent.lower().split()
     semantic_evidences = record.semantic_profile.column_evidences
     ranked, is_tie = rank_candidates(
         candidate_pairs,
         semantic_evidences=semantic_evidences,
         intent_tokens=intent_tokens,
-        dataset=record.dataset,
+        dataset=active_dataset,
         semantic_profile=record.semantic_profile,
     )
 
@@ -647,7 +650,7 @@ def select_winner_endpoint(req: SelectWinnerRequest):
             generator_logs=gen_logs,
             consistency_check=consistency,
             semantic_profile=record.semantic_profile,
-            dataset=record.dataset,
+            dataset=active_dataset,
         )
     except WinnerSelectionError as e:
         raise HTTPException(
@@ -1839,8 +1842,9 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
     if req.robustness_tie_floor is not None:
         pipe_kwargs["robustness_tie_floor"] = req.robustness_tie_floor
 
+    active_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
     pipeline_result = run_orchestration_pipeline(
-        dataset=record.dataset,
+        dataset=active_dataset,
         semantic_profile=record.semantic_profile,
         readiness=record.readiness,
         intent=req.intent,
@@ -1899,6 +1903,8 @@ def run_orchestrator_pipeline_endpoint(req: OrchestratorPipelineRequest):
 
     if spec:
         dashboard_specs_store[spec.spec_id] = spec
+        if spec.spec_id not in original_specs_store:
+            original_specs_store[spec.spec_id] = spec
 
     return OrchestratorPipelineResponse(
         status=pipeline_result.status,
@@ -2007,6 +2013,8 @@ def resolve_pipeline_endpoint(req: ResolvePipelineRequest):
 
     if spec:
         dashboard_specs_store[spec.spec_id] = spec
+        if spec.spec_id not in original_specs_store:
+            original_specs_store[spec.spec_id] = spec
 
     return OrchestratorPipelineResponse(
         status=pipeline_result.status,
@@ -2117,7 +2125,7 @@ def query_dashboard_tile(
     # 4. Dataset & Semantic Profile lookup
     session_rec = session_store.get(spec.dataset_id)
     if session_rec:
-        dataset = session_rec.dataset
+        dataset = session_rec.cleaned_dataset if session_rec.cleaned_dataset is not None else session_rec.dataset
         semantic_profile = session_rec.semantic_profile
     else:
         dataset = None
@@ -2251,6 +2259,346 @@ def query_dashboard_tile(
 
     tile_query_cache[cache_key] = resp
     return resp
+
+
+class UpdateDashboardTileRequest(BaseModel):
+    """Payload for updating an existing dashboard tile with a new candidate plan."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    chart_type: Optional[str] = None
+    plan: CandidatePlan
+
+
+@app.put(
+    "/api/dashboard/{spec_id}/tile/{tile_id}",
+    summary="Update a dashboard tile with a newly validated candidate plan",
+)
+def update_dashboard_tile(
+    spec_id: str,
+    tile_id: str,
+    req: UpdateDashboardTileRequest,
+):
+    """Validate, re-execute, and update an existing dashboard tile within the working DashboardSpec."""
+    spec = dashboard_specs_store.get(spec_id)
+    if not spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dashboard spec not found",
+                "message": f"Spec '{spec_id}' was not found in active session",
+                "error_type": "SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    # Ensure original spec snapshot is saved before applying edits
+    if spec_id not in original_specs_store:
+        original_specs_store[spec_id] = spec
+
+    tile_idx = None
+    existing_tile = None
+    for idx, t in enumerate(spec.tiles):
+        if t.id == tile_id or getattr(t, "candidate_id", None) == tile_id:
+            tile_idx = idx
+            existing_tile = t
+            break
+
+    if existing_tile is None or tile_idx is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Tile not found",
+                "message": f"Tile '{tile_id}' not found in dashboard spec",
+                "error_type": "TILE_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    record = session_store.get(spec.dataset_id)
+    if not record:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dataset not found",
+                "message": f"Dataset '{spec.dataset_id}' could not be located",
+                "error_type": "DATASET_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    active_dataset = record.cleaned_dataset if record.cleaned_dataset is not None else record.dataset
+
+    # 1. Pass 1a Pre-Dispatch Validation
+    pass1a_res = validate_pass1a(
+        plan=req.plan,
+        semantic_profile=record.semantic_profile,
+        readiness=record.readiness,
+    )
+    if not pass1a_res.passed:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "Plan validation failed",
+                "message": "Candidate plan failed Pass 1a pre-dispatch validation",
+                "issues": [i.model_dump() for i in pass1a_res.issues],
+                "error_type": "VALIDATION_FAILED",
+                "status_code": 422,
+            },
+        )
+
+    # 2. DuckDB Execution on Active Dataset
+    from engine.duckdb_executor import DuckDBExecutor
+    from orchestrator.schemas import ExecutionStatus, TileEvidence
+    executor = DuckDBExecutor()
+    exec_res = executor.execute_plan(
+        plan=req.plan,
+        dataset=active_dataset,
+        semantic_profile=record.semantic_profile,
+    )
+    if exec_res.status != ExecutionStatus.SUCCESS:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "Execution failed",
+                "message": exec_res.error_message or "Query execution on DuckDB failed",
+                "error_type": "EXECUTION_FAILED",
+                "status_code": 400,
+            },
+        )
+
+    # 3. Pass 1b Post-Execution Validation
+    pass1b_res = validate_pass1b(
+        plan=req.plan,
+        exec_result=exec_res,
+    )
+
+    # 4. Resolve dimensions, metric keys, x_key, y_keys
+    dims = [d.column for d in req.plan.dimensions]
+    x_key = dims[0] if dims else None
+
+    agg_val = (
+        req.plan.metric.aggregation.value
+        if hasattr(req.plan.metric.aggregation, "value")
+        else str(req.plan.metric.aggregation)
+    ).lower()
+    col_val = "records" if req.plan.metric.column == "*" else req.plan.metric.column
+    expected_metric_alias = f"{agg_val}_{col_val}"
+
+    y_keys = [expected_metric_alias] if expected_metric_alias in (exec_res.columns or []) else (
+        [c for c in (exec_res.columns or []) if c not in dims] or ["value"]
+    )
+
+    # 5. Update Evidence provenance
+    from orchestrator.schemas import TileEvidence
+    new_evidence = TileEvidence(
+        strength=existing_tile.evidence.strength if existing_tile.evidence else 0.8,
+        robustness=existing_tile.evidence.robustness if existing_tile.evidence else 0.85,
+        fdr_passed=existing_tile.evidence.fdr_passed if existing_tile.evidence else True,
+        fdr_q_value=existing_tile.evidence.fdr_q_value if existing_tile.evidence else None,
+        n=exec_res.row_count,
+        score=existing_tile.evidence.score if existing_tile.evidence else 0.8,
+    )
+
+    chart_type = req.chart_type or (
+        req.plan.visualization.value
+        if hasattr(req.plan.visualization, "value")
+        else str(req.plan.visualization)
+    )
+
+    updated_tile = existing_tile.model_copy(
+        update={
+            "title": req.title or existing_tile.title,
+            "chart_type": chart_type,
+            "plan": req.plan,
+            "compiled_sql": exec_res.compiled_sql,
+            "data": exec_res.rows or [],
+            "dimensions": dims,
+            "metrics": [f"{agg_val}({req.plan.metric.column})"],
+            "x_key": x_key,
+            "y_keys": y_keys,
+            "evidence": new_evidence,
+            "why_chosen": req.description or existing_tile.why_chosen,
+            "metadata": {
+                **(existing_tile.metadata or {}),
+                "is_edited": True,
+                "dq_warnings": list(exec_res.warnings or []),
+                "execution_duration_ms": int(exec_res.runtime_seconds * 1000) if exec_res.runtime_seconds else None,
+            },
+        }
+    )
+
+    # Update spec in store
+    new_tiles = list(spec.tiles)
+    new_tiles[tile_idx] = updated_tile
+    updated_spec = spec.model_copy(update={"tiles": new_tiles})
+    dashboard_specs_store[spec_id] = updated_spec
+
+    # Invalidate cached queries for this tile
+    keys_to_delete = [k for k in tile_query_cache.keys() if k[0] == spec_id and (k[1] == tile_id or k[1] == existing_tile.id)]
+    for k in keys_to_delete:
+        del tile_query_cache[k]
+
+    return {
+        "status": "SUCCESS",
+        "tile": updated_tile.model_dump(),
+        "spec_id": spec_id,
+        "pass1a": pass1a_res.model_dump(),
+        "pass1b": pass1b_res.model_dump(),
+    }
+
+
+@app.delete(
+    "/api/dashboard/{spec_id}/tile/{tile_id}",
+    summary="Remove a tile from the working DashboardSpec",
+)
+def delete_dashboard_tile(
+    spec_id: str,
+    tile_id: str,
+):
+    """Remove a dashboard tile from the active working DashboardSpec."""
+    spec = dashboard_specs_store.get(spec_id)
+    if not spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dashboard spec not found",
+                "message": f"Spec '{spec_id}' was not found in active session",
+                "error_type": "SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    if spec_id not in original_specs_store:
+        original_specs_store[spec_id] = spec
+
+    new_tiles = [t for t in spec.tiles if t.id != tile_id and getattr(t, "candidate_id", None) != tile_id]
+    if len(new_tiles) == len(spec.tiles):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Tile not found",
+                "message": f"Tile '{tile_id}' not found in dashboard spec",
+                "error_type": "TILE_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    updated_spec = spec.model_copy(update={"tiles": new_tiles})
+    dashboard_specs_store[spec_id] = updated_spec
+
+    keys_to_delete = [k for k in tile_query_cache.keys() if k[0] == spec_id and k[1] == tile_id]
+    for k in keys_to_delete:
+        del tile_query_cache[k]
+
+    return {
+        "status": "SUCCESS",
+        "message": f"Tile '{tile_id}' removed from dashboard.",
+        "remaining_count": len(new_tiles),
+    }
+
+
+@app.post(
+    "/api/dashboard/{spec_id}/tile/{tile_id}/reset",
+    summary="Reset an edited tile back to its original AI-generated configuration",
+)
+def reset_dashboard_tile(
+    spec_id: str,
+    tile_id: str,
+):
+    """Reset a tile back to its immutable original state from initial generation."""
+    spec = dashboard_specs_store.get(spec_id)
+    if not spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Dashboard spec not found",
+                "message": f"Spec '{spec_id}' was not found in active session",
+                "error_type": "SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    original_spec = original_specs_store.get(spec_id)
+    if not original_spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Original dashboard spec not found",
+                "message": f"Original spec for '{spec_id}' is not available for reset",
+                "error_type": "ORIGINAL_SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    orig_tile = next((t for t in original_spec.tiles if t.id == tile_id or getattr(t, "candidate_id", None) == tile_id), None)
+    if not orig_tile:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Original tile not found",
+                "message": f"Original tile '{tile_id}' could not be located",
+                "error_type": "TILE_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    new_tiles = []
+    found = False
+    for t in spec.tiles:
+        if t.id == tile_id or getattr(t, "candidate_id", None) == tile_id:
+            new_tiles.append(orig_tile)
+            found = True
+        else:
+            new_tiles.append(t)
+    if not found:
+        new_tiles.append(orig_tile)
+
+    updated_spec = spec.model_copy(update={"tiles": new_tiles})
+    dashboard_specs_store[spec_id] = updated_spec
+
+    keys_to_delete = [k for k in tile_query_cache.keys() if k[0] == spec_id and k[1] == tile_id]
+    for k in keys_to_delete:
+        del tile_query_cache[k]
+
+    return {
+        "status": "SUCCESS",
+        "message": f"Tile '{tile_id}' reset to original configuration.",
+        "tile": orig_tile.model_dump(),
+    }
+
+
+@app.post(
+    "/api/dashboard/{spec_id}/reset",
+    summary="Reset all tiles in dashboard back to original AI-generated state",
+)
+def reset_entire_dashboard(
+    spec_id: str,
+):
+    """Reset all tiles in working spec back to original AI-generated spec."""
+    original_spec = original_specs_store.get(spec_id)
+    if not original_spec:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "Original dashboard spec not found",
+                "message": f"Original spec for '{spec_id}' is not available for reset",
+                "error_type": "ORIGINAL_SPEC_NOT_FOUND",
+                "status_code": 404,
+            },
+        )
+
+    dashboard_specs_store[spec_id] = original_spec
+
+    keys_to_delete = [k for k in tile_query_cache.keys() if k[0] == spec_id]
+    for k in keys_to_delete:
+        del tile_query_cache[k]
+
+    return {
+        "status": "SUCCESS",
+        "message": "Dashboard successfully reset to original specification.",
+        "spec": original_spec.model_dump(),
+    }
 
 
 class AnalyticalQueryRequest(BaseModel):
@@ -2469,6 +2817,8 @@ def handle_overview_dashboard(req: OverviewDashboardRequest):
     )
 
     dashboard_specs_store[spec.spec_id] = spec
+    if spec.spec_id not in original_specs_store:
+        original_specs_store[spec.spec_id] = spec
 
     ranked_list = []
     if spec.winner:
