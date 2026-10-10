@@ -123,7 +123,8 @@ export function resolveChartKeys(
       (k) =>
         k.toLowerCase() === pm.toLowerCase() ||
         k.toLowerCase() === cleanPm.toLowerCase() ||
-        k.toLowerCase().endsWith(`_${cleanPm.toLowerCase()}`)
+        k.toLowerCase().endsWith(`_${cleanPm.toLowerCase()}`) ||
+        (cleanPm === '*' && (k.toLowerCase().includes('count') || k.toLowerCase().includes('records')))
     );
     if (found && found !== dimKey) {
       metricKey = found;
@@ -318,8 +319,8 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   if (vizType === 'line') {
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-        <div className="flex-1 w-full h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="flex-1 w-full min-w-0 h-[240px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <LineChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis
@@ -361,8 +362,8 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   if (vizType === 'area') {
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-        <div className="flex-1 w-full h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="flex-1 w-full min-w-0 h-[240px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis
@@ -399,8 +400,8 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   if (vizType === 'donut' || vizType === 'pie') {
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-        <div className="flex-1 w-full h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="flex-1 w-full min-w-0 h-[240px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <PieChart>
               <Tooltip contentStyle={tooltipStyle} />
               <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: '11px', color: 'var(--text)' }} />
@@ -442,12 +443,12 @@ export const InsightChart: React.FC<InsightChartProps> = ({
     const yAxisWidth = Math.min(Math.max(maxLabelLen * 7, 75), 150);
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-        <div className="flex-1 w-full h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="flex-1 w-full min-w-0 h-[240px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <BarChart
               data={normalizedRows}
               layout="vertical"
-              margin={{ top: 10, right: 30, left: Math.max(yAxisWidth - 55, 15), bottom: 10 }}
+              margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
               <XAxis
@@ -492,8 +493,8 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   if (vizType === 'scatter') {
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-        <div className="flex-1 w-full h-[240px]">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="flex-1 w-full min-w-0 h-[240px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
@@ -570,8 +571,8 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 8. Default: Vertical Bar Chart / Histogram
   return (
     <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
-      <div className="flex-1 w-full h-[240px]">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="flex-1 w-full min-w-0 h-[240px]">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <BarChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis

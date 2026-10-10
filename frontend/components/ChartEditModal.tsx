@@ -12,6 +12,9 @@ import {
   BarChart2,
   Code,
   Table as TableIcon,
+  AlertCircle,
+  XCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { DashboardTileUI, DatasetMetadata } from '../lib/types';
 import { getDatasetMetadata, runPlan, updateDashboardTile } from '../lib/api';
@@ -83,6 +86,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isApplying, setIsApplying] = useState<boolean>(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [validatedConfigSig, setValidatedConfigSig] = useState<string | null>(null);
 
   // Load dataset metadata when modal opens
   useEffect(() => {
@@ -138,9 +142,18 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
         setAggregation(String(planAgg).toLowerCase());
       }
 
-      // Reset preview state
-      setPreviewRows(null);
-      setPreviewSql(null);
+      // Initialize preview state from tile's existing validated query
+      const initDim = dim;
+      const initGran = existingGran || '';
+      const initMetric = mCol;
+      const initAgg = (!planAgg || String(planAgg).toLowerCase() === 'none')
+        ? (tile.chart_type === 'scatter' ? 'none' : 'sum')
+        : String(planAgg).toLowerCase();
+      const initSig = `${tile.chart_type || 'bar'}::${initDim}::${initGran}::${initMetric}::${initAgg}`;
+
+      setValidatedConfigSig(initSig);
+      setPreviewRows(tile.data || []);
+      setPreviewSql(tile.compiled_sql || tile.plan?.compiled_sql || null);
       setValidationErrors([]);
       setApplyError(null);
     }
@@ -278,6 +291,9 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
         const fallbackX = scatterDimensionColumns.find((c) => c !== metricCol) || scatterDimensionColumns[0] || '';
         setDimensionCol(fallbackX);
       }
+      if (aggregation === 'sum') {
+        setAggregation('none');
+      }
     } else if (lowType !== 'line') {
       // Other charts (bar, donut) require aggregation
       if (aggregation === 'none') {
@@ -375,7 +391,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
         const issues = (res.pass1a.issues || []).map(formatIssue);
         setValidationErrors(issues.length > 0 ? issues : ['Plan failed validation safeguards.']);
         setPreviewRows(null);
-        setPreviewSql(null);
+        setValidatedConfigSig(null);
         return;
       }
 
@@ -386,24 +402,25 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
           const bIssues = (res.pass1b.issues || []).map(formatIssue);
           setValidationErrors(bIssues.length > 0 ? bIssues : ['Plan failed post-execution validation.']);
           setPreviewRows(null);
-          setPreviewSql(null);
+          setValidatedConfigSig(null);
           return;
         }
 
         setPreviewRows(res.execution.rows || []);
         setPreviewSql(res.execution.compiled_sql || null);
+        setValidatedConfigSig(currentConfigSig);
         setValidationErrors([]);
       } else {
         const execErr = res.execution?.error_message || 'DuckDB query execution failed.';
         setValidationErrors([execErr]);
         setPreviewRows(null);
-        setPreviewSql(null);
+        setValidatedConfigSig(null);
       }
     } catch (err: any) {
       const msg = typeof err?.message === 'string' && err.message ? err.message : formatIssue(err);
       setValidationErrors([msg]);
       setPreviewRows(null);
-      setPreviewSql(null);
+      setValidatedConfigSig(null);
     } finally {
       setIsPreviewLoading(false);
     }
@@ -439,10 +456,67 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
     }
   };
 
+  const currentConfigSig = useMemo(() => {
+    return `${chartType}::${dimensionCol}::${granularity}::${metricCol}::${aggregation}`;
+  }, [chartType, dimensionCol, granularity, metricCol, aggregation]);
+
+  const isValidated = validatedConfigSig !== null && validatedConfigSig === currentConfigSig;
+
   // Display rows (preview if executed, else tile data)
-  const displayData = previewRows !== null ? previewRows : tile.data;
+  const displayData = previewRows !== null ? previewRows : (tile?.data || []);
   const displayMetricName =
     aggregation === 'none' ? metricCol || 'value' : `${aggregation.toUpperCase()}(${metricCol || 'value'})`;
+
+  // Determine if active data contains the requested columns
+  const isDataCompatible = useMemo(() => {
+    if (!displayData || displayData.length === 0) return false;
+    const sample = displayData[0];
+    if (!sample) return false;
+    const availableKeys = Object.keys(sample).map((k) => k.toLowerCase());
+
+    const isKpi = chartType.toLowerCase() === 'kpi';
+    const isScatter = chartType.toLowerCase() === 'scatter';
+
+    // 1. Metric presence check
+    const targetMetric = (metricCol || '').toLowerCase();
+    const cleanMetric = targetMetric.replace(/^[a-z_]+\((.+)\)$/i, '$1');
+    const hasMetric =
+      targetMetric === '*'
+        ? availableKeys.some((k) => k.includes('count') || k.includes('records') || k === '*')
+        : availableKeys.some(
+            (k) =>
+              k === targetMetric ||
+              k === cleanMetric ||
+              k.endsWith(`_${cleanMetric}`) ||
+              k.startsWith(`${aggregation.toLowerCase()}_`) ||
+              typeof sample[k] === 'number'
+          );
+
+    if (!hasMetric) return false;
+
+    // 2. KPI doesn't require dimension
+    if (isKpi) return true;
+
+    // 3. Scatter requires numeric X and Y
+    if (isScatter) {
+      if (!dimensionCol) return false;
+      const targetDim = dimensionCol.toLowerCase();
+      const hasDim = availableKeys.some((k) => k === targetDim);
+      if (!hasDim) return false;
+      const xVal = sample[dimensionCol];
+      const hasNumericX = typeof xVal === 'number' || (typeof xVal === 'string' && !isNaN(Number(xVal)));
+      return hasNumericX;
+    }
+
+    // 4. Grouping dimension check
+    if (dimensionCol) {
+      const targetDim = dimensionCol.toLowerCase();
+      const hasDim = availableKeys.some((k) => k === targetDim);
+      if (!hasDim) return false;
+    }
+
+    return true;
+  }, [displayData, chartType, dimensionCol, metricCol, aggregation]);
 
   return (
     <div className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -668,33 +742,96 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
           </div>
 
           {/* Right Column: Live Chart Preview (5 cols) */}
-          <div className="lg:col-span-5 bg-surface-muted/20 border border-border rounded-card p-4 flex flex-col justify-between">
-            <div>
+          <div className="lg:col-span-5 min-w-0 bg-surface-muted/20 border border-border rounded-card p-4 flex flex-col justify-between">
+            <div className="w-full min-w-0 flex flex-col">
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-border">
                 <span className="text-2xs font-bold text-foreground flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-indigo-500" />
                   <span>Interactive Live Preview</span>
                 </span>
-                {previewRows !== null && (
-                  <span className="text-3xs text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1">
+                {isPreviewLoading ? (
+                  <span className="text-3xs text-indigo-600 dark:text-indigo-400 font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Validating...</span>
+                  </span>
+                ) : validationErrors.length > 0 ? (
+                  <span className="text-3xs text-red-600 dark:text-red-400 font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20">
+                    <XCircle className="w-3 h-3" />
+                    <span>Validation Failed</span>
+                  </span>
+                ) : isValidated ? (
+                  <span className="text-3xs text-emerald-600 dark:text-emerald-400 font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>Validated</span>
+                  </span>
+                ) : isDataCompatible ? (
+                  <span className="text-3xs text-indigo-600 dark:text-indigo-400 font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">
+                    <Sparkles className="w-3 h-3" />
+                    <span>Visual Preview</span>
+                  </span>
+                ) : (
+                  <span className="text-3xs text-amber-600 dark:text-amber-400 font-mono flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>Preview Needed</span>
                   </span>
                 )}
               </div>
 
               {/* Preview Canvas */}
-              <div className="w-full min-h-[260px] flex flex-col items-center justify-center bg-surface border border-border rounded-md p-2 overflow-hidden">
-                <InsightChart
-                  visualization={chartType}
-                  metric={displayMetricName}
-                  dimensions={chartType === 'kpi' ? [] : (dimensionCol ? [dimensionCol] : [])}
-                  executionData={displayData}
-                  isLoading={isPreviewLoading}
-                  isInsufficientData={displayData.length === 0}
-                  errorMessage={undefined}
-                  className="w-full h-full min-h-[250px]"
-                />
+              <div className="w-full min-w-0 flex-1 flex flex-col min-h-[280px]">
+                {isPreviewLoading ? (
+                  <div className="w-full flex-1 min-h-[280px] flex flex-col items-center justify-center p-6 bg-surface border border-border rounded-card text-center animate-pulse">
+                    <Loader2 className="w-7 h-7 text-indigo-500 animate-spin mb-3" />
+                    <p className="text-xs font-semibold text-foreground">Validating on DuckDB...</p>
+                    <p className="text-2xs text-muted-foreground mt-1">Executing query with Pass 1a and Pass 1b safeguards</p>
+                  </div>
+                ) : validationErrors.length > 0 ? (
+                  <div className="w-full flex-1 min-h-[280px] flex flex-col items-center justify-center p-6 bg-red-500/5 border border-red-500/20 rounded-card text-center">
+                    <AlertTriangle className="w-7 h-7 text-red-500 mb-2" />
+                    <p className="text-xs font-semibold text-red-600 dark:text-red-400">Safeguard Validation Failed</p>
+                    <p className="text-2xs text-muted-foreground mt-1 max-w-xs">
+                      The current configuration failed validation. Review the issues on the left and adjust your settings.
+                    </p>
+                  </div>
+                ) : !isDataCompatible ? (
+                  <div className="w-full flex-1 min-h-[280px] flex flex-col items-center justify-center p-6 bg-surface-muted/30 border border-dashed border-border rounded-card text-center">
+                    <div className="p-2.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 mb-3">
+                      <RefreshCw className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-semibold text-foreground">Configuration Modified</p>
+                    <p className="text-2xs text-muted-foreground mt-1 max-w-xs">
+                      Dimensions, metrics, or types changed. Click <strong>Preview &amp; Validate Query</strong> to compile SQL and run on DuckDB.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handlePreview}
+                      disabled={isPreviewLoading || isApplying}
+                      className="mt-3 px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Preview &amp; Validate Query</span>
+                    </button>
+                  </div>
+                ) : displayData.length === 0 ? (
+                  <div className="w-full flex-1 min-h-[280px] flex flex-col items-center justify-center p-6 bg-surface-muted/30 border border-dashed border-border rounded-card text-center">
+                    <TableIcon className="w-7 h-7 text-muted-foreground/60 mb-2" />
+                    <p className="text-xs font-semibold text-foreground">No Records Returned</p>
+                    <p className="text-2xs text-muted-foreground mt-1 max-w-xs">
+                      Query executed with zero records matching criteria.
+                    </p>
+                  </div>
+                ) : (
+                  <InsightChart
+                    visualization={chartType}
+                    metric={displayMetricName}
+                    dimensions={chartType === 'kpi' ? [] : (dimensionCol ? [dimensionCol] : [])}
+                    executionData={displayData}
+                    isLoading={false}
+                    isInsufficientData={displayData.length === 0}
+                    errorMessage={undefined}
+                    className="w-full flex-1 min-w-0"
+                  />
+                )}
               </div>
 
               {/* Preview Compiled SQL snippet */}
