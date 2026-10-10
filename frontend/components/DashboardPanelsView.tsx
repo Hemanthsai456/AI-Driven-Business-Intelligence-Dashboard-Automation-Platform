@@ -630,11 +630,11 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
     const cType = (chartType || 'bar').toLowerCase();
     const { dimKey, metricKey } = resolveChartKeys(rows, preferredDims, preferredMetrics);
-    const displayRows = rows.slice(0, 20);
+    const displayRows = rows.length > 50 ? rows.slice(0, 50) : rows;
     const values = displayRows.map((r) => Number(r[metricKey]) || 0);
-    const maxVal = Math.max(...values, 1);
+    const maxVal = Math.max(...values, 0);
     const minVal = Math.min(...values, 0);
-    const range = maxVal - minVal || 1;
+    const range = (maxVal - minVal) || 1;
 
     const width = 560;
     const height = 240;
@@ -813,11 +813,12 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
     // 4. Horizontal Bar Chart
     if (cType === 'horizontal_bar') {
+      const maxLabelLen = Math.max(...displayRows.map((r) => String(r[dimKey] ?? '').length), 0);
+      const leftPad = Math.min(Math.max(maxLabelLen * 7 + 12, 85), 150);
+      const hChartW = width - leftPad - padding.right;
       const barCount = displayRows.length;
       const barSlotH = chartH / Math.max(barCount, 1);
-      const barH = Math.max(Math.min(barSlotH * 0.65, 28), 6);
-      const leftPad = 90;
-      const hChartW = width - leftPad - padding.right;
+      const barH = Math.max(Math.min(barSlotH * 0.65, 28), 5);
 
       const bars: string[] = [];
       const yAxisLabels: string[] = [];
@@ -831,15 +832,29 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         xGrid.push(`<text x="${xPos.toFixed(1)}" y="${height - padding.bottom + 15}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="monospace">${formattedX}</text>`);
       }
 
+      // Zero baseline position on X-axis
+      const zeroX = leftPad + ((0 - minVal) / range) * hChartW;
+      if (minVal < 0 && maxVal > 0) {
+        xGrid.push(`<line x1="${zeroX.toFixed(1)}" y1="${padding.top}" x2="${zeroX.toFixed(1)}" y2="${height - padding.bottom}" stroke="var(--foreground)" stroke-width="1.5" opacity="0.4" />`);
+      }
+
       displayRows.forEach((row, i) => {
         const val = Number(row[metricKey]) || 0;
-        const barLen = Math.max(((val - minVal) / range) * hChartW, 2);
+        let barX = zeroX;
+        let barLen = 0;
+        if (val >= 0) {
+          barX = zeroX;
+          barLen = Math.max(((val - 0) / range) * hChartW, val === 0 ? 0 : 2);
+        } else {
+          barLen = Math.max(((0 - val) / range) * hChartW, 2);
+          barX = zeroX - barLen;
+        }
         const y = padding.top + i * barSlotH + (barSlotH - barH) / 2;
         const label = String(row[dimKey] ?? `Item ${i + 1}`);
         const color = colors[i % colors.length];
 
-        bars.push(`<rect x="${leftPad}" y="${y.toFixed(1)}" width="${barLen.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
-        yAxisLabels.push(`<text x="${leftPad - 8}" y="${(y + barH / 2 + 3).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 14))}</text>`);
+        bars.push(`<rect x="${barX.toFixed(1)}" y="${y.toFixed(1)}" width="${barLen.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
+        yAxisLabels.push(`<text x="${(leftPad - 8).toFixed(1)}" y="${(y + barH / 2 + 3).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 18))}</text>`);
       });
 
       return `
@@ -873,24 +888,37 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     // 6. Default: Vertical Bar / Histogram / Stacked Bar
     const barCount = displayRows.length;
     const barSlotW = chartW / Math.max(barCount, 1);
-    const barW = Math.max(Math.min(barSlotW * 0.65, 36), 6);
+    const barW = Math.max(Math.min(barSlotW * 0.65, 36), 5);
 
     const bars: string[] = [];
     const xLabels: string[] = [];
 
+    // Zero baseline position on Y-axis
+    const zeroY = padding.top + chartH - ((0 - minVal) / range) * chartH;
+    if (minVal < 0 && maxVal > 0) {
+      gridLines.push(`<line x1="${padding.left}" y1="${zeroY.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--foreground)" stroke-width="1.5" opacity="0.4" />`);
+    }
+
     displayRows.forEach((row, i) => {
       const val = Number(row[metricKey]) || 0;
-      const barH = Math.max(((val - minVal) / range) * chartH, 2);
+      let barY = zeroY;
+      let barH = 0;
+      if (val >= 0) {
+        barH = Math.max(((val - 0) / range) * chartH, val === 0 ? 0 : 2);
+        barY = zeroY - barH;
+      } else {
+        barH = Math.max(((0 - val) / range) * chartH, 2);
+        barY = zeroY;
+      }
       const x = padding.left + i * barSlotW + (barSlotW - barW) / 2;
-      const y = padding.top + chartH - barH;
       const label = String(row[dimKey] ?? `Item ${i + 1}`);
       const color = colors[i % colors.length];
 
-      bars.push(`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
+      bars.push(`<rect x="${x.toFixed(1)}" y="${barY.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${color}" />`);
 
-      if (barCount <= 10 || i % Math.ceil(barCount / 8) === 0 || i === barCount - 1) {
+      if (barCount <= 12 || i % Math.ceil(barCount / 10) === 0 || i === barCount - 1) {
         xLabels.push(
-          `<text x="${(x + barW / 2).toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 10))}</text>`
+          `<text x="${(x + barW / 2).toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(label.slice(0, 12))}</text>`
         );
       }
     });

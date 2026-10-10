@@ -191,9 +191,6 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   }, [normalizedRows, dimKey]);
 
   let vizType = (visualization || 'bar').toLowerCase();
-  if (vizType === 'bar' && maxLabelLen > 12) {
-    vizType = 'horizontal_bar';
-  }
 
   // Filter usable scatter points where both X and Y are finite numbers
   const usableScatterData = React.useMemo(() => {
@@ -440,8 +437,9 @@ export const InsightChart: React.FC<InsightChartProps> = ({
     );
   }
 
-  // 5. Horizontal Bar Chart (for long labels)
+  // 5. Horizontal Bar Chart (for category ranking / long labels)
   if (vizType === 'horizontal_bar') {
+    const yAxisWidth = Math.min(Math.max(maxLabelLen * 7, 75), 150);
     return (
       <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
@@ -449,7 +447,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
             <BarChart
               data={normalizedRows}
               layout="vertical"
-              margin={{ top: 10, right: 30, left: 40, bottom: 10 }}
+              margin={{ top: 10, right: 30, left: Math.max(yAxisWidth - 55, 15), bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
               <XAxis
@@ -465,7 +463,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
                 tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 stroke="var(--border)"
                 tickLine={false}
-                width={70}
+                width={yAxisWidth}
               />
               <Tooltip contentStyle={tooltipStyle} />
               <Bar dataKey={metricKey} radius={[0, 4, 4, 0]}>

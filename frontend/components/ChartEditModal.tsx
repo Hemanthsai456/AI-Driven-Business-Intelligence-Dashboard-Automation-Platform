@@ -331,6 +331,12 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       visEnum = 'PIE';
     }
 
+    // Preserve limit and sorting semantics from existing tile plan (e.g. ranking / Top-N queries)
+    const existingPlan = tile.plan;
+    const planLimit = existingPlan?.limit !== undefined && existingPlan?.limit !== null ? existingPlan.limit : undefined;
+    const planOrderDir = existingPlan?.order_direction || (existingPlan?.limit ? 'DESC' : undefined);
+    const planOrderBy = existingPlan?.order_by || (planOrderDir ? 'metric' : undefined);
+
     return {
       plan_id: tile.plan?.plan_id || `plan_${Date.now()}`,
       dataset_id: datasetId,
@@ -341,6 +347,9 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       },
       dimensions: dims,
       filters: tile.plan?.filters || [],
+      order_by: planOrderBy,
+      order_direction: planOrderDir,
+      limit: planLimit,
       visualization: visEnum,
       generator: 'user_editor',
       reasoning: {
