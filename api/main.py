@@ -2377,16 +2377,17 @@ def update_dashboard_tile(
     dims = [d.column for d in req.plan.dimensions]
     x_key = dims[0] if dims else None
 
+    has_agg = req.plan.metric.aggregation is not None
     agg_val = (
         req.plan.metric.aggregation.value
         if hasattr(req.plan.metric.aggregation, "value")
         else str(req.plan.metric.aggregation)
-    ).lower()
+    ).lower() if has_agg else None
     col_val = "records" if req.plan.metric.column == "*" else req.plan.metric.column
-    expected_metric_alias = f"{agg_val}_{col_val}"
+    expected_metric_alias = f"{agg_val}_{col_val}" if has_agg else col_val
 
     y_keys = [expected_metric_alias] if expected_metric_alias in (exec_res.columns or []) else (
-        [c for c in (exec_res.columns or []) if c not in dims] or ["value"]
+        [c for c in (exec_res.columns or []) if c not in dims] or [req.plan.metric.column]
     )
 
     # 5. Update Evidence provenance
@@ -2414,7 +2415,7 @@ def update_dashboard_tile(
             "compiled_sql": exec_res.compiled_sql,
             "data": exec_res.rows or [],
             "dimensions": dims,
-            "metrics": [f"{agg_val}({req.plan.metric.column})"],
+            "metrics": [f"{agg_val}({req.plan.metric.column})"] if has_agg else [req.plan.metric.column],
             "x_key": x_key,
             "y_keys": y_keys,
             "evidence": new_evidence,

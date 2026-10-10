@@ -605,8 +605,8 @@ class OverviewDashboardPlanner:
                     plan_corr = CandidatePlan(
                         dataset_id=dataset_id,
                         intent=f"Correlation between {m1} and {m2}",
-                        metric=MetricSpec(column=m1, aggregation=AggregationType.AVG),
-                        dimensions=[DimensionSpec(column=m2)],
+                        metric=MetricSpec(column=m2, aggregation=AggregationType.AVG),
+                        dimensions=[DimensionSpec(column=m1)],
                         visualization=VisualizationType.SCATTER,
                         reasoning=PlanReasoning(interpretation=top_corr.statement, evidence=[]),
                     )
@@ -616,8 +616,8 @@ class OverviewDashboardPlanner:
                             family=AnalyticalFamily.RELATIONSHIP,
                             plan=plan_corr,
                             chart_type="scatter",
-                            primary_measure=m1,
-                            primary_dimension=m2,
+                            primary_measure=m2,
+                            primary_dimension=m1,
                             aggregation=AggregationType.AVG,
                             title=top_corr.title,
                             narration=top_corr.statement,
@@ -846,10 +846,10 @@ class OverviewDashboardPlanner:
                 plan=corr_cand.plan,
                 compiled_sql=corr_cand.compiled_sql,
                 data=corr_cand.execution_result.rows,
-                x_key=corr_cand.primary_measure,
-                y_keys=[corr_cand.primary_dimension] if corr_cand.primary_dimension else [],
-                dimensions=[corr_cand.primary_measure] if corr_cand.primary_measure else [],
-                metrics=[corr_cand.primary_dimension] if corr_cand.primary_dimension else [],
+                x_key=corr_cand.primary_dimension,
+                y_keys=[corr_cand.primary_measure] if corr_cand.primary_measure else [],
+                dimensions=[corr_cand.primary_dimension] if corr_cand.primary_dimension else [],
+                metrics=[corr_cand.primary_measure] if corr_cand.primary_measure else [],
             )
             tiles.append(corr_tile)
         elif outlier_insights:

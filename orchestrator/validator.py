@@ -142,6 +142,15 @@ def validate_pass1a(
     if metric_col == "*" and plan.metric.aggregation in (AggregationType.COUNT, AggregationType.COUNT_DISTINCT):
         # Valid wildcard count
         pass
+    elif metric_col == "*":
+        issues.append(
+            ValidationIssue(
+                check="role_aggregation_compat",
+                status=ValidationStatus.FAILED,
+                column="*",
+                message="Wildcard column '*' requires an aggregation function (e.g. COUNT).",
+            )
+        )
     elif metric_col not in available_cols:
         issues.append(
             ValidationIssue(
@@ -339,7 +348,7 @@ def validate_pass1b(
         # Identify metric column in returned rows (usually last column or matching alias)
         metric_col_name = None
         for col in exec_result.columns:
-            if plan.metric.column.lower() in col.lower() or plan.metric.aggregation.value.lower() in col.lower():
+            if plan.metric.column.lower() in col.lower() or (plan.metric.aggregation is not None and plan.metric.aggregation.value.lower() in col.lower()):
                 metric_col_name = col
                 break
         if not metric_col_name and exec_result.columns:

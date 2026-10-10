@@ -37,6 +37,7 @@ const SUPPORTED_CHART_TYPES = [
 ];
 
 const SUPPORTED_AGGREGATIONS = [
+  { value: 'none', label: 'None (Raw Observations)' },
   { value: 'sum', label: 'SUM' },
   { value: 'avg', label: 'AVG (Mean)' },
   { value: 'count', label: 'COUNT' },
@@ -115,11 +116,27 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       setGranularity(existingGran || '');
 
       // Initialize metric and aggregation
-      const mCol = tile.plan?.metric?.column || tile.metrics?.[0]?.replace(/^[a-z_]+\((.+)\)$/i, '$1') || '';
+      let mCol = '';
+      if (tile.metrics?.[0]) {
+        mCol = tile.metrics[0].replace(/^[a-z_]+\((.+)\)$/i, '$1');
+      } else if (tile.plan?.metric?.column) {
+        mCol = tile.plan.metric.column;
+      }
+      if (mCol === dim && tile.y_keys?.[0] && tile.y_keys[0] !== dim) {
+        mCol = tile.y_keys[0];
+      }
       setMetricCol(mCol);
 
-      const agg = tile.plan?.metric?.aggregation || 'sum';
-      setAggregation(String(agg).toLowerCase());
+      const planAgg = tile.plan?.metric?.aggregation;
+      if (!planAgg || String(planAgg).toLowerCase() === 'none') {
+        if (tile.chart_type === 'scatter') {
+          setAggregation('none');
+        } else {
+          setAggregation('sum');
+        }
+      } else {
+        setAggregation(String(planAgg).toLowerCase());
+      }
 
       // Reset preview state
       setPreviewRows(null);
@@ -129,39 +146,145 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
     }
   }, [tile]);
 
-  // Identify column roles from metadata schema
-  const { dimensionColumns, metricColumns, isDimensionTemporal } = useMemo(() => {
-    if (!metadata || !metadata.columns) {
-      return { dimensionColumns: [], metricColumns: [], isDimensionTemporal: false };
-    }
-
-    const dims: string[] = [];
-    const metrics: string[] = [];
+  // Identify column roles and types from metadata schema + tile seeds
+  const { dimensionColumns, metricColumns, scatterDimensionColumns, isDimensionTemporal } = useMemo(() => {
+    const allColsSet = new Set<string>();
+    const dimsSet = new Set<string>();
+    const metricsSet = new Set<string>();
     let isTemporal = false;
 
-    metadata.columns.forEach((col) => {
-      const role = String(col.semantic_role || '').toUpperCase();
-      const dt = String(col.detected_datatype || '').toLowerCase();
-      const isNumeric = dt.includes('int') || dt.includes('float') || dt.includes('double') || dt.includes('numeric');
-      const isDate = dt.includes('date') || dt.includes('time') || role === 'DATETIME';
-
-      if (isNumeric || role === 'MEASURE') {
-        metrics.push(col.original_name);
+    // Seed from tile so controls are immediately populated and consistent
+    if (tile) {
+      if (tile.dimensions) {
+        tile.dimensions.forEach((d) => {
+          allColsSet.add(d);
+          dimsSet.add(d);
+        });
       }
-      // Dimensions can include categorical, dates, and identifiers
-      dims.push(col.original_name);
-
-      if (col.original_name === dimensionCol && isDate) {
-        isTemporal = true;
+      if (tile.x_key) {
+        allColsSet.add(tile.x_key);
+        dimsSet.add(tile.x_key);
       }
-    });
+      if (tile.metrics) {
+        tile.metrics.forEach((m) => {
+          const cleanM = m.replace(/^[a-z_]+\((.+)\)$/i, '$1');
+          if (cleanM && cleanM !== '*') {
+            allColsSet.add(cleanM);
+            metricsSet.add(cleanM);
+          }
+        });
+      }
+      if (tile.y_keys) {
+        tile.y_keys.forEach((y) => {
+          const cleanY = y.replace(/^[a-z_]+\((.+)\)$/i, '$1');
+          if (cleanY && cleanY !== '*') {
+            allColsSet.add(cleanY);
+            metricsSet.add(cleanY);
+          }
+        });
+      }
+      if (tile.plan?.metric?.column && tile.plan.metric.column !== '*') {
+        allColsSet.add(tile.plan.metric.column);
+        metricsSet.add(tile.plan.metric.column);
+      }
+      if (tile.data && tile.data.length > 0) {
+        Object.keys(tile.data[0]).forEach((k) => {
+          if (!k.includes('(') && !k.startsWith('sum_') && !k.startsWith('avg_')) {
+            allColsSet.add(k);
+          }
+        });
+      }
+    }
+
+    if (metadata?.columns && Array.isArray(metadata.columns)) {
+      metadata.columns.forEach((col: any) => {
+        const colName = col.original_name || col.column_name || col.name;
+        if (!colName) return;
+
+        allColsSet.add(colName);
+        const role = String(col.semantic_role || '').toUpperCase();
+        const dt = String(col.detected_datatype || '').toLowerCase();
+        const isNumeric =
+          dt.includes('int') ||
+          dt.includes('float') ||
+          dt.includes('double') ||
+          dt.includes('numeric') ||
+          dt.includes('real') ||
+          dt.includes('decimal') ||
+          dt.includes('number');
+        const isDate = dt.includes('date') || dt.includes('time') || role === 'DATETIME';
+
+        if (isNumeric || role === 'MEASURE') {
+          metricsSet.add(colName);
+        }
+        dimsSet.add(colName);
+
+        if (colName === dimensionCol && isDate) {
+          isTemporal = true;
+        }
+      });
+    } else if (metadata?.dtypes) {
+      Object.entries(metadata.dtypes).forEach(([colName, dtStr]) => {
+        allColsSet.add(colName);
+        const dt = String(dtStr).toLowerCase();
+        const isNumeric =
+          dt.includes('int') ||
+          dt.includes('float') ||
+          dt.includes('double') ||
+          dt.includes('numeric') ||
+          dt.includes('real') ||
+          dt.includes('decimal') ||
+          dt.includes('number');
+        const isDate = dt.includes('date') || dt.includes('time');
+
+        if (isNumeric) metricsSet.add(colName);
+        dimsSet.add(colName);
+        if (colName === dimensionCol && isDate) isTemporal = true;
+      });
+    }
+
+    const dimsArray = Array.from(dimsSet);
+    const metricsArray = Array.from(metricsSet);
+    const scatterDims = metricsArray.length > 0 ? metricsArray : dimsArray;
 
     return {
-      dimensionColumns: dims,
-      metricColumns: metrics.length > 0 ? metrics : dims,
+      dimensionColumns: dimsArray,
+      metricColumns: metricsArray.length > 0 ? metricsArray : dimsArray,
+      scatterDimensionColumns: scatterDims,
       isDimensionTemporal: isTemporal,
     };
-  }, [metadata, dimensionCol]);
+  }, [metadata, tile, dimensionCol]);
+
+  // Aggregations available based on chart type
+  const availableAggregations = useMemo(() => {
+    const isScatter = chartType.toLowerCase() === 'scatter';
+    const isLine = chartType.toLowerCase() === 'line';
+    if (isScatter || isLine) {
+      return SUPPORTED_AGGREGATIONS;
+    }
+    return SUPPORTED_AGGREGATIONS.filter((a) => a.value !== 'none');
+  }, [chartType]);
+
+  // Handle switching chart types
+  const handleChartTypeChange = (newType: string) => {
+    setChartType(newType);
+    const lowType = newType.toLowerCase();
+    if (lowType === 'kpi') {
+      setDimensionCol('');
+      if (aggregation === 'none') setAggregation('sum');
+    } else if (lowType === 'scatter') {
+      // Scatter requires an X-axis column
+      if (!dimensionCol) {
+        const fallbackX = scatterDimensionColumns.find((c) => c !== metricCol) || scatterDimensionColumns[0] || '';
+        setDimensionCol(fallbackX);
+      }
+    } else if (lowType !== 'line') {
+      // Other charts (bar, donut) require aggregation
+      if (aggregation === 'none') {
+        setAggregation('sum');
+      }
+    }
+  };
 
   if (!isOpen || !tile) return null;
 
@@ -185,14 +308,17 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
   // Construct CandidatePlan conforming to backend Pydantic schema
   const buildCurrentPlan = () => {
     const isKpi = chartType.toLowerCase() === 'kpi';
+    const isScatter = chartType.toLowerCase() === 'scatter';
+    const isRaw = (isScatter || chartType.toLowerCase() === 'line') && aggregation === 'none';
+
     const activeMetricCol = metricCol || (metricColumns[0] || '*');
 
-    // KPI visualizations cannot have grouping dimensions
-    const dims = isKpi || !dimensionCol
+    // KPI cards cannot have grouping dimensions. For other charts, dimension is optional if user selected "None"
+    const dims = isKpi || (!dimensionCol && !isScatter)
       ? []
       : [
           {
-            column: dimensionCol,
+            column: dimensionCol || (scatterDimensionColumns[0] || activeMetricCol),
             granularity: isDimensionTemporal && granularity ? granularity.toUpperCase() : null,
           },
         ];
@@ -211,7 +337,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
       intent: title.trim() || 'Custom Analytical View',
       metric: {
         column: activeMetricCol,
-        aggregation: (aggregation || 'sum').toUpperCase(),
+        aggregation: isRaw ? null : (aggregation || 'sum').toUpperCase(),
       },
       dimensions: dims,
       filters: tile.plan?.filters || [],
@@ -306,7 +432,8 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
 
   // Display rows (preview if executed, else tile data)
   const displayData = previewRows !== null ? previewRows : tile.data;
-  const displayMetricName = `${aggregation}(${metricCol || 'value'})`;
+  const displayMetricName =
+    aggregation === 'none' ? metricCol || 'value' : `${aggregation.toUpperCase()}(${metricCol || 'value'})`;
 
   return (
     <div className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
@@ -374,7 +501,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
               </label>
               <select
                 value={chartType}
-                onChange={(e) => setChartType(e.target.value)}
+                onChange={(e) => handleChartTypeChange(e.target.value)}
                 className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 {SUPPORTED_CHART_TYPES.map((ct) => (
@@ -389,12 +516,29 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-2xs font-semibold text-foreground mb-1">
-                  Dimension (Grouping Column)
+                  {chartType === 'scatter'
+                    ? 'Horizontal Axis (X-Axis)'
+                    : chartType === 'line'
+                    ? 'Timeline / Dimension (X-Axis)'
+                    : 'Dimension (Grouping Column)'}
                 </label>
                 {chartType === 'kpi' ? (
                   <div className="w-full text-2xs px-3 py-2 rounded-md bg-surface-muted/50 border border-border text-muted-foreground italic">
                     KPI cards summarize a single scalar value across all records
                   </div>
+                ) : chartType === 'scatter' ? (
+                  <select
+                    value={dimensionCol}
+                    onChange={(e) => setDimensionCol(e.target.value)}
+                    disabled={isLoadingMeta}
+                    className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    {scatterDimensionColumns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <select
                     value={dimensionCol}
@@ -402,7 +546,9 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                     disabled={isLoadingMeta}
                     className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="">None (Total Dataset Metric)</option>
+                    <option value="">
+                      {chartType === 'line' ? 'None (Total Trend)' : 'None (Total Dataset Metric)'}
+                    </option>
                     {dimensionColumns.map((col) => (
                       <option key={col} value={col}>
                         {col}
@@ -420,9 +566,11 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                 <select
                   value={granularity}
                   onChange={(e) => setGranularity(e.target.value)}
-                  disabled={chartType === 'kpi' || !isDimensionTemporal}
+                  disabled={chartType === 'kpi' || chartType === 'scatter' || !isDimensionTemporal}
                   className={`w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                    chartType === 'kpi' || !isDimensionTemporal ? 'opacity-50 cursor-not-allowed' : ''
+                    chartType === 'kpi' || chartType === 'scatter' || !isDimensionTemporal
+                      ? 'opacity-50 cursor-not-allowed'
+                      : ''
                   }`}
                 >
                   {TEMPORAL_GRANULARITIES.map((g) => (
@@ -438,15 +586,21 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-2xs font-semibold text-foreground mb-1">
-                  Metric Column
+                  {chartType === 'scatter' ? 'Vertical Axis (Y-Axis)' : 'Metric Column'}
                 </label>
                 <select
                   value={metricCol}
-                  onChange={(e) => setMetricCol(e.target.value)}
+                  onChange={(e) => {
+                    const newCol = e.target.value;
+                    setMetricCol(newCol);
+                    if (newCol === '*' && aggregation !== 'count') {
+                      setAggregation('count');
+                    }
+                  }}
                   disabled={isLoadingMeta}
                   className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 >
-                  <option value="*">* (Row Count)</option>
+                  {chartType !== 'scatter' && <option value="*">* (Row Count)</option>}
                   {metricColumns.map((col) => (
                     <option key={col} value={col}>
                       {col}
@@ -461,10 +615,17 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                 </label>
                 <select
                   value={aggregation}
-                  onChange={(e) => setAggregation(e.target.value)}
+                  onChange={(e) => {
+                    const newAgg = e.target.value;
+                    setAggregation(newAgg);
+                    if (newAgg !== 'count' && metricCol === '*') {
+                      const fallback = metricColumns.find((c) => c !== '*') || metricColumns[0] || 'records';
+                      setMetricCol(fallback);
+                    }
+                  }}
                   className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500 uppercase font-mono text-2xs"
                 >
-                  {SUPPORTED_AGGREGATIONS.map((agg) => (
+                  {availableAggregations.map((agg) => (
                     <option key={agg.value} value={agg.value}>
                       {agg.label}
                     </option>
@@ -514,7 +675,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
               </div>
 
               {/* Preview Canvas */}
-              <div className="min-h-[220px] flex items-center justify-center bg-surface border border-border rounded-md p-2">
+              <div className="w-full min-h-[260px] flex flex-col items-center justify-center bg-surface border border-border rounded-md p-2 overflow-hidden">
                 <InsightChart
                   visualization={chartType}
                   metric={displayMetricName}
@@ -523,6 +684,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                   isLoading={isPreviewLoading}
                   isInsufficientData={displayData.length === 0}
                   errorMessage={undefined}
+                  className="w-full h-full min-h-[250px]"
                 />
               </div>
 

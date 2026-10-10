@@ -95,7 +95,13 @@ export function resolveChartKeys(
   let dimKey = '';
   for (const pd of preferredDims) {
     if (!pd) continue;
-    const found = keys.find((k) => k.toLowerCase() === pd.toLowerCase());
+    const cleanPd = pd.replace(/^[a-z_]+\((.+)\)$/i, '$1');
+    const found = keys.find(
+      (k) =>
+        k.toLowerCase() === pd.toLowerCase() ||
+        k.toLowerCase() === cleanPd.toLowerCase() ||
+        k.toLowerCase().endsWith(`_${cleanPd.toLowerCase()}`)
+    );
     if (found) {
       dimKey = found;
       break;
@@ -112,7 +118,13 @@ export function resolveChartKeys(
   let metricKey = '';
   for (const pm of preferredMetrics) {
     if (!pm) continue;
-    const found = numericKeys.find((k) => k.toLowerCase() === pm.toLowerCase());
+    const cleanPm = pm.replace(/^[a-z_]+\((.+)\)$/i, '$1');
+    const found = numericKeys.find(
+      (k) =>
+        k.toLowerCase() === pm.toLowerCase() ||
+        k.toLowerCase() === cleanPm.toLowerCase() ||
+        k.toLowerCase().endsWith(`_${cleanPm.toLowerCase()}`)
+    );
     if (found && found !== dimKey) {
       metricKey = found;
       break;
@@ -159,13 +171,18 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   const normalizedRows = React.useMemo(() => {
     return rawRows.map((r) => {
       const copy = { ...r };
-      const val = copy[metricKey];
-      if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
-        copy[metricKey] = Number(val);
+      for (const k of Object.keys(copy)) {
+        const val = copy[k];
+        if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+          copy[k] = Number(val);
+        }
+      }
+      if ((!dimensions || dimensions.length === 0 || !dimensions[0]) && Object.keys(r).length === 1 && !copy.dimension) {
+        copy.dimension = 'Total';
       }
       return copy;
     });
-  }, [rawRows, metricKey]);
+  }, [rawRows, dimensions]);
 
   // Detect long labels -> force horizontal layout for readability (unconditionally declared hook)
   const maxLabelLen = React.useMemo(() => {
@@ -173,10 +190,43 @@ export const InsightChart: React.FC<InsightChartProps> = ({
     return Math.max(...normalizedRows.map((r) => String(r[dimKey] ?? '').length), 0);
   }, [normalizedRows, dimKey]);
 
+  let vizType = (visualization || 'bar').toLowerCase();
+  if (vizType === 'bar' && maxLabelLen > 12) {
+    vizType = 'horizontal_bar';
+  }
+
+  // Filter usable scatter points where both X and Y are finite numbers
+  const usableScatterData = React.useMemo(() => {
+    if (vizType !== 'scatter') return [];
+    return normalizedRows.filter((r) => {
+      const x = r[dimKey];
+      const y = r[metricKey];
+      return (
+        typeof x === 'number' &&
+        !isNaN(x) &&
+        isFinite(x) &&
+        typeof y === 'number' &&
+        !isNaN(y) &&
+        isFinite(y)
+      );
+    });
+  }, [vizType, normalizedRows, dimKey, metricKey]);
+
+  // Verify plottable data usability
+  const hasUsableData = React.useMemo(() => {
+    if (!normalizedRows || normalizedRows.length === 0) return false;
+    if (vizType === 'kpi' || vizType === 'table') return true;
+    if (vizType === 'scatter') return usableScatterData.length > 0;
+    return normalizedRows.some((r) => {
+      const y = r[metricKey];
+      return typeof y === 'number' && !isNaN(y) && isFinite(y);
+    });
+  }, [vizType, normalizedRows, metricKey, usableScatterData]);
+
   // Loading State
   if (isLoading) {
     return (
-      <div className={`flex flex-col items-center justify-center p-8 bg-surface border border-border rounded-card min-h-[260px] animate-pulse ${className}`}>
+      <div className={`w-full flex flex-col items-center justify-center p-8 bg-surface border border-border rounded-card min-h-[260px] animate-pulse ${className}`}>
         <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin mb-3" />
         <span className="text-xs text-muted-foreground font-mono">Querying analytical engine...</span>
       </div>
@@ -186,7 +236,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // Error State
   if (errorMessage) {
     return (
-      <div className={`flex flex-col items-center justify-center p-6 bg-error-soft/30 border border-error/30 rounded-card min-h-[220px] text-center ${className}`}>
+      <div className={`w-full flex flex-col items-center justify-center p-6 bg-error-soft/30 border border-error/30 rounded-card min-h-[220px] text-center ${className}`}>
         <AlertCircle className="w-6 h-6 text-error mb-2" />
         <span className="text-xs font-semibold text-error">Unable to render chart</span>
         <span className="text-2xs text-muted-foreground mt-1 max-w-sm">{errorMessage}</span>
@@ -197,7 +247,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // Insufficient Data State (Filter resulted in fewer than required rows)
   if (isInsufficientData || executionData?.status === 'INSUFFICIENT_DATA') {
     return (
-      <div className={`flex flex-col items-center justify-center p-6 bg-attention-soft/30 border border-attention/30 rounded-card min-h-[220px] text-center ${className}`}>
+      <div className={`w-full flex flex-col items-center justify-center p-6 bg-attention-soft/30 border border-attention/30 rounded-card min-h-[220px] text-center ${className}`}>
         <AlertCircle className="w-6 h-6 text-attention mb-2" />
         <span className="text-xs font-semibold text-foreground">Insufficient data after filtering</span>
         <span className="text-2xs text-muted-foreground mt-1 max-w-xs">
@@ -207,21 +257,22 @@ export const InsightChart: React.FC<InsightChartProps> = ({
     );
   }
 
-  // Empty State
-  if (!normalizedRows || normalizedRows.length === 0) {
+  // Empty State / No Usable Data State
+  if (!normalizedRows || normalizedRows.length === 0 || !hasUsableData) {
     return (
-      <div className={`flex flex-col items-center justify-center p-8 bg-surface-muted/30 border border-dashed border-border rounded-card text-muted-foreground min-h-[240px] text-center ${className}`}>
+      <div className={`w-full flex flex-col items-center justify-center p-8 bg-surface-muted/30 border border-dashed border-border rounded-card text-muted-foreground min-h-[240px] text-center ${className}`}>
         <TableIcon className="w-7 h-7 mb-2 stroke-1 text-muted-foreground/60" />
-        <p className="text-xs font-medium text-foreground">No data points returned</p>
-        <p className="text-2xs text-muted-foreground mt-0.5">The query executed with zero records matching criteria.</p>
+        <p className="text-xs font-medium text-foreground">No plottable data points</p>
+        <p className="text-2xs text-muted-foreground mt-0.5 max-w-sm">
+          {vizType === 'scatter'
+            ? 'This scatter plot requires numeric values for both axes, but no valid data points were found.'
+            : 'The query executed with zero plottable records matching criteria.'}
+        </p>
       </div>
     );
   }
 
-  let vizType = (visualization || 'bar').toLowerCase();
-  if (vizType === 'bar' && maxLabelLen > 12) {
-    vizType = 'horizontal_bar';
-  }
+
 
   // Tooltip custom style
   const tooltipStyle = {
@@ -241,7 +292,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
       : String(rawVal);
 
     return (
-      <div className={`p-6 bg-surface border border-border rounded-card flex flex-col items-center justify-center text-center shadow-xs min-h-[220px] ${className}`}>
+      <div className={`w-full p-6 bg-surface border border-border rounded-card flex flex-col items-center justify-center text-center shadow-xs min-h-[220px] ${className}`}>
         <div className="p-2 rounded-full bg-primary-soft text-primary mb-3">
           <Hash className="w-5 h-5" />
         </div>
@@ -269,7 +320,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 2. Line Chart
   if (vizType === 'line') {
     return (
-      <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+      <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
@@ -312,7 +363,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 3. Area Chart
   if (vizType === 'area') {
     return (
-      <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+      <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
@@ -350,7 +401,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 4. Donut Chart (Composition)
   if (vizType === 'donut' || vizType === 'pie') {
     return (
-      <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+      <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -392,7 +443,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 5. Horizontal Bar Chart (for long labels)
   if (vizType === 'horizontal_bar') {
     return (
-      <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+      <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -442,7 +493,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   // 6. Scatter Chart (Correlation)
   if (vizType === 'scatter') {
     return (
-      <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+      <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
         <div className="flex-1 w-full h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>
@@ -450,19 +501,25 @@ export const InsightChart: React.FC<InsightChartProps> = ({
               <XAxis
                 dataKey={dimKey}
                 name={dimKey}
+                type="number"
+                domain={['auto', 'auto']}
                 tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 stroke="var(--border)"
+                tickFormatter={(v) => (typeof v === 'number' ? Number(v.toFixed(2)).toString() : v)}
               />
               <YAxis
                 dataKey={metricKey}
                 name={metricKey}
+                type="number"
+                domain={['auto', 'auto']}
                 tick={{ fontSize: 11, fill: 'var(--muted)' }}
                 stroke="var(--border)"
+                tickFormatter={(v) => (typeof v === 'number' ? Number(v.toFixed(2)).toString() : v)}
               />
               <Tooltip contentStyle={tooltipStyle} cursor={{ strokeDasharray: '3 3' }} />
               <Scatter
                 name={metricKey}
-                data={normalizedRows}
+                data={usableScatterData}
                 fill="var(--chart-1)"
                 onClick={(entry: any) => {
                   if (onItemClick && entry) {
@@ -481,7 +538,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
   if (vizType === 'table') {
     const cols = Object.keys(normalizedRows[0] || {});
     return (
-      <div className={`bg-surface border border-border rounded-card overflow-hidden ${className}`}>
+      <div className={`w-full bg-surface border border-border rounded-card overflow-hidden ${className}`}>
         <div className="overflow-x-auto max-h-[280px]">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
@@ -514,7 +571,7 @@ export const InsightChart: React.FC<InsightChartProps> = ({
 
   // 8. Default: Vertical Bar Chart / Histogram
   return (
-    <div className={`p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
+    <div className={`w-full p-4 bg-surface border border-border rounded-card min-h-[280px] flex flex-col ${className}`}>
       <div className="flex-1 w-full h-[240px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={normalizedRows} margin={{ top: 10, right: 20, left: 10, bottom: 25 }}>

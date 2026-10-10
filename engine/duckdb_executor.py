@@ -86,6 +86,21 @@ class DuckDBExecutor:
             # Register source dataframe (zero-copy read-only reference)
             con.register("raw_dataframe", df)
 
+            plan_referenced_cols = set()
+            if plan is not None:
+                if plan.metric is not None and plan.metric.column and plan.metric.column != "*":
+                    plan_referenced_cols.add(plan.metric.column)
+                for d in (plan.dimensions or []):
+                    if d.column:
+                        plan_referenced_cols.add(d.column)
+                for f in (plan.filters or []):
+                    if f.column:
+                        plan_referenced_cols.add(f.column)
+            else:
+                plan_referenced_cols = set(df.columns)
+
+            plan_cast_failures: Dict[str, int] = {}
+
             # C2 Implementation: Build TRY_CAST expressions for DATETIME & MEASURE columns in the view
             view_expressions: List[str] = []
             for col in df.columns:
@@ -102,15 +117,26 @@ class DuckDBExecutor:
                 is_string_dtype = pd.api.types.is_string_dtype(df[col]) or pd.api.types.is_object_dtype(df[col])
 
                 if is_datetime_role and is_string_dtype:
-                    # TRY_CAST in view
-                    view_expressions.append(f"TRY_CAST({col_quoted} AS TIMESTAMP) AS {col_quoted}")
+                    # Robust TRY_CAST / STRPTIME in view supporting ISO and common delimited formats
+                    dt_cast_expr = (
+                        f"COALESCE("
+                        f"TRY_CAST({col_quoted} AS TIMESTAMP), "
+                        f"TRY_CAST({col_quoted} AS DATE), "
+                        f"TRY_STRPTIME({col_quoted}, '%d-%m-%Y'), "
+                        f"TRY_STRPTIME({col_quoted}, '%m-%d-%Y'), "
+                        f"TRY_STRPTIME({col_quoted}, '%d/%m/%Y'), "
+                        f"TRY_STRPTIME({col_quoted}, '%m/%d/%Y'), "
+                        f"TRY_STRPTIME({col_quoted}, '%Y/%m/%d')"
+                        f")"
+                    )
+                    view_expressions.append(f"{dt_cast_expr} AS {col_quoted}")
 
                     # Measure failed cast count on non-empty values
                     cast_check_query = (
                         f"SELECT COUNT(*) FROM raw_dataframe "
                         f"WHERE {col_quoted} IS NOT NULL "
                         f"  AND TRIM(CAST({col_quoted} AS VARCHAR)) != '' "
-                        f"  AND TRY_CAST({col_quoted} AS TIMESTAMP) IS NULL;"
+                        f"  AND {dt_cast_expr} IS NULL;"
                     )
                     try:
                         failed_count = con.execute(cast_check_query).fetchone()[0]
@@ -118,11 +144,12 @@ class DuckDBExecutor:
                         failed_count = 0
 
                     if failed_count > 0:
-                        total_failed_casts += failed_count
                         rate = failed_count / max(len(df), 1)
                         warnings.append(
                             f"Column '{col}' had {failed_count} failed datetime casts ({rate:.1%}) via TRY_CAST."
                         )
+                        if col in plan_referenced_cols:
+                            plan_cast_failures[col] = failed_count
                 elif is_measure_role and is_string_dtype:
                     # TRY_CAST string measure to DOUBLE
                     view_expressions.append(f"TRY_CAST({col_quoted} AS DOUBLE) AS {col_quoted}")
@@ -139,11 +166,12 @@ class DuckDBExecutor:
                         failed_count = 0
 
                     if failed_count > 0:
-                        total_failed_casts += failed_count
                         rate = failed_count / max(len(df), 1)
                         warnings.append(
                             f"Column '{col}' had {failed_count} non-numeric values ({rate:.1%}) converted to NULL for numeric calculation via TRY_CAST."
                         )
+                        if col in plan_referenced_cols:
+                            plan_cast_failures[col] = failed_count
                 else:
                     view_expressions.append(f"{col_quoted} AS {col_quoted}")
 
@@ -185,7 +213,12 @@ class DuckDBExecutor:
                 )
 
             total_rows = len(df)
-            failed_cast_rate = total_failed_casts / max(total_rows, 1)
+            total_failed_casts = sum(plan_cast_failures.values()) if plan_cast_failures else 0
+            failed_cast_rate = (
+                max(fc / max(total_rows, 1) for fc in plan_cast_failures.values())
+                if plan_cast_failures
+                else 0.0
+            )
 
             # Sanitize output rows for JSON serialization via deterministic sanitizer
             rows, columns = sanitize_dataframe_to_rows(res_df)

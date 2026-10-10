@@ -113,16 +113,21 @@ class ExecutionStatus(str, Enum):
 
 
 class MetricSpec(BaseModel):
-    """A single metric: one column + one aggregation function."""
+    """A single metric: one column + optional aggregation function."""
 
     column: str = Field(description="Column name (must exist in DatasetSemanticProfile).")
-    aggregation: AggregationType = Field(description="Whitelisted aggregation function.")
+    aggregation: Optional[AggregationType] = Field(
+        default=AggregationType.SUM,
+        description="Whitelisted aggregation function, or None for raw observations.",
+    )
 
     model_config = {"frozen": True}
 
     @field_validator("aggregation", mode="before")
     @classmethod
     def _coerce_aggregation(cls, v: Any) -> Any:
+        if v is None or (isinstance(v, str) and v.strip().upper() in ("NONE", "RAW", "")):
+            return None
         if isinstance(v, str):
             return v.strip().upper()
         return v

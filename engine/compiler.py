@@ -161,11 +161,17 @@ def compile_plan_to_sql(
 
     # 2. Metric
     metric_agg = plan.metric.aggregation
-    agg_str = metric_agg.value if hasattr(metric_agg, "value") else str(metric_agg)
-    metric_expr = _compile_aggregation(metric_agg, plan.metric.column)
-    metric_col_name = "records" if plan.metric.column == "*" else plan.metric.column
-    metric_alias = f"{agg_str.lower()}_{metric_col_name}"
-    select_items.append(f"{metric_expr} AS {quote_identifier(metric_alias)}")
+    if metric_agg is None:
+        metric_col_name = plan.metric.column
+        metric_expr = quote_identifier(metric_col_name)
+        metric_alias = metric_col_name
+        select_items.append(f"{metric_expr} AS {quote_identifier(metric_alias)}")
+    else:
+        agg_str = metric_agg.value if hasattr(metric_agg, "value") else str(metric_agg)
+        metric_expr = _compile_aggregation(metric_agg, plan.metric.column)
+        metric_col_name = "records" if plan.metric.column == "*" else plan.metric.column
+        metric_alias = f"{agg_str.lower()}_{metric_col_name}"
+        select_items.append(f"{metric_expr} AS {quote_identifier(metric_alias)}")
 
     # SELECT & FROM
     from_clause = f"FROM {quote_identifier(source_view)}"
@@ -177,9 +183,9 @@ def compile_plan_to_sql(
         predicates = [_compile_filter(f) for f in plan.filters]
         where_clause = "\nWHERE " + "\n  AND ".join(predicates)
 
-    # GROUP BY
+    # GROUP BY (only when an aggregation function is applied)
     group_clause = ""
-    if group_indices:
+    if group_indices and metric_agg is not None:
         group_clause = f"\nGROUP BY {', '.join(str(i) for i in group_indices)}"
 
     # ORDER BY
