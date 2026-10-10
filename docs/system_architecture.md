@@ -14,7 +14,8 @@ flowchart TD
     subgraph UI ["Presentation Layer (Next.js 14 App Router)"]
         Nav["App Shell & Navigation"]
         DataStudioView["Data Studio (Overview, Quality, Profiling, Cleaning, EDA)"]
-        DashboardView["Autonomous Overview Dashboard (12-Col Grid, Slicers)"]
+        DatasetExplorerView["Dataset Explorer (Collapsible Schema & 5-Row Data Preview)"]
+        DashboardView["Autonomous Overview & Editable Dashboard (12-Col Grid, Chart Editor, Slicers)"]
         ChatView["Dataset Chat & Evidence Inspector"]
         AnalysisView["Focused Natural-Language Analysis Workspace"]
     end
@@ -181,6 +182,7 @@ Built with **Next.js 14 App Router**, **React 18**, and **TypeScript**:
   - *Profiling*: Column-by-column statistical metrics, quantiles, distinct ratios, and min/max/median values.
   - *Cleaning*: Interactive recommendation review, custom transformations, structural row/column operations, multi-valued cell handling, pre-registration summary, registration, and CSV/XLSX export.
   - *EDA*: Automated histograms, categorical frequencies, correlation matrix, chronological trends, observations, and manual bivariate/multivariate ad-hoc queries.
-- **Autonomous Overview Dashboard (`/`)**: 12-column responsive grid featuring KPI context strips, hero visuals, side composition donuts, supporting charts, interactive slicers (`date_range`, `multi_select`), and dynamic tile cross-filtering.
+- **Dataset Explorer (`frontend/components/DatasetExplorer.tsx`)**: Embedded collapsible inspection widget positioned between dataset selection and analytical briefs on the Home page. Bound directly to the active cleaned dataset, it displays a default 5-row data preview with physical data types and null indicators to clarify ambiguous column names, alongside a searchable column metadata view showing inferred semantic roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `DERIVED`), distinct counts, and representative values.
+- **Autonomous Overview & Editable Dashboard (`/`)**: 12-column responsive grid featuring KPI context strips, hero visuals, side composition donuts, supporting charts, interactive slicers (`date_range`, `multi_select`), and dynamic tile cross-filtering. Includes in-place chart configuration (`ChartEditModal.tsx`) across 7 visualization formats, dimension/measure selection, aggregations, live DuckDB preview validation, individual tile removal (`DELETE /api/dashboard/{spec_id}/tile/{tile_id}`), per-tile reset (`POST .../tile/{tile_id}/reset`), and global dashboard reset (`POST .../reset`).
 - **Dataset Chat & Evidence Inspector**: Multi-turn conversational interface with natural language querying, execution timing, row count indicators, and deep SQL provenance inspection.
 - **Centralized Theme Tokens (`frontend/lib/theme.ts`, `frontend/lib/chartTheme.ts`)**: Enterprise warm-palette design system with complete light and dark mode support for UI elements and SVG chart marks.

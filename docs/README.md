@@ -47,8 +47,8 @@ Unsupervised insight discovery, generalized analytical reasoning, Power BI-style
 | Document | Description |
 | :--- | :--- |
 | [`docs/autonomous_overview.md`](autonomous_overview.md) | **Autonomous Overview Engine**: Generalized analytical reasoning (`orchestrator/overview/`), dataset grain inference, aggregation suitability (additive vs. intensive), candidate diversity ranking, 12-column grid layout, and DuckDB live cross-filtering. |
-| [`docs/stage_e_insight_discovery.md`](stage_e_insight_discovery.md) | **Stage E Insight Discovery**: Autonomous candidate enumeration across 8 statistical types, Benjamini-Hochberg FDR control ($\alpha = 0.05$), and numeric grounding guards. |
-| [`docs/stage_f_power_bi_dashboard.md`](stage_f_power_bi_dashboard.md) | **Stage F Power BI Dashboard**: 12-column deterministic grid layout, KPI context strip, runtime slicers, and DuckDB tile query re-compilation. |
+| [`docs/automated_insight_discovery.md`](automated_insight_discovery.md) | **Stage E Insight Discovery**: Autonomous candidate enumeration across 8 statistical types, Benjamini-Hochberg FDR control ($\alpha = 0.05$), and numeric grounding guards. |
+| [`docs/dashboard_generation_and_editing.md`](dashboard_generation_and_editing.md) | **Dashboard Generation & Editing**: 12-column deterministic grid layout, KPI context strip, runtime slicers, in-place chart editor, and DuckDB tile query re-compilation. |
 | [`docs/ranker_v1_spec.md`](ranker_v1_spec.md) | **Ranker V1 Specification**: Mathematical formulation of candidate ranking across evidence, coverage, stability, assumptions, and provider agreement. |
 
 ---
@@ -87,8 +87,8 @@ REST API specification, UI components, configuration, testing, and troubleshooti
 ### Path B: Understanding Autonomous Analytics & Dashboards
 1. [`docs/system_architecture.md`](system_architecture.md)
 2. [`docs/autonomous_overview.md`](autonomous_overview.md)
-3. [`docs/stage_e_insight_discovery.md`](stage_e_insight_discovery.md)
-4. [`docs/stage_f_power_bi_dashboard.md`](stage_f_power_bi_dashboard.md)
+3. [`docs/automated_insight_discovery.md`](automated_insight_discovery.md)
+4. [`docs/dashboard_generation_and_editing.md`](dashboard_generation_and_editing.md)
 
 ### Path C: Integrating with the API or Building Frontend Views
 1. [`docs/api_reference.md`](api_reference.md)

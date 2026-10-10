@@ -98,3 +98,31 @@ The frontend rendering pipeline is validated using Playwright running headless M
 - Inspects SVG DOM mark elements (`.recharts-bar-rectangles path` and `rect`).
 - Asserts that all rendered bars have `height > 0`.
 - Protects against container collapsing, flexbox zero-height regressions, and missing mark rendering.
+
+---
+
+## 6. Interactive Tile Editing, Removal, and Resetting
+
+Stage F includes in-place chart configuration and dashboard customization:
+
+### 1. Configuration-Based Chart Editor (`ChartEditModal.tsx`)
+Users can click the edit (pencil) icon on any dashboard tile card to customize:
+- **Title & Narrative Description**: User-customized chart title and context description.
+- **Chart Type**: Switch across 7 visualization formats (`bar`, `horizontal_bar`, `line`, `area`, `scatter`, `donut`, `kpi`, `table`).
+- **Dimension Column & Temporal Granularity**: Categorical or temporal grouping dimension, with optional timestamp truncation (`day`, `month`, `quarter`, `year`).
+- **Measure Column & Aggregation Function**: Quantitative metric evaluated via supported aggregations (`none`, `sum`, `avg`, `count`, `count_distinct`, `min`, `max`, `median`, `stddev`).
+- **Sort Order & Limit**: Record ordering (`DESC`, `ASC`) and Top-$K$ truncation.
+
+### 2. Live Preview & Query Validation Safeguards
+- **Interactive Live Preview**: Re-executes the candidate plan against DuckDB in the active session, rendering an interactive preview before changes are committed.
+- **Stale Guard Prevention**: Tracks a configuration signature (`validatedConfigSig`) so users cannot inadvertently commit outdated preview results if parameters change prior to re-validation.
+- **Responsive Layout Protection**: Enforces responsive container sizing to prevent collapsed 0px dimensions or visual clipping.
+- **Compiled SQL Transparency**: Users can expand a preview drawer to inspect the exact DuckDB SQL statement compiled for the chart.
+
+### 3. Adding, Removing, and Resetting Charts
+- **Removing Charts**: Users can remove unwanted tiles via the trash button (`Trash2`), invoking `DELETE /api/dashboard/{spec_id}/tile/{tile_id}` with a confirmation safeguard.
+- **Resetting Edits (Individual Tile)**: Edited tiles display an `"EDITED"` badge and a reset icon (`RotateCcw`), restoring the tile to its original AI-generated configuration via `POST /api/dashboard/{spec_id}/tile/{tile_id}/reset`.
+- **Resetting Entire Dashboard**: A global **Reset Dashboard** control restores all deleted and edited tiles back to the initial AI-generated specification via `POST /api/dashboard/{spec_id}/reset`.
+- **Query Execution & Slicer Preservation**: Edited tiles remain fully integrated with global date range and multi-select slicers, dynamically recompiling parameterized DuckDB queries with injected filters.
+- **Export & Print Parity**: Exported standalone HTML reports and print stylesheets faithfully preserve all edited chart types, customized titles, modified metrics, and deletions.
+

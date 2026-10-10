@@ -15,7 +15,8 @@ flowchart TD
     subgraph UI ["Presentation Layer (Next.js 14 / React 18 / TypeScript)"]
         TopBar["TopBar & Workspace Switcher (Raw vs Cleaned)"]
         DataStudio["Data Studio (Overview, Quality, Profiling, Cleaning, EDA)"]
-        Dashboard["Autonomous Overview Dashboard (12-Col Grid, Runtime Slicers)"]
+        DatasetExplorerUI["Dataset Explorer (Collapsible Schema & 5-Row Data Preview)"]
+        Dashboard["Overview Dashboard (12-Col Grid, Editable Charts, Runtime Slicers)"]
         Chat["Dataset Chat & Evidence Inspector"]
         Analysis["Focused Analysis Workspace (Natural-Language Briefs)"]
     end
@@ -128,7 +129,14 @@ flowchart TD
   - Deterministic sampling down to 1,000 points for large scatter datasets.
 - **Light & Dark Theme Visuals**: Dynamic Recharts SVG marks reacting smoothly to theme switching via centralized tokens (`lib/chartTheme.ts`).
 
-### 4. Autonomous Overview Dashboard (`orchestrator/overview/`)
+### 4. Dataset Explorer (`frontend/components/DatasetExplorer.tsx`)
+- **Contextual In-Line Placement**: Positioned directly above dashboard charts (between Section 1 — Dataset and Section 2 — Analytical Brief on the Home page), collapsed by default for compact visual hygiene.
+- **Active Cleaned Dataset Integration**: Bound directly to the active cleaned dataset and metadata without introducing a separate dataset selector or triggering duplicate data-processing pipelines.
+- **Default 5-Row Data Preview**: Immediately displays the first five records of the active cleaned dataset with column header names, physical data type badges (`str`, `int64`, `float64`, `datetime`), and distinctive `NULL` indicators. Smooth horizontal scrolling enables inspection of wide schemas and helps users understand ambiguous column names before querying or configuring charts.
+- **Column Metadata Exploration**: Dedicated schema view featuring a real-time column search filter, data type indicators, semantic roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `DERIVED`), distinct counts, and representative values.
+- **Resilient Asynchronous Resolution**: Prioritizes cached in-memory parent props; gracefully falls back to direct API fetches (`getDatasetMetadata`, `getDatasetPreview`) with error messaging and a one-click Retry action.
+
+### 5. Autonomous Overview & Editable Dashboard (`orchestrator/overview/`, `frontend/components/DashboardPanelsView.tsx`)
 - **Zero Hardcoded Dictionaries**: Operates on arbitrary uploaded datasets using generalized analytical reasoning:
   - **Dataset Grain Inference**: Differentiates `ENTITY`, `TRANSACTION_EVENT`, `REPEATED_OBSERVATION`, and `GROUPED_SUMMARY`.
   - **Measure Aggregation Suitability**: Evaluates additive/extensive measures (`SUM`) vs intensive rate/price/percentage measures (`AVG`, `MEDIAN`).
@@ -139,12 +147,28 @@ flowchart TD
   - Row 1: KPI context strip (up to 4 summary cards).
   - Row 2: Hero visualization ($w=8$) paired with side composition donut ($w=4$).
   - Row 3+: Balanced supporting grid ($w=6$ or $w=4$).
+- **Configuration-Based Chart Editor (`ChartEditModal.tsx`)**:
+  - In-place configuration editor accessible via the pencil icon on any dashboard tile card.
+  - Supports 7 visualization types: Bar Chart (Vertical), Horizontal Bar, Line Chart, Area Chart, Scatter Plot, Donut / Pie, KPI Metric Card, and Data Table.
+  - Configurable dimensions, temporal granularities (`day`, `month`, `quarter`, `year`), target measures, 8 aggregation functions (`none`, `sum`, `avg`, `count`, `count_distinct`, `min`, `max`, `median`, `stddev`), sort order, and Top-$K$ limits.
+- **Interactive Live Preview & Query Validation Safeguards**:
+  - Real-time preview execution against DuckDB verifying candidate SQL compilation and data viability before changes are applied.
+  - Signature-based stale guard prevents committing outdated preview results when configuration parameters are adjusted.
+  - Responsive canvas sizing guards against 0px container collapse or visual clipping.
+  - Compiled SQL transparency drawer allows inspecting the exact DuckDB query statement.
+- **Adding, Removing & Resetting Charts**:
+  - Individual tile deletion with confirmation (`DELETE /api/dashboard/{spec_id}/tile/{tile_id}`).
+  - Per-tile reset (`POST /api/dashboard/{spec_id}/tile/{tile_id}/reset`) restoring an edited tile (marked with an `"EDITED"` badge) back to its original AI-generated plan.
+  - Global **Reset Dashboard** action restoring the entire dashboard layout back to the initial AI-generated specification (`POST /api/dashboard/{spec_id}/reset`).
 - **Interactive Slicers & Dynamic Cross-Filtering**:
   - `date_range` slider and `multi_select` dimension checkboxes.
   - Endpoint `POST /api/dashboard/{spec_id}/tile/{tile_id}/query` dynamically recompiles candidate plans into parameterized DuckDB SQL with injected filters in real time.
+  - Edited tiles preserve query execution safeguards and remain fully responsive to runtime slicers.
+- **Export & Print Parity**:
+  - Exported standalone HTML reports and print stylesheets faithfully preserve all custom chart formats, edited metrics, and deleted tiles with 100% fidelity.
 - **Robustness Floor (`ROBUSTNESS_FLOOR = 0.35`)**: Amber **"Low stability"** warning badges on volatile bootstrap estimates.
 
-### 5. Conversational Dataset Chat & Evidence Grounding (`orchestrator/chat/`)
+### 6. Conversational Dataset Chat & Evidence Grounding (`orchestrator/chat/`)
 - **Multi-Turn Conversational Analytics**: Natural language interaction with conversational memory, pronoun binding, and follow-up suggestion generation.
 - **Intent Classification (`ChatIntentClassifier`)**: Categorizes queries into analytical queries, follow-ups, comparisons, metadata requests, insight explanations, or provenance queries.
 - **NL-to-SQL Execution (`orchestrator/query_engine.py`)**: Translates questions into structured plans executed securely against DuckDB.
@@ -162,26 +186,27 @@ flowchart TD
 └─────────────────┘       └─────────────────┘       └────────┬────────┘
                                                              │
 ┌─────────────────┐       ┌─────────────────┐       ┌────────▼────────┐
-│ 6. Dataset Chat │ <───┐ │ 5. Explore EDA  │ <──── │ 4. Register or  │
-│ (Conversational │     │ │ (Histograms,    │       │    Keep Raw     │
-│  NL-to-SQL)     │     │ │  Correlations)  │       │ (New clean ID)  │
+│ 6. Explore EDA  │ <───┐ │ 5. Preview &    │ <──── │ 4. Register or  │
+│ (Histograms,    │     │ │    Explore Cols │       │    Keep Raw     │
+│  Correlations)  │     │ │ (5-Row Table)   │       │ (New clean ID)  │
 └────────┬────────┘     │ └─────────────────┘       └─────────────────┘
          │              │
-┌────────▼────────┐     │ ┌─────────────────┐
-│ 7. Autonomous   │ ────┴─│ 8. Inspect      │
-│    Overview     │       │    Provenance   │
-│ (12-Col BI Grid)│       │ (SQL, Grounding)│
-└─────────────────┘       └─────────────────┘
+┌────────▼────────┐     │ ┌─────────────────┐       ┌─────────────────┐
+│ 7. Dataset Chat │ ────┼─│ 8. Autonomous   │ ────> │ 9. Customize &  │
+│ (Conversational │     │ │    Overview     │       │    Export HTML  │
+│  NL-to-SQL)     │     │ │ (12-Col BI Grid)│       │ (Edit, Print)   │
+└─────────────────┘     │ └─────────────────┘       └─────────────────┘
 ```
 
 1. **Upload Dataset**: Upload tabular data via the UI (`/upload`). The platform ingests, profiles, infers semantics, and checks schema readiness.
 2. **Inspect Quality & Profile**: In Data Studio, review the Global Quality Score, check missingness rates, inspect cardinalities, and review detected column roles.
 3. **Transform & Clean**: Review recommended cleaning rules, test custom transforms with dry-run previews, drop unwanted columns, filter rows, or handle multi-valued cells.
 4. **Register Cleaned Dataset**: Inspect the pre-registration summary and click **Register Cleaned Dataset**. The cleaned version is saved as an independent dataset, preserving raw data untouched.
-5. **Explore via EDA**: In the EDA tab, examine numeric distribution histograms, categorical bar charts, the correlation heatmap, and test ad-hoc bivariate relationships.
-6. **Ask Natural Language Questions**: Open Dataset Chat or the Focused Analysis workspace to ask analytical questions (*"Show monthly sales trend by region"*).
-7. **Generate Autonomous Overview**: Click **Generate Overview** to produce a complete Power BI-style dashboard without writing any queries.
-8. **Inspect Evidence & Interact**: Adjust date slicers and multi-select checkboxes for instant DuckDB dynamic cross-filtering, and open the Evidence Inspector to view compiled SQL queries and statistical validation proofs.
+5. **Inspect Columns in Dataset Explorer**: Expand the collapsible Dataset Explorer above the dashboard to review the first 5 rows and verify ambiguous column names, types, and representative values.
+6. **Explore via EDA**: In the EDA tab, examine numeric distribution histograms, categorical bar charts, the correlation heatmap, and test ad-hoc bivariate relationships.
+7. **Ask Natural Language Questions**: Open Dataset Chat or the Focused Analysis workspace to ask analytical questions (*"Show monthly sales trend by region"*).
+8. **Generate Autonomous Overview**: Click **Generate Overview** to produce a complete Power BI-style dashboard without writing any queries.
+9. **Customize Charts, Filter & Export**: Edit chart configurations with live DuckDB previews, remove or reset tiles, interact with runtime slicers, and export standalone HTML reports or print.
 
 ---
 
@@ -338,7 +363,7 @@ npm run dev
 │   └── sanitizer.py            # NaN, Infinity, and null output sanitizer
 ├── frontend/                   # Next.js 14 web application
 │   ├── app/                    # App Router pages (/, /data-studio, /upload, /analysis)
-│   ├── components/             # Reusable React components (EvidenceInspector, Chat, etc.)
+│   ├── components/             # Reusable React components (DatasetExplorer, ChartEditModal, etc.)
 │   │   └── data_studio/        # 5 Data Studio tabs (Overview, Quality, Profiling, Cleaning, EDA)
 │   ├── lib/                    # API client (api.ts), theme tokens (theme.ts, chartTheme.ts)
 │   └── package.json            # Frontend dependencies & scripts
@@ -453,8 +478,8 @@ For deep architectural specifications, data models, and component guides, refer 
 | [`docs/autonomous_overview.md`](docs/autonomous_overview.md) | Autonomous Overview planner, generalized analytical reasoning, and 12-col grid layout |
 | [`docs/dataset_chat_evidence.md`](docs/dataset_chat_evidence.md) | Conversational Dataset Chat, NL-to-SQL execution, SQL provenance, and grounding guards |
 | [`docs/api_reference.md`](docs/api_reference.md) | Complete REST API specification for all backend endpoints and request schemas |
-| [`docs/stage_e_insight_discovery.md`](docs/stage_e_insight_discovery.md) | Stage E insight discovery, candidate enumeration, and Benjamini-Hochberg FDR control |
-| [`docs/stage_f_power_bi_dashboard.md`](docs/stage_f_power_bi_dashboard.md) | Power BI 12-column grid geometry, runtime slicers, and DuckDB dynamic cross-filtering |
+| [`docs/automated_insight_discovery.md`](docs/automated_insight_discovery.md) | Stage E insight discovery, candidate enumeration, and Benjamini-Hochberg FDR control |
+| [`docs/dashboard_generation_and_editing.md`](docs/dashboard_generation_and_editing.md) | Power BI 12-column grid geometry, runtime slicers, and DuckDB dynamic cross-filtering |
 | [`docs/column_roles.md`](docs/column_roles.md) | Semantic roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `DERIVED`) |
 | [`docs/architecture_boundaries.md`](docs/architecture_boundaries.md) | Cognitive loop boundaries, ambiguity gating, and LLM provider decoupling |
 | [`docs/canonical_data_model.md`](docs/canonical_data_model.md) | Canonical data model representations and immutability invariants |
