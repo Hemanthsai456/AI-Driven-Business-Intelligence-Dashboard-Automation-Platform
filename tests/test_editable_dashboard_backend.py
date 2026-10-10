@@ -402,3 +402,111 @@ def test_full_dashboard_reset():
     assert len(dashboard_specs_store["spec_full"].tiles) == 2
     assert dashboard_specs_store["spec_full"].tiles[0].title == "Original T1"
     assert dashboard_specs_store["spec_full"].tiles[1].title == "Original T2"
+
+
+def test_plan_validation_case_insensitivity_and_aliases():
+    """Verify POST /api/orchestrator/run-plan accepts lowercase enums and chart aliases."""
+    df = pd.DataFrame({"Category": ["A", "B", "C"], "Sales": [100, 200, 300]})
+    record = _build_test_record("ds_case_test", df)
+    session_store.save(record)
+
+    # 1. Lowercase enums and aliases
+    payload = {
+        "plan_id": "plan_case_1",
+        "dataset_id": "ds_case_test",
+        "intent": "Total Sales by Category",
+        "metric": {"column": "Sales", "aggregation": "sum"},  # lowercase 'sum'
+        "dimensions": [{"column": "Category", "granularity": None}],
+        "filters": [],
+        "visualization": "horizontal_bar",  # alias for BAR
+        "generator": "user_editor",
+        "reasoning": {"interpretation": "Sales by Category", "evidence": ["test"]},
+    }
+    res = client.post("/api/orchestrator/run-plan", json=payload)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
+    data = res.json()
+    assert data["pass1a"]["passed"] is True
+    assert data["execution"]["status"] == "SUCCESS"
+    assert len(data["execution"]["rows"]) == 3
+
+
+def test_kpi_plan_execution_and_single_row_output():
+    """Verify KPI configuration with empty dimensions executes and returns a single row."""
+    df = pd.DataFrame({"Revenue": [10.5, 20.0, 30.5]})
+    record = _build_test_record("ds_kpi_test", df)
+    session_store.save(record)
+
+    payload = {
+        "plan_id": "plan_kpi_1",
+        "dataset_id": "ds_kpi_test",
+        "intent": "Total Revenue KPI",
+        "metric": {"column": "Revenue", "aggregation": "SUM"},
+        "dimensions": [],  # KPI has no grouping dimension
+        "filters": [],
+        "visualization": "KPI",
+        "generator": "user_editor",
+        "reasoning": {"interpretation": "Total Revenue", "evidence": []},
+    }
+    res = client.post("/api/orchestrator/run-plan", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["pass1a"]["passed"] is True
+    assert data["execution"]["status"] == "SUCCESS"
+    assert data["execution"]["row_count"] == 1
+    assert data["execution"]["rows"][0]["sum_Revenue"] == 61.0
+
+
+def test_validation_error_format_and_rejection():
+    """Verify genuinely invalid plans return human-readable structured errors and preserve tiles."""
+    df = pd.DataFrame({"Region": ["North", "South"], "Amount": [10, 20]})
+    record = _build_test_record("ds_err_test", df)
+    session_store.save(record)
+
+    # 1. Invalid aggregation: SUM on categorical column 'Region'
+    invalid_plan = {
+        "plan_id": "plan_err_1",
+        "dataset_id": "ds_err_test",
+        "intent": "Invalid SUM on Dimension",
+        "metric": {"column": "Region", "aggregation": "SUM"},
+        "dimensions": [],
+        "filters": [],
+        "visualization": "BAR",
+        "generator": "user_editor",
+        "reasoning": {"interpretation": "Bad", "evidence": []},
+    }
+    res = client.post("/api/orchestrator/run-plan", json=invalid_plan)
+    assert res.status_code == 200  # run-plan returns pass1a result with passed=False
+    data = res.json()
+    assert data["pass1a"]["passed"] is False
+    assert len(data["pass1a"]["issues"]) > 0
+    # Verify the message is human-readable and mentions the issue
+    issue_msg = data["pass1a"]["issues"][0]["message"]
+    assert ("cannot be used as an analytical metric" in issue_msg) or ("requires MEASURE role" in issue_msg)
+    assert "[object Object]" not in issue_msg
+
+    # 2. PUT tile update with genuinely invalid plan: must return 422 with structured human-readable error
+    valid_plan = CandidatePlan(
+        dataset_id="ds_err_test",
+        intent="Valid",
+        metric=MetricSpec(column="Amount", aggregation=AggregationType.SUM),
+        dimensions=[DimensionSpec(column="Region")],
+        visualization=VisualizationType.BAR,
+        reasoning=PlanReasoning(interpretation="Valid", evidence=[]),
+    )
+    tile_orig = DashboardTile(id="t_protect", title="Protected Tile", chart_type="bar", plan=valid_plan)
+    spec = _build_spec(spec_id="spec_protect", dataset_id="ds_err_test", tiles=[tile_orig], plan=valid_plan)
+    dashboard_specs_store["spec_protect"] = spec
+    original_specs_store["spec_protect"] = spec
+
+    update_payload = {
+        "title": "Hacked Title",
+        "plan": invalid_plan,
+    }
+    put_res = client.put("/api/dashboard/spec_protect/tile/t_protect", json=update_payload)
+    assert put_res.status_code == 422
+    err_body = put_res.json()
+    assert ("cannot be used as an analytical metric" in err_body["message"]) or ("requires MEASURE role" in err_body["message"])
+    assert "[object Object]" not in err_body["message"]
+    # Last valid tile must be preserved
+    assert dashboard_specs_store["spec_protect"].tiles[0].title == "Protected Tile"
+

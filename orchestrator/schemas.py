@@ -120,6 +120,13 @@ class MetricSpec(BaseModel):
 
     model_config = {"frozen": True}
 
+    @field_validator("aggregation", mode="before")
+    @classmethod
+    def _coerce_aggregation(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip().upper()
+        return v
+
 
 class DimensionSpec(BaseModel):
     """A grouping dimension, optionally with temporal granularity."""
@@ -131,6 +138,14 @@ class DimensionSpec(BaseModel):
     )
 
     model_config = {"frozen": True}
+
+    @field_validator("granularity", mode="before")
+    @classmethod
+    def _coerce_granularity(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            clean = v.strip().upper()
+            return clean if clean else None
+        return v
 
 
 class FilterSpec(BaseModel):
@@ -230,6 +245,18 @@ class CandidatePlan(BaseModel):
     reasoning: PlanReasoning = Field(description="LLM interpretation and evidence.")
 
     model_config = {"frozen": True}
+
+    @field_validator("visualization", mode="before")
+    @classmethod
+    def _coerce_visualization(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            clean = v.strip().upper()
+            if clean in ("HORIZONTAL_BAR", "STACKED_BAR"):
+                return "BAR"
+            if clean == "DONUT":
+                return "PIE"
+            return clean
+        return v
 
 
     def plan_signature(self) -> str:

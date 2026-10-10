@@ -165,33 +165,61 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
 
   if (!isOpen || !tile) return null;
 
-  // Construct CandidatePlan from current form values
+  // Helper to format any validation issue or error object safely
+  const formatIssue = (issue: any): string => {
+    if (typeof issue === 'string') return issue;
+    if (!issue) return 'Validation safeguard triggered.';
+    if (typeof issue === 'object') {
+      if (issue.message) return issue.message;
+      if (issue.msg) return issue.msg;
+      if (issue.check) return `${issue.check}: validation check failed`;
+      try {
+        return JSON.stringify(issue);
+      } catch {
+        return 'Structured validation error';
+      }
+    }
+    return String(issue);
+  };
+
+  // Construct CandidatePlan conforming to backend Pydantic schema
   const buildCurrentPlan = () => {
+    const isKpi = chartType.toLowerCase() === 'kpi';
     const activeMetricCol = metricCol || (metricColumns[0] || '*');
-    const dims = dimensionCol
-      ? [
+
+    // KPI visualizations cannot have grouping dimensions
+    const dims = isKpi || !dimensionCol
+      ? []
+      : [
           {
             column: dimensionCol,
-            granularity: isDimensionTemporal && granularity ? granularity : null,
+            granularity: isDimensionTemporal && granularity ? granularity.toUpperCase() : null,
           },
-        ]
-      : [];
+        ];
+
+    // Map chartType to standard VisualizationType enum
+    let visEnum = chartType.toUpperCase();
+    if (visEnum === 'HORIZONTAL_BAR' || visEnum === 'STACKED_BAR') {
+      visEnum = 'BAR';
+    } else if (visEnum === 'DONUT') {
+      visEnum = 'PIE';
+    }
 
     return {
       plan_id: tile.plan?.plan_id || `plan_${Date.now()}`,
       dataset_id: datasetId,
-      intent: title || 'Custom Analytical View',
+      intent: title.trim() || 'Custom Analytical View',
       metric: {
         column: activeMetricCol,
-        aggregation: aggregation,
+        aggregation: (aggregation || 'sum').toUpperCase(),
       },
       dimensions: dims,
       filters: tile.plan?.filters || [],
-      visualization: chartType,
+      visualization: visEnum,
       generator: 'user_editor',
       reasoning: {
-        interpretation: title || 'User edited dashboard chart',
-        evidence: [description || 'Custom configuration applied via editor'],
+        interpretation: title.trim() || 'User edited dashboard chart',
+        evidence: [description.trim() || 'Custom configuration applied via editor'],
       },
     };
   };
@@ -209,7 +237,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
 
       // Check Pass 1a validation
       if (res.pass1a && !res.pass1a.passed) {
-        const issues = (res.pass1a.issues || []).map((iss: any) => iss.message || JSON.stringify(iss));
+        const issues = (res.pass1a.issues || []).map(formatIssue);
         setValidationErrors(issues.length > 0 ? issues : ['Plan failed validation safeguards.']);
         setPreviewRows(null);
         setPreviewSql(null);
@@ -218,14 +246,29 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
 
       // Check DuckDB execution
       if (res.execution && res.execution.status === 'SUCCESS') {
+        // Check Pass 1b post-execution validation
+        if (res.pass1b && !res.pass1b.passed) {
+          const bIssues = (res.pass1b.issues || []).map(formatIssue);
+          setValidationErrors(bIssues.length > 0 ? bIssues : ['Plan failed post-execution validation.']);
+          setPreviewRows(null);
+          setPreviewSql(null);
+          return;
+        }
+
         setPreviewRows(res.execution.rows || []);
         setPreviewSql(res.execution.compiled_sql || null);
+        setValidationErrors([]);
       } else {
-        setValidationErrors([res.execution?.error_message || 'DuckDB query execution failed.']);
+        const execErr = res.execution?.error_message || 'DuckDB query execution failed.';
+        setValidationErrors([execErr]);
         setPreviewRows(null);
+        setPreviewSql(null);
       }
     } catch (err: any) {
-      setValidationErrors([err.message || 'An unexpected error occurred while running the preview.']);
+      const msg = typeof err?.message === 'string' && err.message ? err.message : formatIssue(err);
+      setValidationErrors([msg]);
+      setPreviewRows(null);
+      setPreviewSql(null);
     } finally {
       setIsPreviewLoading(false);
     }
@@ -254,7 +297,8 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
         setApplyError('Failed to apply chart edits to backend specification.');
       }
     } catch (err: any) {
-      setApplyError(err.message || 'Failed to update dashboard chart.');
+      const msg = typeof err?.message === 'string' && err.message ? err.message : formatIssue(err);
+      setApplyError(msg || 'Failed to update dashboard chart.');
     } finally {
       setIsApplying(false);
     }
@@ -347,32 +391,38 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                 <label className="block text-2xs font-semibold text-foreground mb-1">
                   Dimension (Grouping Column)
                 </label>
-                <select
-                  value={dimensionCol}
-                  onChange={(e) => setDimensionCol(e.target.value)}
-                  disabled={isLoadingMeta}
-                  className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                >
-                  <option value="">None (Overall Metric / KPI)</option>
-                  {dimensionColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
+                {chartType === 'kpi' ? (
+                  <div className="w-full text-2xs px-3 py-2 rounded-md bg-surface-muted/50 border border-border text-muted-foreground italic">
+                    KPI cards summarize a single scalar value across all records
+                  </div>
+                ) : (
+                  <select
+                    value={dimensionCol}
+                    onChange={(e) => setDimensionCol(e.target.value)}
+                    disabled={isLoadingMeta}
+                    className="w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="">None (Total Dataset Metric)</option>
+                    {dimensionColumns.map((col) => (
+                      <option key={col} value={col}>
+                        {col}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Temporal Granularity (if temporal dimension) */}
               <div>
                 <label className="block text-2xs font-semibold text-foreground mb-1">
-                  Temporal Granularity
+                  Date Granularity
                 </label>
                 <select
                   value={granularity}
                   onChange={(e) => setGranularity(e.target.value)}
-                  disabled={!isDimensionTemporal}
+                  disabled={chartType === 'kpi' || !isDimensionTemporal}
                   className={`w-full text-xs px-3 py-2 rounded-md bg-surface border border-border text-foreground focus:outline-none focus:ring-1 focus:ring-indigo-500 ${
-                    !isDimensionTemporal ? 'opacity-50 cursor-not-allowed' : ''
+                    chartType === 'kpi' || !isDimensionTemporal ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
                   {TEMPORAL_GRANULARITIES.map((g) => (
@@ -427,12 +477,12 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             {validationErrors.length > 0 && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-md text-red-600 dark:text-red-400 space-y-1">
                 <div className="flex items-center gap-1.5 text-2xs font-bold">
-                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>Validation Safeguard Triggered</span>
                 </div>
                 <ul className="list-disc list-inside text-3xs space-y-0.5">
                   {validationErrors.map((err, idx) => (
-                    <li key={idx}>{err}</li>
+                    <li key={idx}>{formatIssue(err)}</li>
                   ))}
                 </ul>
               </div>
@@ -442,7 +492,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
             {applyError && (
               <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-md text-red-600 dark:text-red-400 text-2xs flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>{applyError}</span>
+                <span>{formatIssue(applyError)}</span>
               </div>
             )}
           </div>
@@ -468,7 +518,7 @@ export const ChartEditModal: React.FC<ChartEditModalProps> = ({
                 <InsightChart
                   visualization={chartType}
                   metric={displayMetricName}
-                  dimensions={dimensionCol ? [dimensionCol] : []}
+                  dimensions={chartType === 'kpi' ? [] : (dimensionCol ? [dimensionCol] : [])}
                   executionData={displayData}
                   isLoading={isPreviewLoading}
                   isInsufficientData={displayData.length === 0}

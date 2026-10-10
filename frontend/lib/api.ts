@@ -38,7 +38,28 @@ async function handleResponse<T>(res: Response): Promise<T> {
     let errorMsg = `HTTP Error ${res.status}: ${res.statusText}`;
     try {
       const errorData = await res.json();
-      errorMsg = errorData.message || errorData.detail || errorMsg;
+      if (typeof errorData.message === 'string' && errorData.message.trim()) {
+        errorMsg = errorData.message;
+      } else if (Array.isArray(errorData.detail)) {
+        errorMsg = errorData.detail
+          .map((d: any) => {
+            if (typeof d === 'string') return d;
+            const loc = Array.isArray(d.loc) ? d.loc.filter((p: any) => p !== 'body').join('.') : '';
+            const msg = d.msg || d.message || JSON.stringify(d);
+            return loc ? `${loc}: ${msg}` : msg;
+          })
+          .join('; ');
+      } else if (typeof errorData.detail === 'string' && errorData.detail.trim()) {
+        errorMsg = errorData.detail;
+      } else if (errorData.detail && typeof errorData.detail === 'object') {
+        errorMsg = errorData.detail.message || errorData.detail.error || JSON.stringify(errorData.detail);
+      } else if (Array.isArray(errorData.issues)) {
+        errorMsg = errorData.issues
+          .map((i: any) => (typeof i === 'object' ? i.message || i.check || JSON.stringify(i) : String(i)))
+          .join('; ');
+      } else if (typeof errorData.error === 'string' && errorData.error.trim()) {
+        errorMsg = errorData.error;
+      }
     } catch {
       // Ignore JSON parse error on error responses
     }

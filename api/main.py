@@ -2953,14 +2953,59 @@ def clear_chat_conversation(dataset_id: str, conversation_id: str):
     return {"status": "SUCCESS", "cleared": cleared, "conversation_id": conversation_id}
 
 
-@app.exception_handler(HTTPException)
+from fastapi.exceptions import RequestValidationError
 
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request, exc: RequestValidationError):
+    errors = exc.errors()
+    issue_msgs = []
+    for err in errors:
+        loc = ".".join(str(p) for p in err.get("loc", []) if p != "body")
+        msg = err.get("msg", "Validation error")
+        issue_msgs.append(f"{loc}: {msg}" if loc else msg)
+    combined = "; ".join(issue_msgs) if issue_msgs else "Invalid request payload"
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=APIErrorResponse(
+            error="Validation Error",
+            message=combined,
+            status_code=422,
+            details={"issues": issue_msgs},
+        ).model_dump(),
+    )
+
+
+@app.exception_handler(HTTPException)
 def http_exception_handler(request, exc: HTTPException):
+    err_str = "Request error"
+    msg_str = "Request error"
+    details_dict = None
+
+    if isinstance(exc.detail, str):
+        err_str = exc.detail
+        msg_str = exc.detail
+    elif isinstance(exc.detail, dict):
+        err_str = exc.detail.get("error", "Request error")
+        msg_str = exc.detail.get("message", err_str)
+        issues = exc.detail.get("issues", [])
+        if issues:
+            issue_texts = [
+                i.get("message", str(i)) if isinstance(i, dict) else str(i)
+                for i in issues
+            ]
+            msg_str = f"{msg_str}: {'; '.join(issue_texts)}"
+        details_dict = exc.detail
+    elif isinstance(exc.detail, list):
+        msg_str = "; ".join(str(x) for x in exc.detail)
+        details_dict = {"issues": exc.detail}
+
     return JSONResponse(
         status_code=exc.status_code,
         content=APIErrorResponse(
-            error=exc.detail if isinstance(exc.detail, str) else (exc.detail.get("error", "Request error") if isinstance(exc.detail, dict) else "Request error"),
-            message=str(exc.detail if isinstance(exc.detail, str) else (exc.detail.get("message", str(exc.detail)) if isinstance(exc.detail, dict) else str(exc.detail))),
+            error=err_str,
+            message=msg_str,
             status_code=exc.status_code,
+            details=details_dict,
         ).model_dump(),
     )
