@@ -20,7 +20,6 @@ import {
   Maximize2,
   FileText,
   CheckCircle2,
-  XCircle,
   RotateCcw,
   Printer,
   ExternalLink,
@@ -37,7 +36,6 @@ import { DashboardPanelUI, DashboardTileUI, SlicerDef, DatasetMetadata } from '.
 import { InsightChart, resolveChartKeys } from './InsightChart';
 import {
   queryTile,
-  getProvidersStatus,
   deleteDashboardTile,
   resetDashboardTile,
   resetDashboard,
@@ -73,21 +71,6 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'data' | 'cleaning' | 'trace'>('dashboard');
-
-  // Provider health state
-  const [providers, setProviders] = useState<any[]>(rawProviders || spec?.providers || []);
-
-  useEffect(() => {
-    if (!providers || providers.length === 0) {
-      getProvidersStatus()
-        .then((res) => {
-          if (res && res.providers) {
-            setProviders(res.providers);
-          }
-        })
-        .catch(() => { });
-    }
-  }, [providers]);
 
   // Modals state
   const [activeModal, setActiveModal] = useState<{
@@ -1593,36 +1576,6 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                     <Brush className="w-3 h-3" />
                     <span>{cleaningCount} cleaning rules</span>
                   </button>
-                )}
-              </div>
-
-              {/* Contributing Providers Status */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-3xs uppercase font-mono text-muted-foreground mr-1">
-                  Engine Providers:
-                </span>
-                {providers && providers.length > 0 ? (
-                  providers.map((p: any, idx: number) => {
-                    const isLive = p.status === 'live' || p.status === 'ok';
-                    return (
-                      <span
-                        key={idx}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-mono ${isLive
-                            ? 'bg-success-soft text-success border border-success/30'
-                            : 'bg-attention-soft text-attention border border-attention/30'
-                          }`}
-                        title={p.reason ? `Provider status: ${p.reason}` : `Provider: ${p.provider}`}
-                      >
-                        {isLive ? <CheckCircle2 className="w-2.5 h-2.5" /> : <XCircle className="w-2.5 h-2.5" />}
-                        <span>{p.provider || p.name}</span>
-                      </span>
-                    );
-                  })
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-3xs font-mono bg-primary-soft text-primary border border-primary/20">
-                    <CheckCircle2 className="w-2.5 h-2.5" />
-                    <span>Gemini / Groq / Baseline</span>
-                  </span>
                 )}
               </div>
             </div>

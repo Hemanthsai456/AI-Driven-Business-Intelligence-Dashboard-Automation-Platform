@@ -3,16 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { useTheme } from './ThemeProvider';
 import { Breadcrumbs } from './Breadcrumbs';
-import { healthCheck, getProvidersStatus } from '../lib/api';
+import { healthCheck } from '../lib/api';
 import {
   Sun,
   Moon,
-  Laptop,
-  CheckCircle2,
-  AlertTriangle,
   PanelLeftClose,
   PanelLeft,
-  Cpu,
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -20,18 +16,9 @@ interface TopBarProps {
   rowCount?: number;
 }
 
-interface ProviderInfo {
-  provider: string;
-  status: 'live' | 'failed';
-  model: string | null;
-  reason: string | null;
-  is_baseline: boolean;
-}
-
 export const TopBar: React.FC<TopBarProps> = ({ datasetName, rowCount }) => {
   const { theme, setTheme, resolvedTheme, sidebarCollapsed, toggleSidebar } = useTheme();
   const [backendStatus, setBackendStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -43,17 +30,6 @@ export const TopBar: React.FC<TopBarProps> = ({ datasetName, rowCount }) => {
       })
       .catch(() => {
         if (mounted) setBackendStatus('disconnected');
-      });
-
-    // Check multi-provider health
-    getProvidersStatus()
-      .then((res) => {
-        if (mounted && res && res.providers) {
-          setProviders(res.providers);
-        }
-      })
-      .catch(() => {
-        // Fallback if provider endpoint temporarily unavailable
       });
 
     return () => {
@@ -88,40 +64,8 @@ export const TopBar: React.FC<TopBarProps> = ({ datasetName, rowCount }) => {
         </div>
       </div>
 
-      {/* Right: Provider Chips, Backend Status & Theme Toggle */}
+      {/* Right: Backend Status & Theme Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Compact Provider Chips */}
-        <div className="hidden md:flex items-center gap-1.5">
-          {providers.map((p) => {
-            const isLive = p.status === 'live';
-            const label = p.is_baseline ? 'baseline' : p.provider.replace('_', ' ');
-
-            return (
-              <div
-                key={p.provider}
-                title={
-                  !isLive
-                    ? `${p.provider} failed: ${p.reason || 'Service unreachable'}`
-                    : p.is_baseline
-                    ? 'Rule-based baseline provider'
-                    : `Active model: ${p.model || 'live'}`
-                }
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono font-medium border transition-colors ${
-                  isLive
-                    ? 'bg-success-soft text-success border-success/30'
-                    : 'bg-attention-soft text-attention border-attention/30'
-                }`}
-              >
-                {!isLive ? (
-                  <AlertTriangle className="w-3 h-3 text-attention shrink-0" />
-                ) : (
-                  <CheckCircle2 className="w-3 h-3 text-success shrink-0" />
-                )}
-                <span className="capitalize">{label}</span>
-              </div>
-            );
-          })}
-        </div>
 
         {/* Backend Status Indicator */}
         <div
