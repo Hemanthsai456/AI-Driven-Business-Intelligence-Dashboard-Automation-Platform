@@ -33,7 +33,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
-import { DashboardPanelUI, DashboardTileUI, SlicerDef } from '../lib/types';
+import { DashboardPanelUI, DashboardTileUI, SlicerDef, DatasetMetadata } from '../lib/types';
 import { InsightChart, resolveChartKeys } from './InsightChart';
 import {
   queryTile,
@@ -49,6 +49,7 @@ export interface DashboardPanelsViewProps {
   spec?: any;
   headline?: string | null;
   panels?: DashboardPanelUI[];
+  metadata?: DatasetMetadata | null;
   previewData?: any;
   cleaningReport?: any;
   providers?: any[];
@@ -62,6 +63,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   spec,
   headline,
   panels: rawPanels,
+  metadata,
   previewData,
   cleaningReport,
   providers: rawProviders,
@@ -1776,6 +1778,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
               )}
             </div>
           )}
+
 
           {/* F1: 12-Column Responsive Grid of Tiles */}
           {activeTiles.length === 0 ? (

@@ -49,6 +49,7 @@ import { PipelineStepper, PipelineStep, ProviderStatusItem } from '../components
 import { ClarificationCard } from '../components/ClarificationCard';
 import { DashboardPanelsView } from '../components/DashboardPanelsView';
 import { DatasetChatView } from '../components/DatasetChatView';
+import { DatasetExplorer } from '../components/DatasetExplorer';
 import { MessageSquare } from 'lucide-react';
 
 export default function HomePage() {
@@ -532,65 +533,6 @@ export default function HomePage() {
                 </span>
               </div>
             </div>
-
-            {/* Expandable Cleaning Row */}
-            <div className="border border-border rounded-card overflow-hidden">
-              <button
-                onClick={() => setCleaningExpanded((p) => !p)}
-                className="w-full flex items-center justify-between p-3 bg-surface-muted/20 hover:bg-surface-muted/50 transition-colors text-left"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-foreground">
-                    Data Cleaning:
-                  </span>
-                  <span className="text-xs font-mono text-muted-foreground">
-                    {cleaningChangesCount} change{cleaningChangesCount === 1 ? '' : 's'} applied
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-2xs text-muted-foreground">
-                  <span>{cleaningExpanded ? 'Hide Report' : 'Show Report'}</span>
-                  {cleaningExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </div>
-              </button>
-
-              {cleaningExpanded && (
-                <div className="p-3 border-t border-border bg-surface space-y-2">
-                  <div className="overflow-x-auto max-h-48">
-                    <table className="w-full text-left text-xs font-mono border-collapse">
-                      <thead>
-                        <tr className="border-b border-border text-2xs uppercase text-muted-foreground bg-surface-muted/40">
-                          <th className="py-1.5 px-2.5 font-semibold">Rule</th>
-                          <th className="py-1.5 px-2.5 font-semibold">Target Column</th>
-                          <th className="py-1.5 px-2.5 font-semibold text-right">Count / Details</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border text-foreground">
-                        {cleaningReport?.transformations && cleaningReport.transformations.length > 0 ? (
-                          cleaningReport.transformations.map((t: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-surface-muted/20">
-                              <td className="py-1.5 px-2.5">{t.rule_name || t.type || 'Normalization'}</td>
-                              <td className="py-1.5 px-2.5 font-semibold">{t.column_name || t.column || 'All'}</td>
-                              <td className="py-1.5 px-2.5 text-right text-muted-foreground font-mono">
-                                {t.affected_count || t.count || 1}
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3} className="py-3 px-2.5 text-center text-muted-foreground italic">
-                              No type coercion or null-fill anomalies detected in this dataset.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="text-2xs text-muted-foreground italic font-mono pt-1">
-                    Original data is preserved unchanged in the ingestion stage.
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -601,6 +543,15 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {/* Dataset Explorer (Between Section 1 and Section 2) */}
+      {selectedDatasetId && (
+        <DatasetExplorer
+          datasetId={selectedDatasetId}
+          metadata={metadata}
+          previewData={previewData}
+        />
+      )}
 
       {/* --------------------------------------------------------------------- */}
       {/* CARD 2: BRIEF */}
@@ -807,6 +758,7 @@ export default function HomePage() {
           <DashboardPanelsView
             spec={pipelineResult?.dashboard_spec || pipelineResult}
             datasetId={selectedDatasetId}
+            metadata={metadata}
             previewData={previewData}
             cleaningReport={cleaningReport}
             providers={providers}
