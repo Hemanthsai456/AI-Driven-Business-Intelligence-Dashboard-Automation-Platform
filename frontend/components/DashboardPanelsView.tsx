@@ -629,12 +629,20 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     }
 
     const cType = (chartType || 'bar').toLowerCase();
-    const { dimKey, metricKey } = resolveChartKeys(rows, preferredDims, preferredMetrics);
-    const displayRows = rows.length > 50 ? rows.slice(0, 50) : rows;
-    const values = displayRows.map((r) => Number(r[metricKey]) || 0);
-    const maxVal = Math.max(...values, 0);
-    const minVal = Math.min(...values, 0);
-    const range = (maxVal - minVal) || 1;
+
+    // Ensure numeric string values are coerced to numbers for clean plotting
+    const normalizedRows = rows.map((r) => {
+      const copy: Record<string, any> = { ...r };
+      for (const k of Object.keys(copy)) {
+        const val = copy[k];
+        if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+          copy[k] = Number(val);
+        }
+      }
+      return copy;
+    });
+
+    const { dimKey, metricKey } = resolveChartKeys(normalizedRows, preferredDims, preferredMetrics);
 
     const width = 560;
     const height = 240;
@@ -653,10 +661,17 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       '#E07A5F',
     ];
 
+    const formatTick = (val: number): string => {
+      const absVal = Math.abs(val);
+      if (absVal >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+      if (absVal >= 1000) return (val / 1000).toFixed(absVal >= 10000 ? 0 : 1) + 'k';
+      return Number.isInteger(val) ? val.toString() : val.toFixed(1);
+    };
+
     // 1. Donut / Pie Composition Charts
     if (cType === 'donut' || cType === 'pie' || cType === 'composition') {
       const isDonut = cType === 'donut' || cType === 'composition';
-      const nonNegValues = displayRows.map((r) => Math.max(0, Number(r[metricKey]) || 0));
+      const nonNegValues = normalizedRows.map((r) => Math.max(0, Number(r[metricKey]) || 0));
       const total = nonNegValues.reduce((a, b) => a + b, 0) || 1;
       const cx = 130;
       const cy = height / 2;
@@ -666,8 +681,8 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       const slices: string[] = [];
       const legendItems: string[] = [];
 
-      if (displayRows.length === 1 || total <= 0) {
-        const dimLabel = escapeHtml(String(displayRows[0]?.[dimKey] ?? 'Total'));
+      if (normalizedRows.length === 1 || total <= 0) {
+        const dimLabel = escapeHtml(String(normalizedRows[0]?.[dimKey] ?? 'Total'));
         const color = colors[0];
         if (isDonut) {
           const d = `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx} ${cy + r} A ${r} ${r} 0 1 1 ${cx} ${cy - r} M ${cx} ${cy - innerR} A ${innerR} ${innerR} 0 1 0 ${cx} ${cy + innerR} A ${innerR} ${innerR} 0 1 0 ${cx} ${cy - innerR} Z`;
@@ -684,7 +699,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         `);
       } else {
         let startAngle = -Math.PI / 2;
-        displayRows.slice(0, 8).forEach((row, i) => {
+        normalizedRows.slice(0, 8).forEach((row, i) => {
           const val = Math.max(0, Number(row[metricKey]) || 0);
           const sliceAngle = (val / total) * 2 * Math.PI;
           if (sliceAngle < 0.005) return;
@@ -734,6 +749,102 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       `;
     }
 
+    // 2. Scatter Plot (Independent Numeric X and Y Axes)
+    if (cType === 'scatter') {
+      const usableScatterData = normalizedRows.filter((r) => {
+        const x = r[dimKey];
+        const y = r[metricKey];
+        return (
+          typeof x === 'number' && !isNaN(x) && isFinite(x) &&
+          typeof y === 'number' && !isNaN(y) && isFinite(y)
+        );
+      });
+
+      if (usableScatterData.length === 0) {
+        return `<div style="padding: 24px; text-align: center; color: var(--muted); font-size: 12px;">No valid numeric coordinates found for scatter plot</div>`;
+      }
+
+      const allX = usableScatterData.map((r) => Number(r[dimKey]));
+      const allY = usableScatterData.map((r) => Number(r[metricKey]));
+
+      const rawMinX = Math.min(...allX);
+      const rawMaxX = Math.max(...allX);
+      const minX = rawMinX === rawMaxX ? rawMinX - 1 : rawMinX;
+      const maxX = rawMinX === rawMaxX ? rawMaxX + 1 : rawMaxX;
+      const rangeX = (maxX - minX) || 1;
+
+      const rawMinY = Math.min(...allY);
+      const rawMaxY = Math.max(...allY);
+      const minY = rawMinY === rawMaxY ? rawMinY - 1 : rawMinY;
+      const maxY = rawMinY === rawMaxY ? rawMaxY + 1 : rawMaxY;
+      const rangeY = (maxY - minY) || 1;
+
+      const maxScatterPoints = 1200;
+      const pointsToRender = usableScatterData.length <= maxScatterPoints
+        ? usableScatterData
+        : Array.from({ length: maxScatterPoints }, (_, i) => {
+            const idx = Math.floor((i / (maxScatterPoints - 1)) * (usableScatterData.length - 1));
+            return usableScatterData[idx];
+          });
+
+      const scatterGrid: string[] = [];
+      const scatterYLabels: string[] = [];
+      const scatterXLabels: string[] = [];
+      const steps = 4;
+
+      // Y-axis grid and labels
+      for (let i = 0; i <= steps; i++) {
+        const yVal = minY + (rangeY / steps) * i;
+        const yPos = padding.top + chartH - (i / steps) * chartH;
+        scatterGrid.push(`<line x1="${padding.left}" y1="${yPos.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${yPos.toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
+        scatterYLabels.push(`<text x="${(padding.left - 8).toFixed(1)}" y="${(yPos + 4).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="monospace">${formatTick(yVal)}</text>`);
+      }
+
+      // X-axis grid and labels
+      for (let i = 0; i <= steps; i++) {
+        const xVal = minX + (rangeX / steps) * i;
+        const xPos = padding.left + (i / steps) * chartW;
+        scatterGrid.push(`<line x1="${xPos.toFixed(1)}" y1="${padding.top}" x2="${xPos.toFixed(1)}" y2="${(height - padding.bottom).toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.4" />`);
+        scatterXLabels.push(`<text x="${xPos.toFixed(1)}" y="${(height - padding.bottom + 16).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="monospace">${formatTick(xVal)}</text>`);
+      }
+
+      // Zero baseline lines if 0 is inside ranges
+      if (minY < 0 && maxY > 0) {
+        const zeroY = padding.top + chartH - ((0 - minY) / rangeY) * chartH;
+        scatterGrid.push(`<line x1="${padding.left}" y1="${zeroY.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--foreground)" stroke-width="1.2" opacity="0.4" />`);
+      }
+      if (minX < 0 && maxX > 0) {
+        const zeroX = padding.left + ((0 - minX) / rangeX) * chartW;
+        scatterGrid.push(`<line x1="${zeroX.toFixed(1)}" y1="${padding.top}" x2="${zeroX.toFixed(1)}" y2="${(height - padding.bottom).toFixed(1)}" stroke="var(--foreground)" stroke-width="1.2" opacity="0.4" />`);
+      }
+
+      const dots = pointsToRender.map((r) => {
+        const ptX = Number(r[dimKey]);
+        const ptY = Number(r[metricKey]);
+        const cx = padding.left + ((ptX - minX) / rangeX) * chartW;
+        const cy = padding.top + chartH - ((ptY - minY) / rangeY) * chartH;
+        return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${colors[0]}" fill-opacity="0.8" />`;
+      });
+
+      return `
+        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
+          ${scatterGrid.join('')}
+          ${scatterYLabels.join('')}
+          ${scatterXLabels.join('')}
+          ${dots.join('')}
+        </svg>
+      `;
+    }
+
+    // Shared domain calculation across entire dataset for single-metric charts
+    const allNumericY = normalizedRows
+      .map((r) => Number(r[metricKey]))
+      .filter((v) => typeof v === 'number' && !isNaN(v) && isFinite(v));
+
+    const minVal = allNumericY.length > 0 ? Math.min(...allNumericY) : 0;
+    const maxVal = allNumericY.length > 0 ? Math.max(...allNumericY) : 1;
+    const range = (maxVal - minVal) || 1;
+
     // Grid lines and Y-axis
     const gridLines: string[] = [];
     const yLabels: string[] = [];
@@ -742,45 +853,61 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       const yVal = minVal + (range / steps) * i;
       const yPos = padding.top + chartH - (i / steps) * chartH;
       gridLines.push(`<line x1="${padding.left}" y1="${yPos.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${yPos.toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
-      const formattedY = yVal >= 1000 ? (yVal / 1000).toFixed(1) + 'k' : (Number.isInteger(yVal) ? yVal : yVal.toFixed(1));
-      yLabels.push(`<text x="${(padding.left - 8).toFixed(1)}" y="${(yPos + 4).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="monospace">${formattedY}</text>`);
+      yLabels.push(`<text x="${(padding.left - 8).toFixed(1)}" y="${(yPos + 4).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="monospace">${formatTick(yVal)}</text>`);
     }
 
-    // 2. Line Chart
+    // 3. Line Chart
     if (cType === 'line' || cType === 'trend') {
-      const pts = displayRows.map((r, i) => {
-        const x = padding.left + (i / Math.max(displayRows.length - 1, 1)) * chartW;
+      const maxLinePoints = 250;
+      const linePoints = normalizedRows.length <= maxLinePoints
+        ? normalizedRows
+        : Array.from({ length: maxLinePoints }, (_, i) => {
+            const idx = Math.floor((i / (maxLinePoints - 1)) * (normalizedRows.length - 1));
+            return normalizedRows[idx];
+          });
+
+      const pts = linePoints.map((r, i) => {
+        const x = padding.left + (i / Math.max(linePoints.length - 1, 1)) * chartW;
         const val = Number(r[metricKey]) || 0;
         const y = padding.top + chartH - ((val - minVal) / range) * chartH;
         return { x, y, val, label: String(r[dimKey] ?? '') };
       });
 
       const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+      const stepInterval = Math.max(Math.ceil(pts.length / 6), 1);
       const xLabels = pts
-        .filter((_, idx) => idx % Math.ceil(pts.length / 6) === 0 || idx === pts.length - 1)
+        .filter((_, idx) => idx % stepInterval === 0 || idx === pts.length - 1)
         .map((p) => `
           <text x="${p.x.toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(p.label.slice(0, 12))}</text>
         `);
 
-      const dots = pts.map(
-        (p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`
-      );
+      const dots = pts.length <= 30
+        ? pts.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`).join('')
+        : '';
 
       return `
         <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
           ${gridLines.join('')}
           ${yLabels.join('')}
           <path d="${linePath}" fill="none" stroke="${colors[0]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          ${dots.join('')}
+          ${dots}
           ${xLabels.join('')}
         </svg>
       `;
     }
 
-    // 3. Area Chart
+    // 4. Area Chart
     if (cType === 'area') {
-      const pts = displayRows.map((r, i) => {
-        const x = padding.left + (i / Math.max(displayRows.length - 1, 1)) * chartW;
+      const maxAreaPoints = 250;
+      const areaPoints = normalizedRows.length <= maxAreaPoints
+        ? normalizedRows
+        : Array.from({ length: maxAreaPoints }, (_, i) => {
+            const idx = Math.floor((i / (maxAreaPoints - 1)) * (normalizedRows.length - 1));
+            return normalizedRows[idx];
+          });
+
+      const pts = areaPoints.map((r, i) => {
+        const x = padding.left + (i / Math.max(areaPoints.length - 1, 1)) * chartW;
         const val = Number(r[metricKey]) || 0;
         const y = padding.top + chartH - ((val - minVal) / range) * chartH;
         return { x, y, val, label: String(r[dimKey] ?? '') };
@@ -789,15 +916,16 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
       const areaPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${(padding.top + chartH).toFixed(1)} L ${pts[0].x.toFixed(1)} ${(padding.top + chartH).toFixed(1)} Z`;
 
+      const stepInterval = Math.max(Math.ceil(pts.length / 6), 1);
       const xLabels = pts
-        .filter((_, idx) => idx % Math.ceil(pts.length / 6) === 0 || idx === pts.length - 1)
+        .filter((_, idx) => idx % stepInterval === 0 || idx === pts.length - 1)
         .map((p) => `
           <text x="${p.x.toFixed(1)}" y="${(padding.top + chartH + 18).toFixed(1)}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="sans-serif">${escapeHtml(p.label.slice(0, 12))}</text>
         `);
 
-      const dots = pts.map(
-        (p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`
-      );
+      const dots = pts.length <= 30
+        ? pts.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`).join('')
+        : '';
 
       return `
         <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
@@ -805,14 +933,19 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           ${yLabels.join('')}
           <path d="${areaPath}" fill="${colors[0]}" fill-opacity="0.15" />
           <path d="${linePath}" fill="none" stroke="${colors[0]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          ${dots.join('')}
+          ${dots}
           ${xLabels.join('')}
         </svg>
       `;
     }
 
-    // 4. Horizontal Bar Chart
+    // 5. Horizontal Bar Chart
     if (cType === 'horizontal_bar') {
+      const displayRows = normalizedRows.length > 50 ? normalizedRows.slice(0, 50) : normalizedRows;
+      const barMinVal = Math.min(minVal, 0);
+      const barMaxVal = Math.max(maxVal, 0);
+      const barRange = (barMaxVal - barMinVal) || 1;
+
       const maxLabelLen = Math.max(...displayRows.map((r) => String(r[dimKey] ?? '').length), 0);
       const leftPad = Math.min(Math.max(maxLabelLen * 7 + 12, 85), 150);
       const hChartW = width - leftPad - padding.right;
@@ -825,16 +958,15 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       const xGrid: string[] = [];
 
       for (let i = 0; i <= steps; i++) {
-        const xVal = minVal + (range / steps) * i;
+        const xVal = barMinVal + (barRange / steps) * i;
         const xPos = leftPad + (i / steps) * hChartW;
         xGrid.push(`<line x1="${xPos.toFixed(1)}" y1="${padding.top}" x2="${xPos.toFixed(1)}" y2="${height - padding.bottom}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
-        const formattedX = xVal >= 1000 ? (xVal / 1000).toFixed(1) + 'k' : (Number.isInteger(xVal) ? xVal : xVal.toFixed(1));
-        xGrid.push(`<text x="${xPos.toFixed(1)}" y="${height - padding.bottom + 15}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="monospace">${formattedX}</text>`);
+        xGrid.push(`<text x="${xPos.toFixed(1)}" y="${height - padding.bottom + 15}" text-anchor="middle" fill="var(--muted)" font-size="10" font-family="monospace">${formatTick(xVal)}</text>`);
       }
 
       // Zero baseline position on X-axis
-      const zeroX = leftPad + ((0 - minVal) / range) * hChartW;
-      if (minVal < 0 && maxVal > 0) {
+      const zeroX = leftPad + ((0 - barMinVal) / barRange) * hChartW;
+      if (barMinVal < 0 && barMaxVal > 0) {
         xGrid.push(`<line x1="${zeroX.toFixed(1)}" y1="${padding.top}" x2="${zeroX.toFixed(1)}" y2="${height - padding.bottom}" stroke="var(--foreground)" stroke-width="1.5" opacity="0.4" />`);
       }
 
@@ -844,9 +976,9 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         let barLen = 0;
         if (val >= 0) {
           barX = zeroX;
-          barLen = Math.max(((val - 0) / range) * hChartW, val === 0 ? 0 : 2);
+          barLen = Math.max(((val - 0) / barRange) * hChartW, val === 0 ? 0 : 2);
         } else {
-          barLen = Math.max(((0 - val) / range) * hChartW, 2);
+          barLen = Math.max(((0 - val) / barRange) * hChartW, 2);
           barX = zeroX - barLen;
         }
         const y = padding.top + i * barSlotH + (barSlotH - barH) / 2;
@@ -866,26 +998,21 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       `;
     }
 
-    // 5. Scatter Plot
-    if (cType === 'scatter') {
-      const dots = displayRows.map((r, i) => {
-        const valX = Number(r[dimKey]) || (i + 1);
-        const valY = Number(r[metricKey]) || 0;
-        const x = padding.left + ((valX - minVal) / range) * chartW;
-        const y = padding.top + chartH - ((valY - minVal) / range) * chartH;
-        return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" fill="${colors[0]}" stroke="var(--surface)" stroke-width="1.5" />`;
-      });
+    // 6. Default: Vertical Bar / Histogram / Stacked Bar
+    const displayRows = normalizedRows.length > 50 ? normalizedRows.slice(0, 50) : normalizedRows;
+    const barMinVal = Math.min(minVal, 0);
+    const barMaxVal = Math.max(maxVal, 0);
+    const barRange = (barMaxVal - barMinVal) || 1;
 
-      return `
-        <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
-          ${gridLines.join('')}
-          ${yLabels.join('')}
-          ${dots.join('')}
-        </svg>
-      `;
+    const barGridLines: string[] = [];
+    const barYLabels: string[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const yVal = barMinVal + (barRange / steps) * i;
+      const yPos = padding.top + chartH - (i / steps) * chartH;
+      barGridLines.push(`<line x1="${padding.left}" y1="${yPos.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${yPos.toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0.6" />`);
+      barYLabels.push(`<text x="${(padding.left - 8).toFixed(1)}" y="${(yPos + 4).toFixed(1)}" text-anchor="end" fill="var(--muted)" font-size="10" font-family="monospace">${formatTick(yVal)}</text>`);
     }
 
-    // 6. Default: Vertical Bar / Histogram / Stacked Bar
     const barCount = displayRows.length;
     const barSlotW = chartW / Math.max(barCount, 1);
     const barW = Math.max(Math.min(barSlotW * 0.65, 36), 5);
@@ -894,9 +1021,9 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
     const xLabels: string[] = [];
 
     // Zero baseline position on Y-axis
-    const zeroY = padding.top + chartH - ((0 - minVal) / range) * chartH;
-    if (minVal < 0 && maxVal > 0) {
-      gridLines.push(`<line x1="${padding.left}" y1="${zeroY.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--foreground)" stroke-width="1.5" opacity="0.4" />`);
+    const zeroY = padding.top + chartH - ((0 - barMinVal) / barRange) * chartH;
+    if (barMinVal < 0 && barMaxVal > 0) {
+      barGridLines.push(`<line x1="${padding.left}" y1="${zeroY.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${zeroY.toFixed(1)}" stroke="var(--foreground)" stroke-width="1.5" opacity="0.4" />`);
     }
 
     displayRows.forEach((row, i) => {
@@ -904,10 +1031,10 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       let barY = zeroY;
       let barH = 0;
       if (val >= 0) {
-        barH = Math.max(((val - 0) / range) * chartH, val === 0 ? 0 : 2);
+        barH = Math.max(((val - 0) / barRange) * chartH, val === 0 ? 0 : 2);
         barY = zeroY - barH;
       } else {
-        barH = Math.max(((0 - val) / range) * chartH, 2);
+        barH = Math.max(((0 - val) / barRange) * chartH, 2);
         barY = zeroY;
       }
       const x = padding.left + i * barSlotW + (barSlotW - barW) / 2;
@@ -925,8 +1052,8 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
     return `
       <svg viewBox="0 0 ${width} ${height}" style="width: 100%; height: auto; max-height: 240px; display: block;" xmlns="http://www.w3.org/2000/svg">
-        ${gridLines.join('')}
-        ${yLabels.join('')}
+        ${barGridLines.join('')}
+        ${barYLabels.join('')}
         ${bars.join('')}
         ${xLabels.join('')}
       </svg>
@@ -935,7 +1062,9 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
   // Helper to extract SVG visual representation for exported tile
   const getTileChartVisualHtml = (tile: DashboardTileUI, dataRows: Record<string, any>[]): string => {
-    return renderDynamicTileSvg(tile.chart_type, dataRows, tile.dimensions, tile.metrics);
+    const preferredDims = tile.dimensions?.length ? tile.dimensions : (tile.x_key ? [tile.x_key] : []);
+    const preferredMetrics = tile.metrics?.length ? tile.metrics : (tile.y_keys?.length ? tile.y_keys : []);
+    return renderDynamicTileSvg(tile.chart_type, dataRows, preferredDims, preferredMetrics);
   };
 
   // Helper to render formatted HTML data table
@@ -1007,8 +1136,13 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         const isTable = t.chart_type === 'table';
 
         // KPI value computation
+        const preferredDims = t.dimensions?.length ? t.dimensions : (t.x_key ? [t.x_key] : []);
+        const preferredMetrics = t.metrics?.length ? t.metrics : (t.y_keys?.length ? t.y_keys : []);
+        const { metricKey: kpiMetricKey } = resolveChartKeys(dataRows, preferredDims, preferredMetrics);
         const rawKpiVal =
-          dataRows[0] && Object.values(dataRows[0])[0] !== undefined
+          dataRows[0]?.[kpiMetricKey] !== undefined
+            ? dataRows[0][kpiMetricKey]
+            : dataRows[0] && Object.values(dataRows[0])[0] !== undefined
             ? Object.values(dataRows[0])[0]
             : '—';
         const kpiValFormatted =
@@ -1072,11 +1206,16 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
           `;
         }
 
+        const isEdited = Boolean(t.metadata?.is_edited);
+
         return `
           <div class="tile-card ${colSpanClass}">
             <div>
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
-                <span class="tile-badge">${escapeHtml(t.chart_type)}</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span class="tile-badge">${escapeHtml(t.chart_type)}</span>
+                  ${isEdited ? `<span class="tile-badge badge-edited">EDITED</span>` : ''}
+                </div>
                 <span style="font-size: 10px; font-family: monospace; color: var(--muted);">${escapeHtml(t.generator)}</span>
               </div>
               <div class="tile-title">${escapeHtml(t.title)}</div>
@@ -1216,6 +1355,11 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
       border-radius: 4px;
       border: 1px solid var(--border);
       font-family: monospace;
+    }
+    .badge-edited {
+      color: var(--primary);
+      background: var(--primary-soft);
+      border-color: var(--primary);
     }
     .tile-title {
       font-size: 14px;

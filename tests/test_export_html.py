@@ -62,9 +62,30 @@ def _generate_test_html_export(
         data = t.get("data", [])
         sql = t.get("compiled_sql", "SELECT 1")
         evidence = t.get("evidence", {})
+        is_edited = bool(t.get("metadata", {}).get("is_edited") or t.get("is_edited"))
 
         if c_type == "kpi":
-            val = data[0].get("value", 0) if data else 0
+            preferred_metrics = t.get("metrics") or t.get("y_keys") or []
+            val = None
+            if data:
+                row = data[0]
+                for pm in preferred_metrics:
+                    clean_pm = pm.replace("(", "_").replace(")", "")
+                    for k in row.keys():
+                        if k.lower() == pm.lower() or k.lower() == clean_pm.lower():
+                            val = row[k]
+                            break
+                    if val is not None:
+                        break
+                if val is None:
+                    # check numeric keys first
+                    num_keys = [k for k, v in row.items() if isinstance(v, (int, float))]
+                    if num_keys:
+                        val = row[num_keys[0]]
+                    else:
+                        val = row.get("value", list(row.values())[0] if row else 0)
+            else:
+                val = 0
             body = f'<div class="kpi-value">{val}</div>'
         elif c_type == "table":
             cols = list(data[0].keys()) if data else []
@@ -127,7 +148,8 @@ def _generate_test_html_export(
                 </div>
                 """
             elif c_type_norm == "horizontal_bar":
-                bars = "".join(f'<rect x="90" y="{30 + i*25}" width="200" height="16" fill="var(--chart-{i%5+1})" />' for i in range(len(data)))
+                display_rows = data[:50]
+                bars = "".join(f'<rect x="90" y="{30 + i*25}" width="200" height="16" fill="var(--chart-{i%5+1})" />' for i in range(len(display_rows)))
                 body = f"""
                 <div class="chart-container">
                   <svg viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg" class="chart-svg">
@@ -137,18 +159,85 @@ def _generate_test_html_export(
                 </div>
                 """
             elif c_type_norm == "scatter":
-                dots = "".join(f'<circle cx="{60 + i*40}" cy="{180 - i*20}" r="4.5" fill="var(--chart-1)" />' for i in range(len(data)))
+                # Full scatter domain logic matching frontend DashboardPanelsView.tsx
+                sample = data[0] if data else {}
+                keys = list(sample.keys())
+                x_k = t.get("x_key") or (t.get("dimensions", [])[0] if t.get("dimensions") else (keys[0] if keys else "x"))
+                y_k = (t.get("y_keys", [])[0] if t.get("y_keys") else (t.get("metrics", [])[0] if t.get("metrics") else (keys[1] if len(keys) > 1 else keys[0])))
+                clean_y_k = y_k.replace("sum_", "").replace("avg_", "").replace("(", "_").replace(")", "") if isinstance(y_k, str) else str(y_k)
+
+                # Match actual key in data
+                dim_key = next((k for k in keys if k.lower() == str(x_k).lower()), keys[0] if keys else "x")
+                metric_key = next((k for k in keys if k.lower() == str(y_k).lower() or k.lower() == clean_y_k.lower()), keys[1] if len(keys) > 1 else keys[0])
+
+                usable_pts = [
+                    (float(r[dim_key]), float(r[metric_key]))
+                    for r in data
+                    if r.get(dim_key) is not None and r.get(metric_key) is not None and str(r.get(dim_key)).replace("-", "").replace(".", "").isdigit() and str(r.get(metric_key)).replace("-", "").replace(".", "").isdigit()
+                ]
+
+                if not usable_pts:
+                    svg_content = '<text x="280" y="120" text-anchor="middle">No valid coordinates</text>'
+                else:
+                    all_x = [p[0] for p in usable_pts]
+                    all_y = [p[1] for p in usable_pts]
+                    min_x, max_x = min(all_x), max(all_x)
+                    range_x = (max_x - min_x) or 1.0
+                    min_y, max_y = min(all_y), max(all_y)
+                    range_y = (max_y - min_y) or 1.0
+
+                    # Sampling up to 1200 points
+                    max_pts = 1200
+                    if len(usable_pts) > max_pts:
+                        step = len(usable_pts) / max_pts
+                        render_pts = [usable_pts[int(i * step)] for i in range(max_pts)]
+                    else:
+                        render_pts = usable_pts
+
+                    padding = {"top": 20, "right": 20, "bottom": 45, "left": 55}
+                    chart_w = 560 - padding["left"] - padding["right"]
+                    chart_h = 240 - padding["top"] - padding["bottom"]
+
+                    grid_lines = []
+                    # Y-axis ticks and grid
+                    for i in range(5):
+                        y_val = min_y + (range_y / 4.0) * i
+                        y_pos = padding["top"] + chart_h - (i / 4.0) * chart_h
+                        grid_lines.append(f'<line x1="{padding["left"]}" y1="{y_pos:.1f}" x2="{560 - padding["right"]}" y2="{y_pos:.1f}" stroke="var(--border)" stroke-dasharray="3 3" />')
+                        grid_lines.append(f'<text x="{padding["left"] - 8}" y="{y_pos + 4:.1f}" text-anchor="end" class="tick-label">{y_val:.1f}</text>')
+
+                    # X-axis ticks and grid
+                    for i in range(5):
+                        x_val = min_x + (range_x / 4.0) * i
+                        x_pos = padding["left"] + (i / 4.0) * chart_w
+                        grid_lines.append(f'<line x1="{x_pos:.1f}" y1="{padding["top"]}" x2="{x_pos:.1f}" y2="{240 - padding["bottom"]}" stroke="var(--border)" stroke-dasharray="3 3" />')
+                        grid_lines.append(f'<text x="{x_pos:.1f}" y="{240 - padding["bottom"] + 16:.1f}" text-anchor="middle" class="tick-label">{x_val:.0f}</text>')
+
+                    # Zero baselines
+                    if min_y < 0 < max_y:
+                        zero_y = padding["top"] + chart_h - ((0.0 - min_y) / range_y) * chart_h
+                        grid_lines.append(f'<line x1="{padding["left"]}" y1="{zero_y:.1f}" x2="{560 - padding["right"]}" y2="{zero_y:.1f}" stroke="var(--foreground)" class="zero-baseline" />')
+
+                    dots = []
+                    for px, py in render_pts:
+                        cx = padding["left"] + ((px - min_x) / range_x) * chart_w
+                        cy = padding["top"] + chart_h - ((py - min_y) / range_y) * chart_h
+                        dots.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="3" fill="var(--chart-1)" />')
+
+                    svg_content = "".join(grid_lines) + "".join(dots)
+
                 body = f"""
                 <div class="chart-container">
-                  <svg viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg" class="chart-svg">
-                    {dots}
+                  <svg viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg" class="chart-svg scatter-chart-svg">
+                    {svg_content}
                   </svg>
                   <details class="data-details"><summary>View Data ({len(data)} rows)</summary></details>
                 </div>
                 """
             else:
                 # Default vertical bar chart
-                bars = "".join(f'<rect x="{60 + i*45}" y="80" width="28" height="120" fill="var(--chart-{i%5+1})" />' for i in range(len(data)))
+                display_rows = data[:50]
+                bars = "".join(f'<rect x="{60 + i*45}" y="80" width="28" height="120" fill="var(--chart-{i%5+1})" />' for i in range(len(display_rows)))
                 body = f"""
                 <div class="chart-container">
                   <svg viewBox="0 0 560 240" xmlns="http://www.w3.org/2000/svg" class="chart-svg">
@@ -158,10 +247,12 @@ def _generate_test_html_export(
                 </div>
                 """
 
+        badge_edited = '<span class="tile-badge badge-edited">EDITED</span>' if is_edited else ''
         card = f"""
         <div class="tile-card tile-{c_type}">
           <div class="tile-header">
             <span class="tile-badge">{c_type.upper()}</span>
+            {badge_edited}
             <div class="tile-title">{title}</div>
           </div>
           <div class="tile-body">{body}</div>
@@ -179,8 +270,9 @@ def _generate_test_html_export(
   <meta charset="UTF-8">
   <title>{dataset_name} - Export</title>
   <style>
-    :root {{ --chart-1: #2F7F7A; --bg: #ffffff; --foreground: #1F2A37; }}
+    :root {{ --chart-1: #2F7F7A; --bg: #ffffff; --foreground: #1F2A37; --primary: #2F7F7A; --primary-soft: #E6F3F2; }}
     .grid {{ display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }}
+    .badge-edited {{ color: var(--primary); background: var(--primary-soft); }}
   </style>
 </head>
 <body>
@@ -441,3 +533,202 @@ def test_donut_pie_composition_semantic_fidelity_and_arc_paths():
     assert "Group B" in html
     assert "Group C" in html
     assert "Group D" in html
+
+
+def test_edited_scatter_chart_export_parity_full_domain_and_sql():
+    """Verify that an edited scatter chart preserves independent numeric X and Y axes, negative values, and EDITED badge."""
+    # Representative of scatter plot like 'Profit Trend Over Time' with 9994 rows,
+    # X from 0 to 99940, and Y from -8500 to +8800.
+    np.random.seed(42)
+    n_rows = 9994
+    order_ids = [i * 10 for i in range(n_rows)]
+    profits = [
+        float(np.random.normal(loc=150, scale=1200)) if i % 100 != 0 else float(np.random.choice([-8500, 8800, -5000, 6000]))
+        for i in range(n_rows)
+    ]
+    rows = [{"order_id": order_ids[i], "profit": profits[i]} for i in range(n_rows)]
+
+    scatter_tile = {
+        "id": "tile_edited_scatter",
+        "chart_type": "scatter",
+        "title": "Profit Trend Over Time",
+        "data": rows,
+        "x_key": "order_id",
+        "y_keys": ["profit"],
+        "compiled_sql": 'SELECT "order_id", "profit" FROM sales_data',
+        "metadata": {"is_edited": True},
+        "evidence": {"strength": 0.92, "robustness": 0.88, "fdr_passed": False},
+    }
+
+    html = _generate_test_html_export(
+        dataset_name="Superstore_Sales",
+        headline="Executive Performance",
+        row_count=n_rows,
+        tiles=[scatter_tile],
+        active_filters=[],
+    )
+
+    # 1. EDITED badge present
+    assert "badge-edited" in html
+    assert "EDITED" in html
+
+    # 2. Scatter SVG container present
+    assert "scatter-chart-svg" in html
+
+    # 3. Circles rendered
+    circle_matches = re.findall(r'<circle cx="([\d\.]+)" cy="([\d\.]+)"', html)
+    assert len(circle_matches) > 0
+
+    # 4. Check all circle coordinates fall within the viewBox boundaries [0 0 560 240]
+    # Padding is left:55, top:20, right:20, bottom:45 -> chart bounds: x in [55, 540], y in [20, 195]
+    for cx_str, cy_str in circle_matches:
+        cx, cy = float(cx_str), float(cy_str)
+        assert 54.0 <= cx <= 541.0, f"cx={cx} outside chart boundary"
+        assert 19.0 <= cy <= 196.0, f"cy={cy} outside chart boundary"
+
+    # 5. Zero baseline line present because Y values span negative to positive
+    assert "zero-baseline" in html
+
+    # 6. Negative Y-axis ticks present
+    assert re.search(r'<text[^>]+class="tick-label"[^>]*>-\d+', html), "Negative tick label missing"
+
+    # 7. Row count preserved in summary
+    assert f"View Data ({n_rows} rows)" in html
+
+    # 8. Analytical SQL provenance preserved
+    assert 'SELECT "order_id", "profit" FROM sales_data' in html
+
+
+def test_edited_chart_export_parity_across_all_types():
+    """Verify that all supported chart types correctly export when edited."""
+    types_config = [
+        {
+            "chart_type": "scatter",
+            "data": [{"x_val": 10, "y_val": 25.5}, {"x_val": 20, "y_val": -15.0}],
+            "mark": "<circle",
+        },
+        {
+            "chart_type": "line",
+            "data": [{"period": "2024-01", "val": 100}, {"period": "2024-02", "val": 150}],
+            "mark": "<path",
+        },
+        {
+            "chart_type": "area",
+            "data": [{"period": "2024-01", "val": 100}, {"period": "2024-02", "val": 150}],
+            "mark": "<path",
+        },
+        {
+            "chart_type": "bar",
+            "data": [{"cat": "Alpha", "val": 500}, {"cat": "Beta", "val": 700}],
+            "mark": "<rect",
+        },
+        {
+            "chart_type": "horizontal_bar",
+            "data": [{"cat": "Alpha", "val": 500}, {"cat": "Beta", "val": 700}],
+            "mark": "<rect",
+        },
+        {
+            "chart_type": "donut",
+            "data": [{"cat": "Alpha", "val": 60}, {"cat": "Beta", "val": 40}],
+            "mark": "<path",
+        },
+        {
+            "chart_type": "kpi",
+            "data": [{"total_units": 45000}],
+            "metrics": ["total_units"],
+            "mark": "kpi-value",
+        },
+        {
+            "chart_type": "table",
+            "data": [{"id": 1, "status": "active"}, {"id": 2, "status": "closed"}],
+            "mark": "<table>",
+        },
+    ]
+
+    for cfg in types_config:
+        c_type = cfg["chart_type"]
+        tile = {
+            "id": f"tile_edited_{c_type}",
+            "chart_type": c_type,
+            "title": f"Edited {c_type.title()} Insight",
+            "data": cfg["data"],
+            "metrics": cfg.get("metrics", ["val"]),
+            "compiled_sql": f"SELECT * FROM dataset_{c_type}",
+            "metadata": {"is_edited": True},
+        }
+
+        html = _generate_test_html_export(
+            dataset_name="MultiTypeDataset",
+            headline="Edited Charts Parity",
+            row_count=100,
+            tiles=[tile],
+            active_filters=[],
+        )
+
+        assert "badge-edited" in html, f"badge-edited missing for {c_type}"
+        assert "EDITED" in html, f"EDITED text missing for {c_type}"
+        assert cfg["mark"] in html, f"Mark {cfg['mark']} missing for {c_type}"
+        assert f"SELECT * FROM dataset_{c_type}" in html
+
+
+def test_coexistence_of_unchanged_and_edited_charts():
+    """Verify that unchanged generated charts and edited charts coexist with appropriate badge states."""
+    tiles = [
+        {
+            "id": "tile_unchanged_bar",
+            "chart_type": "bar",
+            "title": "Original Revenue by Region",
+            "data": [{"region": "North", "val": 500}, {"region": "South", "val": 400}],
+            "compiled_sql": "SELECT region, SUM(val) FROM t GROUP BY 1",
+            "metadata": {"is_edited": False},
+        },
+        {
+            "id": "tile_edited_hbar",
+            "chart_type": "horizontal_bar",
+            "title": "Edited Revenue by Segment",
+            "data": [{"segment": "Corp", "val": 800}, {"segment": "Consumer", "val": 600}],
+            "compiled_sql": "SELECT segment, SUM(val) FROM t GROUP BY 1",
+            "metadata": {"is_edited": True},
+        },
+    ]
+
+    html = _generate_test_html_export(
+        dataset_name="MixedDataset",
+        headline="Coexistence Test",
+        row_count=200,
+        tiles=tiles,
+        active_filters=[],
+    )
+
+    # Exactly 1 edited badge in tile cards
+    assert html.count('<span class="tile-badge badge-edited">EDITED</span>') == 1
+    assert "Original Revenue by Region" in html
+    assert "Edited Revenue by Segment" in html
+    assert "SELECT region, SUM(val) FROM t GROUP BY 1" in html
+    assert "SELECT segment, SUM(val) FROM t GROUP BY 1" in html
+
+
+def test_kpi_metric_column_resolution_with_multicolumn_data():
+    """Verify that KPI cards correctly pick the target metric from a multi-column row rather than the first key."""
+    tile = {
+        "id": "tile_kpi_multi",
+        "chart_type": "kpi",
+        "title": "Average Order Discount",
+        # Notice the first column is a non-numeric string 'category'
+        "data": [{"category": "Technology", "avg_discount": 0.175}],
+        "metrics": ["avg_discount"],
+        "compiled_sql": "SELECT category, AVG(discount) AS avg_discount FROM t GROUP BY 1",
+        "metadata": {"is_edited": True},
+    }
+
+    html = _generate_test_html_export(
+        dataset_name="KpiDataset",
+        headline="KPI Resolution",
+        row_count=50,
+        tiles=[tile],
+        active_filters=[],
+    )
+
+    # The KPI value should be 0.175, NOT 'Technology'
+    assert '<div class="kpi-value">0.175</div>' in html
+    assert "badge-edited" in html
