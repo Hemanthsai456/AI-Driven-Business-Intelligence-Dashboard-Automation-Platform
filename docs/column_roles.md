@@ -1,6 +1,6 @@
 # Column Semantic Roles Specification
 
-This document defines the semantic roles assigned to dataset columns within the **AI-Driven Business Intelligence & Dashboard Automation Platform**.
+This document defines the semantic roles assigned to dataset columns within **DashCrate**.
 
 ## Overview
 

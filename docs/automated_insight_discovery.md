@@ -1,6 +1,6 @@
 # Stage E: Automated Insight Discovery Engine
 
-This document provides the complete architectural and mathematical specification of **Stage E: Autonomous Insight Discovery Mode** within the AI-Driven Business Intelligence Platform.
+This document provides the complete architectural and mathematical specification of **Stage E: Autonomous Insight Discovery Mode** within **DashCrate**.
 
 ---
 

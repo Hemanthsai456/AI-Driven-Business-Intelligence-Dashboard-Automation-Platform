@@ -39,7 +39,7 @@ class GroqClient(LLMClient):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "bi-platform/1.0",
+            "User-Agent": "dashcrate/1.0",
         }
 
         messages = []

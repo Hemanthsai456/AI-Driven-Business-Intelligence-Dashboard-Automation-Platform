@@ -2,7 +2,7 @@
 
 ## Overview
 
-The ingestion layer in the **AI-Driven Business Intelligence & Dashboard Automation Platform** converts raw tabular files (`.csv`, `.tsv`, `.xlsx`, and `.parquet`) into standardized `CanonicalDataset` objects.
+The ingestion layer in **DashCrate** converts raw tabular files (`.csv`, `.tsv`, `.xlsx`, and `.parquet`) into standardized `CanonicalDataset` objects.
 
 ```
 +---------------+      +-------------------+

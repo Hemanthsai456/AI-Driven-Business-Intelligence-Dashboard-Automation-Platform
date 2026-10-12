@@ -53,15 +53,15 @@ export const Sidebar: React.FC = () => {
       <div className="flex flex-col flex-1 min-h-0">
         {/* Brand Header */}
         <div className="h-14 px-4 border-b border-border flex items-center gap-3 shrink-0">
-          <div className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center shrink-0 font-bold text-xs shadow-xs">
-            BI
+          <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 font-bold text-xs shadow-xs tracking-wider">
+            DC
           </div>
           <div className={`min-w-0 flex-1 ${sidebarCollapsed ? 'hidden' : 'block max-[900px]:hidden'}`}>
             <h1 className="font-bold text-xs tracking-tight text-foreground truncate">
-              AI BI Studio
+              DashCrate
             </h1>
             <span className="text-2xs text-muted-foreground uppercase tracking-wider block font-mono truncate">
-              Enterprise Studio
+              Business Intelligence
             </span>
           </div>
         </div>

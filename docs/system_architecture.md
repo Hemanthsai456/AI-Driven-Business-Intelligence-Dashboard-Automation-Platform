@@ -7,78 +7,9 @@
 
 ## 1. High-Level Architectural Overview
 
-The **AI-Driven Business Intelligence & Dashboard Automation Platform** is architected as a decoupled, multi-tier system separating user interaction, cognitive reasoning, deterministic analytical computation, and stateful dataset session management.
+**DashCrate** is an AI-driven business intelligence and dashboard automation platform architected as a decoupled, multi-tier system separating user interaction, cognitive reasoning, deterministic analytical computation, and stateful dataset session management.
 
-```mermaid
-flowchart TD
-    subgraph UI ["Presentation Layer (Next.js 14 App Router)"]
-        Nav["App Shell & Navigation"]
-        DataStudioView["Data Studio (Overview, Quality, Profiling, Cleaning, EDA)"]
-        DatasetExplorerView["Dataset Explorer (Collapsible Schema & 5-Row Data Preview)"]
-        DashboardView["Autonomous Overview & Editable Dashboard (12-Col Grid, Chart Editor, Slicers)"]
-        ChatView["Dataset Chat & Evidence Inspector"]
-        AnalysisView["Focused Natural-Language Analysis Workspace"]
-    end
-
-    subgraph API ["API & Session Management Layer (FastAPI)"]
-        RESTRouter["FastAPI Application (api/main.py)"]
-        SessionStore["In-Memory Dataset Session Store (api/store.py)"]
-        Record["DatasetSessionRecord (Raw Dataset, Cleaned Dataset, Overrides, Contexts)"]
-    end
-
-    subgraph Intelligence ["Data Intelligence & Profiling Engine"]
-        Loaders["Format Loaders (CSV, TSV, XLSX, Parquet)"]
-        Profiler["Statistical Profiler (Distributions, Cardinality, Missingness)"]
-        Semantics["Semantic Analyzer (Roles: MEASURE, DIMENSION, DATETIME, PK, FK, DERIVED)"]
-        Readiness["Schema Readiness Validator (READY, WARNINGS, NOT_READY)"]
-        EDA["Deterministic EDA Engine (Distributions, Correlations, Trends)"]
-    end
-
-    subgraph Cleaning ["Data Cleaning & Transformation Engine"]
-        Planner["Cleaning Recommendation Planner"]
-        Executor["Transform Executor (Batch, Overrides, Previews)"]
-        Structural["Structural Ops (Drop Cols, Filter Rows, Deduplicate, Semantic Overrides)"]
-        MultiValued["Multi-Valued Cell Engine (Keep, Split, Expand)"]
-        Summary["Pre-Registration Audit Summary"]
-    end
-
-    subgraph Cognitive ["Cognitive & Planning Orchestrator"]
-        Ambiguity["Ambiguity Detector & Active Gate"]
-        AutonomousOverview["Autonomous Overview Planner (Grain & Aggregation Reasoning)"]
-        InsightDiscovery["Stage E Insight Discovery (8 Families, FDR Gate)"]
-        DatasetChatEngine["Conversational Chat Engine (Intent Dispatch, Follow-ups)"]
-        Ranker["Ranker V1 (Evidence, Coverage, Stability, Assumptions, Agreement)"]
-    end
-
-    subgraph Execution ["Deterministic Execution Engine"]
-        Compiler["Query Compiler (Plan / Filters -> DuckDB SQL)"]
-        DuckDB["DuckDB Worker Engine (PRAGMAs, Row Bounds, Sanitization)"]
-    end
-
-    subgraph Providers ["LLM Provider Abstraction Layer"]
-        Factory["Provider Factory (providers/factory.py)"]
-        GeminiAdapter["Google Gemini Adapter"]
-        GroqAdapter["Groq Cloud Adapter"]
-        OllamaAdapter["Local Ollama Adapter"]
-        MockAdapter["Deterministic Mock Adapter"]
-    end
-
-    UI -->|HTTP REST JSON| RESTRouter
-    RESTRouter <--> SessionStore
-    SessionStore --- Record
-
-    RESTRouter --> Loaders
-    Loaders --> Profiler --> Semantics --> Readiness
-    RESTRouter --> Cleaning
-    RESTRouter --> EDA
-
-    RESTRouter --> Cognitive
-    Cognitive --> Providers
-    Cognitive --> Compiler
-    Compiler --> DuckDB
-    DuckDB --> Cognitive
-    Cleaning -.->|Register Cleaned Dataset| SessionStore
-```
+![Architecture](references/Architecture.png)
 
 ---
 

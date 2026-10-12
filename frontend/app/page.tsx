@@ -335,10 +335,10 @@ export default function HomePage() {
       {/* Page Title */}
       <div className="pb-1">
         <h1 className="text-page-title font-bold text-foreground tracking-tight">
-          AI Business Intelligence Studio
+          DashCrate
         </h1>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Autonomous analytical intelligence, multi-provider consensus, and verified dashboard generation.
+          Autonomous business intelligence, multi-provider consensus, and verified dashboard generation.
         </p>
       </div>
 

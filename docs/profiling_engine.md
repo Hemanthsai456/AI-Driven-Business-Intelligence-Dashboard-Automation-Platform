@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Data Profiling Engine** in the **AI-Driven Business Intelligence & Dashboard Automation Platform** executes deterministic, read-only statistical and physical analysis on a `CanonicalDataset`.
+The **Data Profiling Engine** in **DashCrate** executes deterministic, read-only statistical and physical analysis on a `CanonicalDataset`.
 
 ```
 +-------------------+      +-------------------+      +-------------------+

@@ -1,6 +1,6 @@
-# Platform Documentation Index
+# DashCrate Documentation Index
 
-Welcome to the technical documentation for the **AI-Driven Business Intelligence & Dashboard Automation Platform**. This index serves as the central directory mapping the repository's architecture, data processing pipelines, analytical reasoning engines, API contracts, and development guides.
+Welcome to the technical documentation for **DashCrate** (AI-Driven Business Intelligence & Dashboard Automation Platform). This index serves as the central directory mapping the repository's architecture, data processing pipelines, analytical reasoning engines, API contracts, and development guides.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Canonical Data Model provides a unified, source-agnostic internal representation for datasets processed by the **AI-Driven Business Intelligence & Dashboard Automation Platform**. 
+The Canonical Data Model provides a unified, source-agnostic internal representation for datasets processed by **DashCrate** (AI-Driven Business Intelligence & Dashboard Automation Platform).
 
 Regardless of whether incoming data originates from CSV files, TSV files, Excel spreadsheets (`.xlsx`), Parquet files, SQL databases, or API responses, the ingestion pipeline standardizes the data into this canonical structure before downstream profiling, transformation, semantic inference, or dashboard generation take place.
 

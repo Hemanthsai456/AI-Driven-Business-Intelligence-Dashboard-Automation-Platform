@@ -1,0 +1,16 @@
+{
+  "name": "DashCrate - AI Business Intelligence & Dashboard Automation Platform",
+  "short_name": "DashCrate",
+  "description": "Turn raw datasets into explainable analytical understanding and interactive dashboards.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

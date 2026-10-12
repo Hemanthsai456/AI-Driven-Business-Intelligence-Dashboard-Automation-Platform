@@ -38,9 +38,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     try {
-      const savedTheme = (localStorage.getItem('ai_bi_theme') as Theme) || 'light';
-      const savedDensity = (localStorage.getItem('ai_bi_density') as Density) || 'comfortable';
-      const savedSidebar = localStorage.getItem('ai_bi_sidebar_collapsed') === 'true';
+      const savedTheme = ((localStorage.getItem('dashcrate_theme') || localStorage.getItem('ai_bi_theme')) as Theme) || 'light';
+      const savedDensity = ((localStorage.getItem('dashcrate_density') || localStorage.getItem('ai_bi_density')) as Density) || 'comfortable';
+      const savedSidebar = (localStorage.getItem('dashcrate_sidebar_collapsed') ?? localStorage.getItem('ai_bi_sidebar_collapsed')) === 'true';
 
       setThemeState(savedTheme);
       setDensityState(savedDensity);
@@ -86,14 +86,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const setTheme = (t: Theme) => {
     setThemeState(t);
     try {
-      localStorage.setItem('ai_bi_theme', t);
+      localStorage.setItem('dashcrate_theme', t);
     } catch {}
   };
 
   const setDensity = (d: Density) => {
     setDensityState(d);
     try {
-      localStorage.setItem('ai_bi_density', d);
+      localStorage.setItem('dashcrate_density', d);
     } catch {}
   };
 
@@ -101,7 +101,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSidebarCollapsed((prev) => {
       const next = !prev;
       try {
-        localStorage.setItem('ai_bi_sidebar_collapsed', String(next));
+        localStorage.setItem('dashcrate_sidebar_collapsed', String(next));
       } catch {}
       return next;
     });

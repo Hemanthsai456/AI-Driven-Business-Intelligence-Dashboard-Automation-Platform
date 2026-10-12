@@ -1,84 +1,18 @@
-# AI-Driven Business Intelligence & Dashboard Automation Platform
+# DashCrate — AI-Driven Business Intelligence & Dashboard Automation Platform
 
-An intelligent, end-to-end business intelligence platform that automates the journey from raw tabular files to statistical discovery, interactive data cleaning, exploratory analysis, conversational querying, and Power BI-style interactive dashboards.
+**DashCrate** is an intelligent, end-to-end business intelligence platform that automates the journey from raw tabular files to statistical discovery, interactive data cleaning, exploratory analysis, conversational querying, and Power BI-style interactive dashboards.
 
-The platform pairs a deterministic data processing and query compilation engine (**DuckDB**, **Pandas**, **NumPy**) with a multi-provider cognitive layer (**Google Gemini**, **Groq**, **Local Ollama**) governed by strict mathematical safeguards (Benjamini-Hochberg FDR control, numeric grounding guards, and non-mutating dataset immutability).
+DashCrate pairs a deterministic data processing and query compilation engine (**DuckDB**, **Pandas**, **NumPy**) with a multi-provider cognitive layer (**Google Gemini**, **Groq**, **Local Ollama**) governed by strict mathematical safeguards (Benjamini-Hochberg FDR control, numeric grounding guards, and non-mutating dataset immutability).
 
 ---
 
 ## 🏛️ System Architecture
 
-The platform enforces a strict separation between presentation, cognitive planning, deterministic execution, and stateful dataset session management:
+DashCrate enforces a strict separation between presentation, cognitive planning, deterministic execution, and stateful dataset session management:
 
-```mermaid
-flowchart TD
-    subgraph UI ["Presentation Layer (Next.js 14 / React 18 / TypeScript)"]
-        TopBar["TopBar & Workspace Switcher (Raw vs Cleaned)"]
-        DataStudio["Data Studio (Overview, Quality, Profiling, Cleaning, EDA)"]
-        DatasetExplorerUI["Dataset Explorer (Collapsible Schema & 5-Row Data Preview)"]
-        Dashboard["Overview Dashboard (12-Col Grid, Editable Charts, Runtime Slicers)"]
-        Chat["Dataset Chat & Evidence Inspector"]
-        Analysis["Focused Analysis Workspace (Natural-Language Briefs)"]
-    end
+![Architecture](docs/references/Architecture.png)
 
-    subgraph API ["REST API & Session Management (FastAPI :8000)"]
-        Router["FastAPI Application (api/main.py)"]
-        Store["In-Memory Session Store (api/store.py)"]
-        Record["DatasetSessionRecord (Raw, Cleaned, Applied Ops, Overrides, Context)"]
-    end
-
-    subgraph Intelligence ["Data Intelligence & Exploration Layer"]
-        Ingest["Format Loaders (.csv, .tsv, .xlsx, .parquet)"]
-        Profile["Statistical Profiler (Distributions, Cardinality, Missingness)"]
-        Semantics["Semantic Analyzer (MEASURE, DIMENSION, DATETIME, PK, FK, DERIVED)"]
-        Readiness["Schema Readiness Validator (READY, WARNINGS, NOT_READY)"]
-        EDA["Deterministic EDA Engine (Histograms, Heatmaps, Trends, Ad-Hoc Slicing)"]
-    end
-
-    subgraph CleaningLayer ["Data Cleaning & Transformation Pipeline"]
-        Planner["Recommendation Planner"]
-        Executor["Transform Executor (Batch, Overrides, Previews)"]
-        Structural["Structural Ops (Drop Cols, Condition Filter, Deduplication)"]
-        MultiValued["Multi-Valued Cell Engine (Keep, Split, Expand)"]
-        Summary["Pre-Registration Audit Summary"]
-    end
-
-    subgraph Cognitive ["Cognitive Reasoning & Planning Layer"]
-        OverviewPlanner["Autonomous Overview Planner (orchestrator/overview/)"]
-        ReasoningEngine["Generalized Analytical Reasoning (Grain & Aggregation Suitability)"]
-        ChatEngine["Dataset Chat Engine (Multi-Turn Intent Routing, Follow-ups)"]
-        DiscoveryEngine["Stage E Insight Discovery (8 Analytical Families, FDR α=0.05)"]
-        Ranker["Ranker V1 (Evidence, Coverage, Stability, Assumptions, Agreement)"]
-    end
-
-    subgraph Engine ["Deterministic Analytical Execution Layer"]
-        Compiler["Query Compiler (Plan & Slicer Filters -> DuckDB SQL)"]
-        DuckDB["DuckDB Worker Engine (Parameterization, Invariants, Sanitization)"]
-    end
-
-    subgraph Providers ["LLM Provider Abstraction"]
-        Factory["Provider Factory (providers/factory.py)"]
-        GeminiAdapter["Google Gemini"]
-        GroqAdapter["Groq Cloud"]
-        OllamaAdapter["Local Ollama"]
-        MockAdapter["Deterministic Mock"]
-    end
-
-    UI -->|HTTP REST / JSON| Router
-    Router <--> Store
-    Store --- Record
-
-    Router --> Ingest --> Profile --> Semantics --> Readiness
-    Router --> CleaningLayer
-    Router --> EDA
-
-    Router --> Cognitive
-    Cognitive --> Providers
-    Cognitive --> Compiler
-    Compiler --> DuckDB
-    DuckDB --> Cognitive
-    CleaningLayer -.->|Register Cleaned Dataset| Store
-```
+---
 
 ### Architectural Boundaries & Safeguards
 1. **Zero Hallucination Numbers**: LLMs never compute sums, averages, totals, p-values, or correlation coefficients. All calculations are executed deterministically by DuckDB and NumPy/SciPy.
@@ -198,7 +132,7 @@ flowchart TD
 └─────────────────┘     │ └─────────────────┘       └─────────────────┘
 ```
 
-1. **Upload Dataset**: Upload tabular data via the UI (`/upload`). The platform ingests, profiles, infers semantics, and checks schema readiness.
+1. **Upload Dataset**: Upload tabular data via the UI (`/upload`). DashCrate ingests, profiles, infers semantics, and checks schema readiness.
 2. **Inspect Quality & Profile**: In Data Studio, review the Global Quality Score, check missingness rates, inspect cardinalities, and review detected column roles.
 3. **Transform & Clean**: Review recommended cleaning rules, test custom transforms with dry-run previews, drop unwanted columns, filter rows, or handle multi-valued cells.
 4. **Register Cleaned Dataset**: Inspect the pre-registration summary and click **Register Cleaned Dataset**. The cleaned version is saved as an independent dataset, preserving raw data untouched.
@@ -298,7 +232,7 @@ OLLAMA_MODEL=llama3
 NEXT_PUBLIC_API_URL=http://localhost:8000/api
 ```
 
-*(Note: If no API keys are provided, the platform automatically utilizes deterministic rule-based algorithms for candidate generation and analytical query execution).*
+*(Note: If no API keys are provided, DashCrate automatically utilizes deterministic rule-based algorithms for candidate generation and analytical query execution).*
 
 ---
 

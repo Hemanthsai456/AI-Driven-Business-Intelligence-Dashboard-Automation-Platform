@@ -1,4 +1,4 @@
-"""Canonical Data Model definitions for the Business Intelligence & Dashboard Automation Platform.
+"""Canonical Data Model definitions for DashCrate.
 
 This module provides format-agnostic dataclasses for representing datasets, column metadata,
 semantic roles, data profiles, and canonical tabular datasets.

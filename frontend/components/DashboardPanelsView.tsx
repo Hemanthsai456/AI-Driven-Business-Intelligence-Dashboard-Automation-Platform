@@ -517,7 +517,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
             ctx.fillStyle = '#6b7280';
             ctx.font = '10px ui-monospace, monospace';
-            ctx.fillText(`AI-Driven BI Studio • Exported ${new Date().toLocaleDateString()}`, 20, 44);
+            ctx.fillText(`DashCrate • Exported ${new Date().toLocaleDateString()}`, 20, 44);
 
             // Draw chart SVG
             ctx.drawImage(img, 0, headerH, w, h);
@@ -574,7 +574,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
           ctx.fillStyle = '#9ca3af';
           ctx.font = '10px ui-monospace, monospace';
-          ctx.fillText(`AI-Driven BI Studio • Exported ${new Date().toLocaleDateString()}`, 36, 270);
+          ctx.fillText(`DashCrate • Exported ${new Date().toLocaleDateString()}`, 36, 270);
 
           const pngUrl = canvas.toDataURL('image/png');
           const a = document.createElement('a');
@@ -1086,7 +1086,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
   // Export standalone self-contained HTML bundle
   const handleExportHtml = () => {
-    const dashboardTitle = `${datasetName} - AI-Driven Executive BI Dashboard`;
+    const dashboardTitle = `${datasetName} - DashCrate Executive BI Dashboard`;
     const exportTime = new Date().toLocaleString();
 
     // Active filters summary chip list
@@ -1410,7 +1410,7 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 </head>
 <body>
   <div class="header">
-    <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); font-family: monospace; letter-spacing: 0.5px;">AI-Driven Executive BI Dashboard</div>
+    <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); font-family: monospace; letter-spacing: 0.5px;">DashCrate Executive BI Dashboard</div>
     <h1 style="margin: 6px 0 10px 0; font-size: 22px; font-weight: 800; color: var(--foreground);">${escapeHtml(headlineText)}</h1>
     <div style="font-size: 12px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap;">
       <span>Dataset: <strong style="color: var(--foreground);">${escapeHtml(datasetName)}</strong></span>

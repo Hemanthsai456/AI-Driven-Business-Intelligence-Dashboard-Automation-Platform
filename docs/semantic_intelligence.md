@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Semantic Intelligence Foundation** (Step 4) in the **AI-Driven Business Intelligence & Dashboard Automation Platform** provides a deterministic, explainable rule engine that analyzes column physical dtypes, cardinality metrics, profile statistics, and naming patterns to assign preliminary candidate semantic roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `UNKNOWN`).
+The **Semantic Intelligence Foundation** (Step 4) in **DashCrate** provides a deterministic, explainable rule engine that analyzes column physical dtypes, cardinality metrics, profile statistics, and naming patterns to assign preliminary candidate semantic roles (`MEASURE`, `DIMENSION`, `DATETIME`, `IDENTIFIER`, `UNKNOWN`).
 
 ```
 +-------------------+      +-------------------+      +-------------------------+

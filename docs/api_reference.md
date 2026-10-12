@@ -15,7 +15,7 @@
 ```json
 {
   "status": "healthy",
-  "service": "AI-Driven Business Intelligence Platform API",
+  "service": "DashCrate API",
   "version": "1.0.0",
   "capabilities": [
     "Data Ingestion (CSV, TSV, XLSX, Parquet)",

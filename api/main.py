@@ -115,8 +115,8 @@ from orchestrator.utils import rank_candidates, check_candidate_output_consisten
 app = FastAPI(
 
 
-    title="AI-Driven Business Intelligence Platform API",
-    description="REST API wrapping Ingestion, Profiling, Semantic Intelligence, and Schema Readiness engines.",
+    title="DashCrate API",
+    description="REST API wrapping Ingestion, Profiling, Semantic Intelligence, Overview, Chat, and Verified Dashboard engines.",
     version="1.0.0",
 )
 
@@ -137,7 +137,7 @@ def health_check():
     """System health check endpoint."""
     return {
         "status": "healthy",
-        "service": "AI-Driven Business Intelligence Platform API",
+        "service": "DashCrate API",
         "version": "1.0.0",
         "capabilities": [
             "Data Ingestion (CSV, TSV, XLSX, Parquet)",
