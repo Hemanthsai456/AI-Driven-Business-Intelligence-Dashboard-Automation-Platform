@@ -635,17 +635,28 @@ export const ProfilingTab: React.FC<ProfilingTabProps> = ({
                 </Card>
               )}
 
-              {/* 4. Semantic Meaning Section */}
-              <Card className="p-5 border border-border space-y-2">
+              {/* 4. Semantic Meaning Section & Orchestrator Role Usage */}
+              <Card className="p-5 border border-border space-y-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
                   <h3 className="text-xs font-bold text-foreground">
-                    Semantic Meaning
+                    Semantic Meaning & Orchestrator Role
                   </h3>
                 </div>
                 <p className="text-xs text-foreground leading-relaxed">
                   {semanticDescription}
                 </p>
+
+                <div className="p-3 bg-primary-soft/40 rounded-md border border-primary/20 text-2xs space-y-1 font-mono">
+                  <div className="font-semibold text-primary">Orchestrator Role Usage:</div>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {role === 'MEASURE' && 'Eligible for aggregations (SUM, AVG, COUNT, MIN, MAX) in candidate query generation.'}
+                    {role === 'DIMENSION' && 'Eligible for GROUP BY dimensional grouping and categorical breakdowns.'}
+                    {role === 'DATETIME' && 'Eligible for temporal bucketing (YEAR, MONTH, DAY) in trend analysis.'}
+                    {role === 'IDENTIFIER' && 'Reserved for entity lookup, cardinality counting, or row identification.'}
+                    {role === 'UNKNOWN' && 'Exempt from automated aggregations pending manual role mapping.'}
+                  </p>
+                </div>
               </Card>
 
               {/* 5. Observations & Quality Flags */}
@@ -692,17 +703,18 @@ export const ProfilingTab: React.FC<ProfilingTabProps> = ({
                   <div className="p-5 pt-0 border-t border-border space-y-4 text-xs">
                     {selectedEvidence && selectedEvidence.evidence && selectedEvidence.evidence.length > 0 && (
                       <div className="space-y-2 pt-4">
-                        <span className="text-2xs font-semibold text-muted-foreground block uppercase tracking-wider">
-                          Signals Detected
+                        <span className="text-2xs font-semibold text-muted-foreground block uppercase tracking-wider font-mono">
+                          Rule-Based Evidence Signals
                         </span>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="space-y-1.5">
                           {selectedEvidence.evidence.map((ev, idx) => (
-                            <span
+                            <div
                               key={idx}
-                              className="px-2.5 py-1 bg-surface-muted border border-border rounded-md text-2xs font-mono text-foreground"
+                              className="flex items-start gap-2 p-2 bg-surface-muted rounded border border-border text-2xs font-mono text-foreground"
                             >
-                              {ev}
-                            </span>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />
+                              <span className="leading-snug">{ev}</span>
+                            </div>
                           ))}
                         </div>
                       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -51,23 +51,29 @@ import { EDATab } from '../../components/data_studio/EDATab';
 type DataStudioTab = 'overview' | 'quality' | 'profiling' | 'cleaning' | 'eda';
 type AnalysisState = 'idle' | 'analyzing' | 'ready' | 'error';
 
+function resolveTab(tab: string | null): DataStudioTab {
+  if (!tab) return 'overview';
+  if (tab === 'preview') return 'overview';
+  if (tab === 'profile' || tab === 'semantic') return 'profiling';
+  if (['overview', 'quality', 'profiling', 'cleaning', 'eda'].includes(tab)) {
+    return tab as DataStudioTab;
+  }
+  return 'overview';
+}
+
 function DataStudioContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const datasetIdParam = searchParams.get('id');
-  const initialTabParam = searchParams.get('tab') as DataStudioTab | null;
+  const initialTabParam = searchParams.get('tab');
 
   // 1. Dataset Selection State
   const [allDatasets, setAllDatasets] = useState<DatasetListItem[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [loadingDatasets, setLoadingDatasets] = useState<boolean>(true);
 
-  // 2. Active Tab State
-  const [activeTab, setActiveTab] = useState<DataStudioTab>(
-    initialTabParam && ['overview', 'quality', 'profiling', 'cleaning', 'eda'].includes(initialTabParam)
-      ? initialTabParam
-      : 'overview'
-  );
+  // 2. Active Tab State (supports backward compatible tabs: preview -> overview, profile/semantic -> profiling)
+  const [activeTab, setActiveTab] = useState<DataStudioTab>(resolveTab(initialTabParam));
 
   // 3. Analysis Lifecycle State
   const [analysisState, setAnalysisState] = useState<AnalysisState>('idle');
@@ -84,37 +90,9 @@ function DataStudioContent() {
   const [loadingPlan, setLoadingPlan] = useState<boolean>(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
-  // Load registered datasets list on initial mount
-  useEffect(() => {
-    listDatasets()
-      .then((items) => {
-        setAllDatasets(items);
-        if (items.length > 0) {
-          const targetId =
-            datasetIdParam && items.some((d) => d.dataset_id === datasetIdParam)
-              ? datasetIdParam
-              : items[0].dataset_id;
-          setSelectedDatasetId(targetId);
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to list datasets:', err);
-      })
-      .finally(() => {
-        setLoadingDatasets(false);
-      });
-  }, [datasetIdParam]);
-
-  // Sync tab change with URL search param
-  const handleTabChange = (tab: DataStudioTab) => {
-    setActiveTab(tab);
-    const params = new URLSearchParams(window.location.search);
-    params.set('tab', tab);
-    if (selectedDatasetId) {
-      params.set('id', selectedDatasetId);
-    }
-    router.replace(`/data-studio?${params.toString()}`);
-  };
+  // Analysis guards against duplicate executions and race conditions
+  const analyzedDatasetIdRef = useRef<string | null>(null);
+  const isAnalyzingRef = useRef<boolean>(false);
 
   // Dedicated cleaning plan fetch handler (supports retry and on-demand load)
   const fetchCleaningPlan = async (datasetId: string) => {
@@ -132,10 +110,117 @@ function DataStudioContent() {
     }
   };
 
-  // Handle Dataset Switching
+  // Explicit "Analyze Data" Execution Trigger (Fast path: core intelligence first, non-blocking cleaning plan)
+  const handleAnalyzeData = async (targetId?: string) => {
+    const datasetId = targetId || selectedDatasetId;
+    if (!datasetId || isAnalyzingRef.current) return;
+
+    isAnalyzingRef.current = true;
+    setAnalysisState('analyzing');
+    setAnalysisError(null);
+    setLoadingPlan(true);
+    setPlanError(null);
+
+    try {
+      const [meta, prev, prof, sem, read, qual] = await Promise.all([
+        getDatasetMetadata(datasetId),
+        getDatasetPreview(datasetId, 50),
+        getDatasetProfile(datasetId),
+        getDatasetSemanticAnalysis(datasetId),
+        getDatasetReadiness(datasetId),
+        getDatasetQualityAssessment(datasetId).catch(() => null),
+      ]);
+
+      setMetadata(meta);
+      setPreview(prev);
+      setProfile(prof);
+      setSemanticProfile(sem);
+      setReadiness(read);
+      setQualityAssessment(qual);
+      setAnalysisState('ready');
+      analyzedDatasetIdRef.current = datasetId;
+
+      // Asynchronously fetch cleaning plan in background without blocking immediate view render
+      getDatasetCleaningPlan(datasetId)
+        .then((plan) => {
+          setCleaningPlan(plan);
+          setPlanError(null);
+          setLoadingPlan(false);
+        })
+        .catch((e: any) => {
+          setCleaningPlan(null);
+          setPlanError(e.message || 'Failed to generate cleaning plan.');
+          setLoadingPlan(false);
+        });
+    } catch (err: any) {
+      console.error('Error during Data Studio analysis:', err);
+      setAnalysisError(err.message || 'Failed to analyze dataset.');
+      setLoadingPlan(false);
+      setAnalysisState('error');
+    } finally {
+      isAnalyzingRef.current = false;
+    }
+  };
+
+  // Load registered datasets list on initial mount once
+  useEffect(() => {
+    listDatasets()
+      .then((items) => {
+        setAllDatasets(items);
+        if (items.length > 0) {
+          const targetId =
+            datasetIdParam && items.some((d) => d.dataset_id === datasetIdParam)
+              ? datasetIdParam
+              : items[0].dataset_id;
+          setSelectedDatasetId(targetId);
+          if (datasetIdParam) {
+            handleAnalyzeData(targetId);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to list datasets:', err);
+      })
+      .finally(() => {
+        setLoadingDatasets(false);
+      });
+  }, []);
+
+  // Sync external datasetIdParam changes without duplicate execution
+  useEffect(() => {
+    if (
+      datasetIdParam &&
+      datasetIdParam !== selectedDatasetId &&
+      allDatasets.some((d) => d.dataset_id === datasetIdParam)
+    ) {
+      setSelectedDatasetId(datasetIdParam);
+      if (analysisState === 'ready' && analyzedDatasetIdRef.current !== datasetIdParam) {
+        handleAnalyzeData(datasetIdParam);
+      }
+    }
+  }, [datasetIdParam, allDatasets, selectedDatasetId, analysisState]);
+
+  // Sync tab change with URL search param without route re-render thrashing
+  const handleTabChange = (tab: DataStudioTab) => {
+    setActiveTab(tab);
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', tab);
+    if (selectedDatasetId) {
+      params.set('id', selectedDatasetId);
+    }
+    window.history.replaceState(null, '', `/data-studio?${params.toString()}`);
+
+    // If switching to cleaning tab and cleaning plan is not yet loaded, ensure it is fetched
+    if (tab === 'cleaning' && !cleaningPlan && !loadingPlan && selectedDatasetId && analysisState === 'ready') {
+      fetchCleaningPlan(selectedDatasetId);
+    }
+  };
+
+  // Handle Dataset Switching cleanly
   const handleDatasetChange = (newDatasetId: string) => {
+    if (newDatasetId === selectedDatasetId) return;
+
     setSelectedDatasetId(newDatasetId);
-    setAnalysisState('idle');
     setAnalysisError(null);
     setMetadata(null);
     setPreview(null);
@@ -150,7 +235,13 @@ function DataStudioContent() {
     const params = new URLSearchParams(window.location.search);
     params.set('id', newDatasetId);
     params.set('tab', activeTab);
-    router.replace(`/data-studio?${params.toString()}`);
+    window.history.replaceState(null, '', `/data-studio?${params.toString()}`);
+
+    if (analysisState === 'ready') {
+      handleAnalyzeData(newDatasetId);
+    } else {
+      setAnalysisState('idle');
+    }
   };
 
   // Authoritative State Refresh for current Data Studio session
@@ -179,48 +270,9 @@ function DataStudioContent() {
       setQualityAssessment(qual);
       setCleaningPlan(planRes.plan);
       setPlanError(planRes.error);
+      analyzedDatasetIdRef.current = datasetId;
     } catch (err: any) {
       console.error('Error refreshing Data Studio state:', err);
-    }
-  };
-
-  // Explicit "Analyze Data" Execution Trigger
-  const handleAnalyzeData = async () => {
-    if (!selectedDatasetId) return;
-
-    setAnalysisState('analyzing');
-    setAnalysisError(null);
-    setLoadingPlan(true);
-    setPlanError(null);
-
-    try {
-      const [meta, prev, prof, sem, read, qual, planRes] = await Promise.all([
-        getDatasetMetadata(selectedDatasetId),
-        getDatasetPreview(selectedDatasetId, 50),
-        getDatasetProfile(selectedDatasetId),
-        getDatasetSemanticAnalysis(selectedDatasetId),
-        getDatasetReadiness(selectedDatasetId),
-        getDatasetQualityAssessment(selectedDatasetId).catch(() => null),
-        getDatasetCleaningPlan(selectedDatasetId)
-          .then((p) => ({ plan: p, error: null }))
-          .catch((e: any) => ({ plan: null, error: e.message || 'Failed to generate cleaning plan.' })),
-      ]);
-
-      setMetadata(meta);
-      setPreview(prev);
-      setProfile(prof);
-      setSemanticProfile(sem);
-      setReadiness(read);
-      setQualityAssessment(qual);
-      setCleaningPlan(planRes.plan);
-      setPlanError(planRes.error);
-      setLoadingPlan(false);
-      setAnalysisState('ready');
-    } catch (err: any) {
-      console.error('Error during Data Studio analysis:', err);
-      setAnalysisError(err.message || 'Failed to analyze dataset.');
-      setLoadingPlan(false);
-      setAnalysisState('error');
     }
   };
 
@@ -299,7 +351,7 @@ function DataStudioContent() {
           </div>
         </div>
 
-        {/* Dataset Selector & Analyze Data Trigger */}
+        {/* Dataset Selector & Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="flex items-center gap-2 bg-surface border border-border rounded-md px-3 py-1.5 shadow-2xs">
             <Database className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -318,9 +370,9 @@ function DataStudioContent() {
           </div>
 
           <Button
-            variant="primary"
+            variant={analysisState === 'ready' ? 'secondary' : 'primary'}
             size="sm"
-            onClick={handleAnalyzeData}
+            onClick={() => handleAnalyzeData()}
             isLoading={analysisState === 'analyzing'}
             leftIcon={
               analysisState === 'ready' ? (
@@ -333,9 +385,9 @@ function DataStudioContent() {
             {analysisState === 'ready' ? 'Re-analyze Data' : 'Analyze Data'}
           </Button>
 
-          <Link href={`/analysis?id=${selectedDatasetId}`}>
-            <Button variant="secondary" size="sm" leftIcon={<BarChart3 className="w-3.5 h-3.5" />}>
-              Analysis Workspace
+          <Link href={`/?dataset=${selectedDatasetId}`}>
+            <Button variant="primary" size="sm" leftIcon={<BarChart3 className="w-3.5 h-3.5" />}>
+              Generate Dashboard
             </Button>
           </Link>
         </div>
@@ -419,7 +471,7 @@ function DataStudioContent() {
             <Button
               variant="primary"
               size="md"
-              onClick={handleAnalyzeData}
+              onClick={() => handleAnalyzeData()}
               leftIcon={<Sparkles className="w-4 h-4" />}
             >
               Analyze Data
@@ -454,7 +506,7 @@ function DataStudioContent() {
           </div>
           <h2 className="text-sm font-bold text-foreground">Analysis Failed</h2>
           <p className="text-xs text-muted-foreground">{analysisError}</p>
-          <Button variant="secondary" size="sm" onClick={handleAnalyzeData}>
+          <Button variant="secondary" size="sm" onClick={() => handleAnalyzeData()}>
             Retry Analysis
           </Button>
         </Card>

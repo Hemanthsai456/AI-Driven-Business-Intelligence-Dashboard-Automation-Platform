@@ -70,8 +70,6 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
   onSpecChange,
   className = '',
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'data' | 'cleaning' | 'trace'>('dashboard');
-
   // Modals state
   const [activeModal, setActiveModal] = useState<{
     type: 'sql' | 'data' | 'why' | 'expand' | null;
@@ -1460,56 +1458,13 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
 
   return (
     <div className={`flex flex-col gap-5 ${className}`}>
-      {/* Tab Navigation */}
+      {/* Header bar / Executive Dashboard Tab */}
       <div className="flex items-center justify-between border-b border-border text-xs font-medium no-print">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 border-b-2 transition-all ${activeTab === 'dashboard'
-                ? 'border-primary text-primary font-bold'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-          >
+          <div className="flex items-center gap-1.5 px-3.5 py-2 border-b-2 border-primary text-primary font-bold">
             <BarChart3 className="w-3.5 h-3.5" />
             <span>Executive Dashboard</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 border-b-2 transition-all ${activeTab === 'data'
-                ? 'border-primary text-primary font-bold'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-          >
-            <TableIcon className="w-3.5 h-3.5" />
-            <span>Data Preview</span>
-          </button>
-
-          {cleaningReport && (
-            <button
-              onClick={() => setActiveTab('cleaning')}
-              className={`flex items-center gap-1.5 px-3.5 py-2 border-b-2 transition-all ${activeTab === 'cleaning'
-                  ? 'border-primary text-primary font-bold'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <Brush className="w-3.5 h-3.5" />
-              <span>Cleaning Report ({cleaningCount})</span>
-            </button>
-          )}
-
-          {spec?.winner?.execution?.compiled_sql && (
-            <button
-              onClick={() => setActiveTab('trace')}
-              className={`flex items-center gap-1.5 px-3.5 py-2 border-b-2 transition-all ${activeTab === 'trace'
-                  ? 'border-primary text-primary font-bold'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>Trace & SQL</span>
-            </button>
-          )}
+          </div>
         </div>
 
         {/* Global Export & Print buttons */}
@@ -1543,9 +1498,8 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
         </div>
       </div>
 
-      {/* TAB 1: EXECUTIVE DASHBOARD */}
-      {activeTab === 'dashboard' && (
-        <div className="space-y-4">
+      {/* EXECUTIVE DASHBOARD */}
+      <div className="space-y-4">
           {/* F6: Trust Layer Summary Strip */}
           <div className="bg-surface border border-border rounded-card p-3 sm:p-4 shadow-xs">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -1569,13 +1523,10 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
                   </span>
                 )}
                 {cleaningCount > 0 && (
-                  <button
-                    onClick={() => setActiveTab('cleaning')}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono bg-success-soft text-success border border-success/30 hover:underline"
-                  >
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded text-2xs font-mono bg-success-soft text-success border border-success/30">
                     <Brush className="w-3 h-3" />
-                    <span>{cleaningCount} cleaning rules</span>
-                  </button>
+                    <span>{cleaningCount} cleaning rules applied</span>
+                  </span>
                 )}
               </div>
             </div>
@@ -1985,123 +1936,6 @@ export const DashboardPanelsView: React.FC<DashboardPanelsViewProps> = ({
             </details>
           )}
         </div>
-      )}
-
-      {/* TAB 2: DATA PREVIEW */}
-      {activeTab === 'data' && (
-        <div className="bg-surface border border-border rounded-card p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Raw Data Preview</h3>
-              <p className="text-2xs text-muted-foreground">Sample rows from the active ingested dataset</p>
-            </div>
-            {previewData?.rows && (
-              <span className="text-2xs font-mono text-muted-foreground">
-                Showing {previewData.rows.length} rows
-              </span>
-            )}
-          </div>
-
-          {previewData?.rows && previewData.rows.length > 0 ? (
-            <div className="overflow-x-auto max-h-96">
-              <table className="w-full text-left text-xs font-mono border-collapse">
-                <thead>
-                  <tr className="border-b border-border bg-surface-muted/50 text-2xs uppercase text-muted-foreground">
-                    {previewData.columns.map((col: string) => (
-                      <th key={col} className="py-2 px-3 font-semibold whitespace-nowrap">
-                        {col}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border text-foreground">
-                  {previewData.rows.map((row: any, rIdx: number) => (
-                    <tr key={rIdx} className="hover:bg-surface-muted/20">
-                      {previewData.columns.map((col: string) => (
-                        <td key={col} className="py-1.5 px-3 whitespace-nowrap text-muted-foreground">
-                          {row[col] !== null && row[col] !== undefined ? String(row[col]) : <span className="text-error italic">null</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-8 text-center text-xs text-muted-foreground">
-              No preview data currently loaded.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: CLEANING REPORT */}
-      {activeTab === 'cleaning' && cleaningReport && (
-        <div className="bg-surface border border-border rounded-card p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Data Cleaning & Transformation Report</h3>
-              <p className="text-2xs text-muted-foreground">Deterministic normalization transformations applied to raw data</p>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono border-collapse">
-              <thead>
-                <tr className="border-b border-border bg-surface-muted/50 text-2xs uppercase text-muted-foreground">
-                  <th className="py-2 px-3 font-semibold">Rule / Operation</th>
-                  <th className="py-2 px-3 font-semibold">Column</th>
-                  <th className="py-2 px-3 font-semibold text-right">Affected Count</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border text-foreground">
-                {cleaningReport.transformations && cleaningReport.transformations.length > 0 ? (
-                  cleaningReport.transformations.map((t: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-surface-muted/20">
-                      <td className="py-2 px-3">{t.rule_name || t.type || 'Normalization'}</td>
-                      <td className="py-2 px-3 font-semibold">{t.column_name || t.column || 'All'}</td>
-                      <td className="py-2 px-3 text-right text-muted-foreground font-mono">
-                        {t.affected_count || t.count || 1}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="py-6 text-center text-muted-foreground italic">
-                      Zero anomalies detected. Original dataset was already clean.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: TRACE & SQL */}
-      {activeTab === 'trace' && spec?.winner?.execution?.compiled_sql && (
-        <div className="bg-surface border border-border rounded-card p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-foreground">Auditable Compiled SQL</h3>
-              <p className="text-2xs text-muted-foreground">DuckDB query executed in sandboxed worker</p>
-            </div>
-          </div>
-          <pre className="p-3 bg-surface-muted/50 rounded-card border border-border font-mono text-xs text-foreground overflow-x-auto">
-            <code>
-              {(() => {
-                const heroTile = activeTiles.find((t) => t.size.w === 8) || activeTiles[0];
-                return (
-                  (heroTile && tileOverrides[heroTile.id]?.compiled_sql) ||
-                  spec.winner?.execution?.compiled_sql ||
-                  activeTiles[0]?.compiled_sql ||
-                  '-- Re-compiled dynamically through DuckDB sandboxed compiler\nSELECT * FROM dataset'
-                );
-              })()}
-            </code>
-          </pre>
-        </div>
-      )}
 
       {/* MODALS: View SQL, View Data, Why Chosen, Expand */}
       {activeModal.type && activeModal.tile && (() => {

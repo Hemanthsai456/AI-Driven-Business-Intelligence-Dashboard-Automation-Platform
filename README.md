@@ -138,7 +138,7 @@ DashCrate enforces a strict separation between presentation, cognitive planning,
 4. **Register Cleaned Dataset**: Inspect the pre-registration summary and click **Register Cleaned Dataset**. The cleaned version is saved as an independent dataset, preserving raw data untouched.
 5. **Inspect Columns in Dataset Explorer**: Expand the collapsible Dataset Explorer above the dashboard to review the first 5 rows and verify ambiguous column names, types, and representative values.
 6. **Explore via EDA**: In the EDA tab, examine numeric distribution histograms, categorical bar charts, the correlation heatmap, and test ad-hoc bivariate relationships.
-7. **Ask Natural Language Questions**: Open Dataset Chat or the Focused Analysis workspace to ask analytical questions (*"Show monthly sales trend by region"*).
+7. **Ask Natural Language Questions**: Open Dataset Chat or Data Studio to ask analytical questions (*"Show monthly sales trend by region"*).
 8. **Generate Autonomous Overview**: Click **Generate Overview** to produce a complete Power BI-style dashboard without writing any queries.
 9. **Customize Charts, Filter & Export**: Edit chart configurations with live DuckDB previews, remove or reset tiles, interact with runtime slicers, and export standalone HTML reports or print.
 
@@ -296,7 +296,7 @@ npm run dev
 │   ├── duckdb_executor.py      # DuckDB connection management & query execution
 │   └── sanitizer.py            # NaN, Infinity, and null output sanitizer
 ├── frontend/                   # Next.js 14 web application
-│   ├── app/                    # App Router pages (/, /data-studio, /upload, /analysis)
+│   ├── app/                    # App Router pages (/, /data-studio, /upload, /settings)
 │   ├── components/             # Reusable React components (DatasetExplorer, ChartEditModal, etc.)
 │   │   └── data_studio/        # 5 Data Studio tabs (Overview, Quality, Profiling, Cleaning, EDA)
 │   ├── lib/                    # API client (api.ts), theme tokens (theme.ts, chartTheme.ts)

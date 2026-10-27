@@ -9,6 +9,15 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/analysis',
+        destination: '/data-studio',
+        permanent: true,
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
