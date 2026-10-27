@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { UploadCloud, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { Button } from './Button';
 import { uploadDataset } from '../lib/api';
@@ -11,6 +12,7 @@ interface FileUploaderProps {
 }
 
 export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) => {
+  const router = useRouter();
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,7 +145,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
             </div>
           </div>
           <Button
-            onClick={() => (window.location.href = `/data-studio?id=${uploadedDataset.dataset_id}`)}
+            onClick={() => router.push(`/data-studio?id=${uploadedDataset.dataset_id}`)}
             variant="primary"
             size="sm"
             rightIcon={<ArrowRight className="w-3.5 h-3.5" />}

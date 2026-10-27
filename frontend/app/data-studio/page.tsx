@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -90,27 +90,45 @@ function DataStudioContent() {
   const [loadingPlan, setLoadingPlan] = useState<boolean>(false);
   const [planError, setPlanError] = useState<string | null>(null);
 
-  // Explicit "Analyze Data" Execution Trigger
+  // Analysis guards against duplicate executions and race conditions
+  const analyzedDatasetIdRef = useRef<string | null>(null);
+  const isAnalyzingRef = useRef<boolean>(false);
+
+  // Dedicated cleaning plan fetch handler (supports retry and on-demand load)
+  const fetchCleaningPlan = async (datasetId: string) => {
+    if (!datasetId) return;
+    setLoadingPlan(true);
+    setPlanError(null);
+    try {
+      const plan = await getDatasetCleaningPlan(datasetId);
+      setCleaningPlan(plan);
+    } catch (err: any) {
+      console.error('Failed to fetch cleaning plan:', err);
+      setPlanError(err.message || 'Failed to generate cleaning plan.');
+    } finally {
+      setLoadingPlan(false);
+    }
+  };
+
+  // Explicit "Analyze Data" Execution Trigger (Fast path: core intelligence first, non-blocking cleaning plan)
   const handleAnalyzeData = async (targetId?: string) => {
     const datasetId = targetId || selectedDatasetId;
-    if (!datasetId) return;
+    if (!datasetId || isAnalyzingRef.current) return;
 
+    isAnalyzingRef.current = true;
     setAnalysisState('analyzing');
     setAnalysisError(null);
     setLoadingPlan(true);
     setPlanError(null);
 
     try {
-      const [meta, prev, prof, sem, read, qual, planRes] = await Promise.all([
+      const [meta, prev, prof, sem, read, qual] = await Promise.all([
         getDatasetMetadata(datasetId),
         getDatasetPreview(datasetId, 50),
         getDatasetProfile(datasetId),
         getDatasetSemanticAnalysis(datasetId),
         getDatasetReadiness(datasetId),
         getDatasetQualityAssessment(datasetId).catch(() => null),
-        getDatasetCleaningPlan(datasetId)
-          .then((p) => ({ plan: p, error: null }))
-          .catch((e: any) => ({ plan: null, error: e.message || 'Failed to generate cleaning plan.' })),
       ]);
 
       setMetadata(meta);
@@ -119,19 +137,32 @@ function DataStudioContent() {
       setSemanticProfile(sem);
       setReadiness(read);
       setQualityAssessment(qual);
-      setCleaningPlan(planRes.plan);
-      setPlanError(planRes.error);
-      setLoadingPlan(false);
       setAnalysisState('ready');
+      analyzedDatasetIdRef.current = datasetId;
+
+      // Asynchronously fetch cleaning plan in background without blocking immediate view render
+      getDatasetCleaningPlan(datasetId)
+        .then((plan) => {
+          setCleaningPlan(plan);
+          setPlanError(null);
+          setLoadingPlan(false);
+        })
+        .catch((e: any) => {
+          setCleaningPlan(null);
+          setPlanError(e.message || 'Failed to generate cleaning plan.');
+          setLoadingPlan(false);
+        });
     } catch (err: any) {
       console.error('Error during Data Studio analysis:', err);
       setAnalysisError(err.message || 'Failed to analyze dataset.');
       setLoadingPlan(false);
       setAnalysisState('error');
+    } finally {
+      isAnalyzingRef.current = false;
     }
   };
 
-  // Load registered datasets list on initial mount (and auto-analyze if dataset id param is provided)
+  // Load registered datasets list on initial mount once
   useEffect(() => {
     listDatasets()
       .then((items) => {
@@ -153,9 +184,23 @@ function DataStudioContent() {
       .finally(() => {
         setLoadingDatasets(false);
       });
-  }, [datasetIdParam]);
+  }, []);
 
-  // Sync tab change with URL search param
+  // Sync external datasetIdParam changes without duplicate execution
+  useEffect(() => {
+    if (
+      datasetIdParam &&
+      datasetIdParam !== selectedDatasetId &&
+      allDatasets.some((d) => d.dataset_id === datasetIdParam)
+    ) {
+      setSelectedDatasetId(datasetIdParam);
+      if (analysisState === 'ready' && analyzedDatasetIdRef.current !== datasetIdParam) {
+        handleAnalyzeData(datasetIdParam);
+      }
+    }
+  }, [datasetIdParam, allDatasets, selectedDatasetId, analysisState]);
+
+  // Sync tab change with URL search param without route re-render thrashing
   const handleTabChange = (tab: DataStudioTab) => {
     setActiveTab(tab);
     const params = new URLSearchParams(window.location.search);
@@ -163,29 +208,19 @@ function DataStudioContent() {
     if (selectedDatasetId) {
       params.set('id', selectedDatasetId);
     }
-    router.replace(`/data-studio?${params.toString()}`);
-  };
+    window.history.replaceState(null, '', `/data-studio?${params.toString()}`);
 
-  // Dedicated cleaning plan fetch handler (supports retry and on-demand load)
-  const fetchCleaningPlan = async (datasetId: string) => {
-    if (!datasetId) return;
-    setLoadingPlan(true);
-    setPlanError(null);
-    try {
-      const plan = await getDatasetCleaningPlan(datasetId);
-      setCleaningPlan(plan);
-    } catch (err: any) {
-      console.error('Failed to fetch cleaning plan:', err);
-      setPlanError(err.message || 'Failed to generate cleaning plan.');
-    } finally {
-      setLoadingPlan(false);
+    // If switching to cleaning tab and cleaning plan is not yet loaded, ensure it is fetched
+    if (tab === 'cleaning' && !cleaningPlan && !loadingPlan && selectedDatasetId && analysisState === 'ready') {
+      fetchCleaningPlan(selectedDatasetId);
     }
   };
 
-  // Handle Dataset Switching
+  // Handle Dataset Switching cleanly
   const handleDatasetChange = (newDatasetId: string) => {
+    if (newDatasetId === selectedDatasetId) return;
+
     setSelectedDatasetId(newDatasetId);
-    setAnalysisState('idle');
     setAnalysisError(null);
     setMetadata(null);
     setPreview(null);
@@ -200,7 +235,7 @@ function DataStudioContent() {
     const params = new URLSearchParams(window.location.search);
     params.set('id', newDatasetId);
     params.set('tab', activeTab);
-    router.replace(`/data-studio?${params.toString()}`);
+    window.history.replaceState(null, '', `/data-studio?${params.toString()}`);
 
     if (analysisState === 'ready') {
       handleAnalyzeData(newDatasetId);
@@ -235,6 +270,7 @@ function DataStudioContent() {
       setQualityAssessment(qual);
       setCleaningPlan(planRes.plan);
       setPlanError(planRes.error);
+      analyzedDatasetIdRef.current = datasetId;
     } catch (err: any) {
       console.error('Error refreshing Data Studio state:', err);
     }
