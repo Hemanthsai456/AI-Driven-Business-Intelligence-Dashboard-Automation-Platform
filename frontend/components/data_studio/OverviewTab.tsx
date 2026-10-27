@@ -185,6 +185,45 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         </Card>
       </div>
 
+      {/* Schema Readiness & C3 Gate Status Banner */}
+      {readiness && (
+        <div className="p-3.5 bg-surface border border-border rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-surface-muted rounded-md text-primary border border-border shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">
+                  Schema Integrity & C3 Gate:
+                </span>
+                <Badge
+                  variant={
+                    readiness.status === 'READY'
+                      ? 'green'
+                      : readiness.status === 'READY_WITH_WARNINGS'
+                      ? 'amber'
+                      : 'red'
+                  }
+                  size="xs"
+                  dot
+                >
+                  {readiness.status === 'READY'
+                    ? 'Analysis Ready'
+                    : readiness.status === 'READY_WITH_WARNINGS'
+                    ? 'Ready with Warnings'
+                    : 'Not Ready'}
+                </Badge>
+              </div>
+              <p className="text-2xs text-muted-foreground mt-0.5">{readiness.summary}</p>
+            </div>
+          </div>
+          <span className="text-2xs text-muted-foreground font-mono shrink-0">
+            {readiness.checks.filter((c) => c.passed).length}/{readiness.checks.length} Checks Passed
+          </span>
+        </div>
+      )}
+
       {/* 2. Semantic Role & Datatype Composition */}
       <Card className="p-4 border border-border">
         <div className="text-xs font-bold uppercase tracking-wider font-mono text-muted-foreground mb-3 flex items-center justify-between">
@@ -401,10 +440,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     <td className="px-3 py-1.5 text-muted-foreground">{rowIdx + 1}</td>
                     {preview.columns.map((col) => {
                       const val = row[col];
+                      const isNull = val === null || val === undefined;
                       return (
                         <td key={col} className="px-3 py-1.5 truncate max-w-xs text-foreground">
-                          {val === null || val === undefined ? (
-                            <span className="text-muted-foreground italic">null</span>
+                          {isNull ? (
+                            <span className="text-rose-500 font-semibold italic text-2xs">null</span>
+                          ) : typeof val === 'boolean' ? (
+                            <span className={val ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'}>
+                              {String(val)}
+                            </span>
                           ) : (
                             String(val)
                           )}
