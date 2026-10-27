@@ -143,12 +143,12 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess }) =
             </div>
           </div>
           <Button
-            onClick={() => (window.location.href = `/analysis?id=${uploadedDataset.dataset_id}`)}
+            onClick={() => (window.location.href = `/data-studio?id=${uploadedDataset.dataset_id}`)}
             variant="primary"
             size="sm"
             rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
           >
-            Continue to Analysis
+            Continue to Data Studio
           </Button>
         </div>
       )}

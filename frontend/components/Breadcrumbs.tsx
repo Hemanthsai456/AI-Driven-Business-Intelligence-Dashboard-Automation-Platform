@@ -6,10 +6,8 @@ import { ChevronRight } from 'lucide-react';
 
 const ROUTE_MAP: Record<string, string> = {
   '/': 'Home',
-  '/ask': 'Ask (NL Query)',
   '/upload': 'Upload Dataset',
-  '/analysis': 'Analysis Workspace',
-  '/plan-runner': 'Plan Runner',
+  '/data-studio': 'Data Studio',
   '/settings': 'Settings',
 };
 

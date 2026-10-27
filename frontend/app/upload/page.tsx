@@ -12,7 +12,7 @@ export default function UploadPage() {
   const router = useRouter();
 
   const handleUploadSuccess = (metadata: DatasetMetadata) => {
-    router.push(`/analysis?id=${metadata.dataset_id}`);
+    router.push(`/data-studio?id=${metadata.dataset_id}`);
   };
 
   return (
