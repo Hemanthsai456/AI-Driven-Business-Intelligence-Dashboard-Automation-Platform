@@ -1,20 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
 import {
   LayoutDashboard,
   UploadCloud,
-  BarChart3,
   SlidersHorizontal,
-  Sparkles,
-  Terminal,
   Settings,
-  ChevronDown,
-  ChevronRight,
-  Database,
 } from 'lucide-react';
 
 interface NavItem {
@@ -27,22 +21,11 @@ const WORKSPACE_NAV: NavItem[] = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/upload', label: 'Upload Dataset', icon: UploadCloud },
   { href: '/data-studio', label: 'Data Studio', icon: SlidersHorizontal },
-  { href: '/analysis', label: 'Analysis Workspace', icon: BarChart3 },
-];
-
-const ADVANCED_NAV: NavItem[] = [
-  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const { sidebarCollapsed } = useTheme();
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-
-  // Auto-expand advanced if current route is within advanced nav
-  const isAdvancedActive = ADVANCED_NAV.some(
-    (item) => pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href))
-  );
 
   return (
     <aside
@@ -66,9 +49,8 @@ export const Sidebar: React.FC = () => {
           </div>
         </div>
 
-        {/* Navigation Groups */}
+        {/* Main Navigation (Scrolls independently) */}
         <div className="flex-1 overflow-y-auto p-2 space-y-4">
-          {/* Workspace Group */}
           <div>
             <div
               className={`px-2.5 pb-1 text-2xs font-semibold text-muted-foreground uppercase tracking-wider font-mono ${
@@ -112,64 +94,37 @@ export const Sidebar: React.FC = () => {
               })}
             </nav>
           </div>
-
-          {/* Advanced Group (Collapsed by default) */}
-          <div>
-            <button
-              onClick={() => setAdvancedOpen((prev) => !prev)}
-              className={`w-full flex items-center justify-between px-2.5 py-1 text-2xs font-semibold text-muted-foreground uppercase tracking-wider font-mono hover:text-foreground transition-colors ${
-                sidebarCollapsed ? 'hidden' : 'flex max-[900px]:hidden'
-              }`}
-            >
-              <span>Advanced</span>
-              {advancedOpen || isAdvancedActive ? (
-                <ChevronDown className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5" />
-              )}
-            </button>
-
-            {(advancedOpen || isAdvancedActive || sidebarCollapsed) && (
-              <nav className="space-y-0.5 mt-0.5">
-                {ADVANCED_NAV.map((item) => {
-                  const Icon = item.icon;
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== '/' && pathname.startsWith(item.href));
-
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={sidebarCollapsed ? item.label : undefined}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                        isActive
-                          ? 'bg-primary-soft text-primary font-semibold border-l-[3px] border-primary'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-surface-muted'
-                      } ${sidebarCollapsed ? 'justify-center px-0' : 'max-[900px]:justify-center max-[900px]:px-0'}`}
-                    >
-                      <Icon
-                        className={`w-4 h-4 shrink-0 transition-colors ${
-                          isActive ? 'text-primary' : 'text-muted-foreground'
-                        }`}
-                      />
-                      <span
-                        className={`truncate ${
-                          sidebarCollapsed ? 'hidden' : 'block max-[900px]:hidden'
-                        }`}
-                      >
-                        {item.label}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </nav>
-            )}
-          </div>
         </div>
 
-        {/* Footer Summary */}
-        <div className="p-3 border-t border-border shrink-0">
+        {/* Bottom Pinned Area (Settings & Engine Status) */}
+        <div className="p-2 border-t border-border shrink-0 space-y-2">
+          {/* Settings Nav Item */}
+          <Link
+            href="/settings"
+            title={sidebarCollapsed ? 'Settings' : undefined}
+            className={`flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+              pathname === '/settings' || pathname.startsWith('/settings')
+                ? 'bg-primary-soft text-primary font-semibold border-l-[3px] border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-surface-muted'
+            } ${sidebarCollapsed ? 'justify-center px-0' : 'max-[900px]:justify-center max-[900px]:px-0'}`}
+          >
+            <Settings
+              className={`w-4 h-4 shrink-0 transition-colors ${
+                pathname === '/settings' || pathname.startsWith('/settings')
+                  ? 'text-primary'
+                  : 'text-muted-foreground'
+              }`}
+            />
+            <span
+              className={`truncate ${
+                sidebarCollapsed ? 'hidden' : 'block max-[900px]:hidden'
+              }`}
+            >
+              Settings
+            </span>
+          </Link>
+
+          {/* Engine Status Card */}
           <div
             className={`p-2.5 bg-surface-muted rounded-card border border-border text-2xs space-y-1 ${
               sidebarCollapsed ? 'hidden' : 'block max-[900px]:hidden'
@@ -188,7 +143,7 @@ export const Sidebar: React.FC = () => {
           </div>
 
           <div
-            className={`flex justify-center ${
+            className={`flex justify-center py-1 ${
               sidebarCollapsed ? 'block' : 'hidden max-[900px]:flex'
             }`}
             title="Engine Active"
@@ -200,3 +155,4 @@ export const Sidebar: React.FC = () => {
     </aside>
   );
 };
+
